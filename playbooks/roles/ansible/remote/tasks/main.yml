@@ -1,0 +1,28 @@
+- name: install build dependencies
+  apt: name={{ item }} state=present
+  with_items:
+    - build-essential
+    - libpython-dev
+
+- name: create ansible remote dir
+  file: path={{ ansible_python_dir }} state=directory
+
+- name: copy ansible remote requirements.txt
+  copy:
+    src: requirements.txt
+    dest: "{{ ansible_python_dir }}/requirements.txt"
+    owner: root
+    group: root
+    mode: 0644
+
+- name: install ansible remote dependencies
+  pip:
+    virtualenv: "{{ ansible_python_virtualenv }}"
+    requirements: "{{ ansible_python_dir }}/requirements.txt"
+    state: present
+
+- name: set ansible python interpreter
+  set_fact:
+    ansible_python_interpreter: "{{ ansible_python_virtualenv }}/bin/python"
+
+- meta: flush_handlers

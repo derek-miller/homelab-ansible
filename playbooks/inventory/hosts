@@ -1,0 +1,29 @@
+[mining:children]
+nvidia-miner
+nicehash-miner
+
+[nvidia-miner:children]
+nvidia-equihash-gtx1070-miner
+
+[nvidia-miner:vars]
+nvidia_overclock_exe=/usr/local/bin/nvidia-overclock
+overclock_command="{{ nvidia_overclock_exe }} -l {{ nvidia_power_limit }} -p {{ nvidia_persistence_mode }} -c {{ nvidia_gpu_clock_offset }} -m {{ nvidia_mem_clock_offset }} -f {{ nvidia_fan_speed }}"
+
+[nvidia-equihash-gtx1070-miner]
+miner1
+
+[nvidia-equihash-gtx1070-miner:vars]
+nvidia_persistence_mode=1
+nvidia_power_limit=120
+nvidia_gpu_clock_offset=60
+nvidia_mem_clock_offset=1050
+nvidia_fan_speed=40
+
+[nicehash-miner]
+miner1 nicehash_worker_name=miner1
+
+[nicehash-miner:vars]
+nicehash_bitcoin_address=3C8DxZGimzMiWEjg2rmcUd2RHAHZjFo6FS
+
+[hs110-stats]
+miner1 hs110_stats_ip_address=192.168.1.5

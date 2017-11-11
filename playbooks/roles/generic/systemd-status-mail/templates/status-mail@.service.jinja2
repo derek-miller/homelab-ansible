@@ -1,0 +1,7 @@
+[Unit]
+Description=Status mail for %i
+
+[Service]
+Type=oneshot
+ExecStart={{ systemd_status_mail_script }} %i
+User=nobody

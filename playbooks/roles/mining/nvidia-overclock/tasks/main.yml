@@ -1,0 +1,17 @@
+- assert:
+    that: nvidia_overclock_state in ('present', 'absent')
+
+- name: copy nvidia-overclock executable
+  copy:
+    src: nvidia-overclock
+    dest: "{{ nvidia_overclock_exe }}"
+    owner: root
+    group: root
+    mode: 0755
+  when: nvidia_overclock_state == 'present'
+
+- name: delete nvidia-overclock executable
+  file:
+    path: "{{ nvidia_overclock_exe }}"
+    state: absent
+  when: nvidia_overclock_state == 'absent'

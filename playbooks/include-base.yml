@@ -1,0 +1,19 @@
+- import_playbook: include-setup.yml setup_hosts="{{ base_hosts }}:{{ gather_hosts|default }}"
+
+- name: set up ansible environment on remote
+  hosts: "{{ base_hosts }}"
+  roles:
+    - ansible/remote
+  tags:
+    - always
+    - base-setup  # not part of base tag since really a setup task but needs apt mirrors, etc. from previous base plays
+    - ansible-remote
+
+- name: common
+  hosts: "{{ base_hosts }}"
+  roles:
+    - common/essential
+  tags:
+    - always
+    - base
+    - common-essential

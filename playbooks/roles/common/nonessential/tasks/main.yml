@@ -1,0 +1,5 @@
+# this role is for tasks ALL hosts almost certainly want
+
+- name: install common packages
+  apt: name={{ item }}
+  with_items: "{{ common_pkgs.apt }}"

@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+set -e
+
+# Initialize our own variables:
+GPU_ID_SMI=""
+GPU_ID_SETTINGS=""
+POWER=""
+PM=""
+CLOCK=""
+MEM=""
+FAN=""
+
+function usage(){
+   echo "Overclock Nvidia GPUs with the given settings."
+   echo "Usage: $0 [OPTIONS]"
+   echo ""
+   echo "   Options:"
+   echo "      -i Target a specific GPU or Unit"
+   echo "      -l Specifies maximum power management limit in watts"
+   echo "      -p Set persistence mode: 0/DISABLED, 1/ENABLED"
+   echo "      -c GPU clock offset"
+   echo "      -m Memory clock offset"
+   echo "      -f Fan speed as percent"
+   echo ""
+   exit
+}
+
+function getOptions(){
+   while getopts "i:l:p:c:m:f:h" opt ; do
+     case $opt in
+        i)
+           export GPU_ID_SMI="-i $OPTARG "
+           export GPU_ID_SETTINGS="[gpu:$OPTARG]/"
+           ;;
+        l)
+           export POWER=$OPTARG
+           ;;
+        p)
+           export PM=$OPTARG
+           ;;
+        c)
+           export CLOCK=$OPTARG
+           ;;
+        m)
+           export MEM=$OPTARG
+           ;;
+        s)
+           export STATE=$OPTARG
+           ;;
+        f)
+           export FAN=$OPTARG
+           ;;
+        h)
+           usage
+           exit
+           ;;
+        :)
+           echo "Option -$OPTARG requires an argument"
+           exit
+           ;;
+        *)
+           usage
+           ;;
+     esac
+   done
+}
+
+function printValues(){
+   # for debugging
+   echo "GPU_ID_SMI: ${GPU_ID_SMI}"
+   echo "GPU_ID_SETTINGS: ${GPU_ID_SETTINGS}"
+   echo "POWER: ${POWER}"
+   echo "PM: ${PM}"
+   echo "CLOCK: ${CLOCK}"
+   echo "MEM: ${MEM}"
+   echo "FAN: ${FAN}"
+   echo "Leftovers: $@"
+   echo "NVIDIA_SETTINGS: ${NVIDIA_SETTINGS}"
+   echo "NVIDIA_SMI: ${NVIDIA_SMI}"
+}
+
+getOptions $@
+
+NVIDIA_SETTINGS="$(which nvidia-settings)"
+NVIDIA_SMI="$(which nvidia-smi)"
+
+if [ "$NVIDIA_SETTINGS" == "" ] || [ "$NVIDIA_SMI" == "" ] ; then
+   echo "Error: missing nvidia-settings and/or nvidia-smi"
+   echo "Please be sure that you installed the nvidia drivers."
+   exit
+fi
+
+export DISPLAY=:0
+export XAUTHORITY=/var/run/lightdm/root/${DISPLAY}
+
+${NVIDIA_SETTINGS} -a ${GPU_ID_SETTINGS}GPUPowerMizerMode=1
+[ "$PM" != "" ] && ${NVIDIA_SMI} ${GPU_ID_SMI}-pm ${PM}
+[ "$POWER" != "" ] && ${NVIDIA_SMI} ${GPU_ID_SMI}-pl ${POWER}
+[ "$FAN" != "" ] && ${NVIDIA_SETTINGS} -a ${GPU_ID_SETTINGS}GPUFanControlState=1
+[ "$FAN" != "" ] && ${NVIDIA_SETTINGS} -a ${GPU_ID_SETTINGS}GPUTargetFanSpeed=${FAN}
+[ "$CLOCK" != "" ] && ${NVIDIA_SETTINGS} -a ${GPU_ID_SETTINGS}GPUGraphicsClockOffset[3]=${CLOCK}
+[ "$MEM" != "" ] && ${NVIDIA_SETTINGS} -a ${GPU_ID_SETTINGS}GPUMemoryTransferRateOffset[3]=${MEM}
+
+exit 0

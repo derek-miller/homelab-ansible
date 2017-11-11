@@ -1,0 +1,7 @@
+#!/bin/sh
+
+# Redirect output to stderr.
+exec 1>&2
+
+# Ensure vault files are encrypted
+exec make vault-check

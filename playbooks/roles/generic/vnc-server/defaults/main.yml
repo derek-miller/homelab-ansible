@@ -1,0 +1,8 @@
+x11vnc_resolution: 1920x1080
+x11vnc_display: :0
+x11vnc_auth: /var/run/lightdm/root/{{ x11vnc_display }}
+x11vnc_rfb_port: /etc/x11vnc.pass
+x11vnc_rfb_pass_file: /etc/x11vnc.pass
+
+# must set:
+# vnc_password:

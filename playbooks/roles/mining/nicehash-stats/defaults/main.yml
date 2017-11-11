@@ -1,0 +1,9 @@
+nicehash_stats_state: present
+nicehash_stats_metric_name: nicehash
+nicehash_stats_script_install_dir: /usr/local/bin
+nicehash_stats_timeout_s: 5
+
+# must set:
+# nicehash_api_id
+# nicehash_api_key
+# nicehash_bitcoin_address

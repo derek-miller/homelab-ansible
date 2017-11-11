@@ -1,0 +1,2 @@
+ansible_python_dir: /opt/ansible
+ansible_python_virtualenv: "{{ ansible_python_dir }}/virtualenv"

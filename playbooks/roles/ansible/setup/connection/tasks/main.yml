@@ -1,0 +1,31 @@
+- name: make local ssh key dir
+  local_action:
+    module: file
+    path: "{{ local_ssh_key_dir }}"
+    mode: 0700
+    state: directory
+  check_mode: no
+  run_once: yes
+
+- name: copy ansible surrogate user ssh private key
+  local_action:
+    module: copy
+    src: "{{ ansible_surrogate_private_key_file }}"
+    dest: "{{ local_ssh_key_dir }}/{{ ansible_surrogate_private_key_file|basename }}"
+    mode: 0600
+  check_mode: no
+  run_once: yes
+
+- name: use ansible surrogate user
+  set_fact: ansible_ssh_user={{ ansible_surrogate_user }}
+  when: ansible_ssh_user is not defined
+  check_mode: no
+
+- name: set ansible ssh private key file
+  set_fact: ansible_ssh_private_key_file={{ local_ssh_key_dir }}/{{ ansible_surrogate_private_key_file|basename }}
+  when: ansible_ssh_user == ansible_surrogate_user
+  check_mode: no
+
+- name: become root
+  set_fact:
+    ansible_become: yes

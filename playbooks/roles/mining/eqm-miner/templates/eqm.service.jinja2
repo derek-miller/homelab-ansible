@@ -1,0 +1,30 @@
+[Unit]
+Description=EQM Miner
+After=network.target
+OnFailure=status-mail@%n.service
+
+[Service]
+Type=simple
+{% if eqm_overclock_command|default()|trim %}
+ExecStartPre={{ eqm_overclock_command|trim }}
+{% endif %}
+ExecStart={{ eqm_exe }} \
+    -l {{ eqm_location }} \
+    -u {{ eqm_bitcoin_address }} \
+    -w {{ eqm_worker_name }} \
+{% if eqm_api_port|int > 0 %}
+    -i {{ eqm_api_ip }} \
+    -a {{ eqm_api_port|int }} \
+{% endif %}
+    -d {{ eqm_logging_level|int }} \
+    -t 0 \
+    {{ (('-ca ' if eqm_cuda_devices == 'all' else '-cd ' + eqm_cuda_devices|trim + ' ') * eqm_cuda_threads_per|int)|trim }} \
+    -cm {{ eqm_cuda_mode|int }}
+RuntimeDirectory={{ eqm_service }}
+WorkingDirectory=/tmp
+KillMode=mixed
+KillSignal=SIGKILL
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

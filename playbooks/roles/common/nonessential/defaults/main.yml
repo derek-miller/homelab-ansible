@@ -1,0 +1,13 @@
+common_pkgs:
+  apt:
+    - build-essential
+    - htop
+    - ifstat
+    - iftop
+    - iotop
+    - iptraf
+    - ntp
+    - pigz
+    - tmux
+    - unzip
+    - vim

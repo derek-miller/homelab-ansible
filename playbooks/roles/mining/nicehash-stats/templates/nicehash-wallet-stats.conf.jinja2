@@ -1,0 +1,8 @@
+[[inputs.exec]]
+  name_override = "{{ nicehash_stats_metric_name }}"
+  commands = [
+    "{{ nicehash_stats_script_install_dir }}/nicehash-wallet-stats '{{ nicehash_api_id }}' '{{ nicehash_api_key }}' '{{ nicehash_bitcoin_address }}'",
+  ]
+  timeout = "{{ nicehash_stats_timeout_s|int }}s"
+  data_format = "json"
+  tag_keys = ["address"]

@@ -1,0 +1,12 @@
+- name: set sysctl params
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_file: "{{ sysctl_file }}"
+    sysctl_set: yes
+    reload: yes
+  with_items:
+    - { name: 'fs.nr_open', value: "{{ sysctl_fs_nr_open|int }}" }
+    - { name: 'vm.dirty_background_ratio', value: "{{ sysctl_vm_dirty_background_ratio|int }}" }
+    - { name: 'vm.dirty_ratio', value: "{{ sysctl_vm_dirty_ratio|int }}" }
+    - { name: 'vm.swappiness', value: "{{ sysctl_vm_swappiness|int }}" }

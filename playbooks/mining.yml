@@ -1,0 +1,46 @@
+- import_playbook: include-base.yml base_hosts=mining
+
+- hosts: mining
+  roles:
+    - role: common/nonessential
+      tags:
+        - common-nonessential
+        - common
+
+- hosts: hs110-stats
+  roles:
+    - role: generic/hs110-stats
+      tags:
+        - hs110-stats
+
+- hosts: nvidia-miner
+  roles:
+#    - role: galaxy/nvidia-cuda
+#      gpu: True
+#      tags:
+#        - nvidia-cuda
+#        - nvidia-miner
+    - role: mining/nvidia-smi-stats
+      tags:
+        - nvidia-smi-stats
+        - nvidia-miner
+    - role: mining/nvidia-overclock
+      tags:
+        - nvidia-overclock
+        - nvidia-miner
+
+- hosts: nicehash-miner
+  roles:
+    - role: mining/nicehash-stats
+      nicehash_api_id: "{{ vault_nicehash_api_id }}"
+      nicehash_api_key: "{{ vault_nicehash_api_key_read_only }}"
+      tags:
+        - nicehash-stats
+        - nicehash-miner
+    - role: mining/eqm-miner
+      eqm_worker_name: "{{ nicehash_worker_name }}"
+      eqm_bitcoin_address: "{{ nicehash_bitcoin_address }}"
+      eqm_overclock_command: "{{ overclock_command|default() }}"
+      tags:
+        - eqm-miner
+        - nicehash-miner

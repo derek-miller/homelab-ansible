@@ -1,0 +1,24 @@
+- assert:
+    that: nvidia_smi_stats_state in ('present', 'absent')
+
+- name: copy nvidia-smi-stats script
+  copy:
+    src: nvidia-smi-stats
+    dest: "{{ nvidia_smi_stats_script_install_dir }}/nvidia-smi-stats"
+    owner: root
+    group: root
+    mode: 0755
+  when: nvidia_smi_stats_state == 'present'
+
+- name: delete nvidia-smi-stats script
+  file:
+    path: "{{ nvidia_smi_stats_script_install_dir }}/nvidia-smi-stats"
+    state: absent
+  when: nvidia_smi_stats_state == 'absent'
+
+- include_role:
+    name: generic/telegraf/plugin
+  vars:
+    telegraf_plugin_conf_src: telegraf.conf.jinja2
+    telegraf_plugin_conf: nvidia-smi-stats.conf
+    telegraf_plugin_state: "{{ nvidia_smi_stats_state }}"

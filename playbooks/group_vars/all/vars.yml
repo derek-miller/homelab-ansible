@@ -1,0 +1,30 @@
+ansible_surrogate_user: ansible
+vault_dir_name: vault
+
+pip_default_index_url: https://pypi.python.org/simple
+pip_version_spec:
+setuptools_version_spec:
+virtualenv_version_spec:
+
+pki_tls_ca_bundle: /etc/ssl/certs/ca-certificates.crt
+pki_tls_dir: /etc/ssl
+pki_tls_private_dir: /etc/ssl/private
+pki_tls_private_group: ssl-cert
+
+influxdb_host: influxdb.qnap.dmiller.me
+influxdb_username: "{{ vault_influxdb_username }}"
+influxdb_password: "{{ vault_influxdb_password }}"
+influxdb_https_port: 443
+influxdb_url: https://{{ influxdb_host }}:{{ influxdb_https_port }}
+influxdb_database_name: telegraf
+telegraf_udp_host: 127.0.0.1
+telegraf_udp_port: 8094
+
+postfix_relayhost: smtp.gmail.com  # smtp-relay.gmail.com
+postfix_sasl_user: 20miller10@gmail.com  # derek@gitlit.io
+postfix_sasl_password: "{{ vault_postfix_sasl_password }}"
+
+vnc_password: "{{ vault_vnc_password }}"
+
+sudoers: []
+alert_email_address: alerts@gitlit.io

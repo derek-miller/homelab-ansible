@@ -1,0 +1,15 @@
+- name: config telegraf
+  template:
+    src: telegraf.conf.jinja2
+    dest: "{{ telegraf_conf }}"
+    owner: root
+    group: root
+    mode: 0644
+    backup: yes
+  notify: reload telegraf
+
+- name: enable telegraf
+  service: name=telegraf enabled=yes
+
+- name: start telegraf
+  service: name=telegraf state=started

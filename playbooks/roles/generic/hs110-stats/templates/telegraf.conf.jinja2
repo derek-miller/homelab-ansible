@@ -1,0 +1,8 @@
+[[inputs.exec]]
+  name_override = "{{ hs110_stats_metric_name }}"
+  commands = [
+    "{{ hs110_stats_script_install_dir }}/hs110-stats {{ hs110_stats_ip_address }} {{ hs110_stats_port|int }} status 2>/dev/null | jq '.system .get_sysinfo'",
+    "{{ hs110_stats_script_install_dir }}/hs110-stats {{ hs110_stats_ip_address }} {{ hs110_stats_port|int }} emeter 2>/dev/null | jq '.emeter .get_realtime'",
+  ]
+  timeout = "{{ hs110_stats_timeout_s|int }}s"
+  data_format = "json"

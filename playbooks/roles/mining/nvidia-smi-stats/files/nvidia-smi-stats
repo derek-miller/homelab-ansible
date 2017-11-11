@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+from __future__ import print_function
+
+import json
+import subprocess
+import traceback
+
+import sys
+
+if __name__ == '__main__':
+    stats = [
+        'driver_version',
+        'count',
+        'name',
+        'uuid',
+        'index',
+        'display_mode',
+        'display_active',
+        'persistence_mode',
+        'accounting.mode',
+        'accounting.buffer_size',
+        'vbios_version',
+        'fan.speed',
+        'pstate',
+        'clocks_throttle_reasons.supported',
+        'clocks_throttle_reasons.active',
+        'clocks_throttle_reasons.gpu_idle',
+        'clocks_throttle_reasons.applications_clocks_setting',
+        'clocks_throttle_reasons.sw_power_cap',
+        'clocks_throttle_reasons.hw_slowdown',
+        'clocks_throttle_reasons.sync_boost',
+        'memory.total',
+        'memory.used',
+        'memory.free',
+        'compute_mode',
+        'utilization.gpu',
+        'utilization.memory',
+        'encoder.stats.sessionCount',
+        'encoder.stats.averageFps',
+        'encoder.stats.averageLatency',
+        'temperature.gpu',
+        'power.management',
+        'power.draw',
+        'power.limit',
+        'enforced.power.limit',
+        'power.default_limit',
+        'power.min_limit',
+        'power.max_limit',
+        'clocks.current.graphics',
+        'clocks.current.sm',
+        'clocks.current.memory',
+        'clocks.current.video',
+        'clocks.max.graphics',
+        'clocks.max.sm',
+        'clocks.max.memory',
+    ]
+
+    try:
+        output = subprocess.check_output(['nvidia-smi', '--format=noheader,nounits,csv', '--query-gpu={}'.format(','.join(stats))], stderr=subprocess.STDOUT)
+        all_gpu_stats = []
+        for line in output.splitlines(False):
+            values = [x.strip() for x in line.split(',')]
+            gpu_stats = {}
+            for name, value in zip(stats, [x.strip() for x in line.split(',')]):
+                try:
+                    gpu_stats[name] = float(value)
+                except:
+                    pass
+            all_gpu_stats.append(gpu_stats)
+        json.dump(all_gpu_stats, sys.stdout)
+        sys.exit(0)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)

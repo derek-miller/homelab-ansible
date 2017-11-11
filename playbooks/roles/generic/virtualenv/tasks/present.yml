@@ -1,0 +1,46 @@
+- name: create virtualenv dir
+  file:
+    path: "{{ virtualenv_path }}"
+    owner: "{{ virtualenv_owner }}"
+    group: "{{ virtualenv_group }}"
+    mode: 0755
+    state: directory
+
+# If a template dest is a symlink, ansible overwrites the symlink target's contents instead of replacing
+# the link with a new file (absolute insanity). See https://github.com/ansible/ansible/issues/14469
+
+- name: check if virtualenv pip.conf is a symlink
+  stat: path={{ virtualenv_pip_conf }}
+  register: virtualenv_pip_conf_stat
+
+- name: delete virtualenv pip.conf if it's a symlink
+  file:
+    path: "{{ virtualenv_pip_conf }}"
+    state: absent
+  when:
+    - virtualenv_pip_conf_stat.stat.exists
+    - virtualenv_pip_conf_stat.stat.islnk
+
+- name: create virtualenv pip.conf
+  template:
+    src: pip.conf.jinja2
+    dest: "{{ virtualenv_pip_conf }}"
+    owner: "{{ virtualenv_owner }}"
+    group: "{{ virtualenv_group }}"
+    mode: 0644
+
+- name: create virtualenv and upgrade setuptools
+  pip:
+    virtualenv: "{{ virtualenv_path }}"
+    virtualenv_site_packages: "{{ virtualenv_site_packages }}"
+    name: setuptools{{ setuptools_version_spec }}
+    extra_args: --upgrade-strategy only-if-needed
+    state: latest
+
+- name: create virtualenv and upgrade pip
+  pip:
+    virtualenv: "{{ virtualenv_path }}"
+    virtualenv_site_packages: "{{ virtualenv_site_packages }}"
+    name: pip{{ pip_version_spec }}
+    extra_args: --upgrade-strategy only-if-needed
+    state: latest

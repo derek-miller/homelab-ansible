@@ -1,0 +1,30 @@
+# Allow ansible to run without the user entering a password
+
+- name: create ansible surrogate user
+  user:
+    name: "{{ ansible_surrogate_user }}"
+    system: yes
+    groups: ssh
+    append: yes
+    password: !
+    shell: /bin/bash
+    createhome: yes
+
+- name: authorize ansible surrogate ssh key
+  authorized_key:
+    user: "{{ ansible_surrogate_user }}"
+    key: "{{ item }}"
+    exclusive: yes
+  with_file:
+    - "{{ ansible_surrogate_public_key_file }}"
+
+- name: grant ansible surrogate user passwordless sudoer
+  template:
+    src: sudoers.d/ansible-surrogate.jinja2
+    dest: /etc/sudoers.d/ansible-surrogate
+    owner: root
+    group: root
+    mode: 0440
+    validate: 'visudo -cf %s'
+
+- meta: flush_handlers

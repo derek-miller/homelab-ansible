@@ -1,0 +1,3 @@
+systemd_status_mail_state: present
+systemd_status_mail_script: /usr/local/bin/systemd-status-mail
+systemd_status_mail_service: status-mail

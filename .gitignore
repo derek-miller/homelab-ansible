@@ -1,0 +1,9 @@
+*.pyc
+*.swp
+/.ansible/
+/.idea/
+/.python-version
+/.ssh/
+/.vault_pass
+/playbooks/*.retry
+/playbooks/roles/galaxy/

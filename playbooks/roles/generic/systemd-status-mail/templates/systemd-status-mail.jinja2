@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -e -o pipefail
+
+UNIT="$1"
+STATUS="$(systemctl status --full "$UNIT")"
+SUBJECT="$UNIT $(echo "$STATUS" | grep 'Active:' | sed 's/\s*Active:\s*//')"
+
+/usr/sbin/sendmail -t <<EOF
+To: {{ alert_email_address }}
+From: "systemd@{{ ansible_hostname }}" <systemd@{{ ansible_fqdn }}>
+Subject: $SUBJECT
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain; charset=UTF-8
+
+$STATUS
+EOF

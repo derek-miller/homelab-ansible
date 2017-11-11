@@ -1,0 +1,17 @@
+- assert:
+    that: ansible_os_family == 'Debian'
+- assert:
+    that: ansible_service_mgr == 'systemd'
+
+- name: install x11vnc
+  apt: pkg=x11vnc state=present
+
+- name: configure x11vnc password
+  shell: x11vnc -storepasswd "{{ vnc_password }}" "{{ x11vnc_rfb_pass_file }}"
+  changed_when: False
+
+- name: configure x11vnc service
+  template:
+    src: x11vnc.service.j2
+    dest: /etc/systemd/system/x11vnc.service
+  notify: restart x11vnc

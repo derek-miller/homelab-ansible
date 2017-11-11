@@ -1,0 +1,24 @@
+- assert:
+    that: hs110_stats_state in ('present', 'absent')
+
+- name: copy hs110-stats script
+  copy:
+    src: hs110-stats
+    dest: "{{ hs110_stats_script_install_dir }}/hs110-stats"
+    owner: root
+    group: root
+    mode: 0755
+  when: hs110_stats_state == 'present'
+
+- name: delete hs110-stats script
+  file:
+    path: "{{ hs110_stats_script_install_dir }}/hs110-stats"
+    state: absent
+  when: hs110_stats_state == 'absent'
+
+- include_role:
+    name: generic/telegraf/plugin
+  vars:
+    telegraf_plugin_conf_src: telegraf.conf.jinja2
+    telegraf_plugin_conf: hs110-stats.conf
+    telegraf_plugin_state: "{{ hs110_stats_state }}"

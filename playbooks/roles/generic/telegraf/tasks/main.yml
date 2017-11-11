@@ -1,0 +1,33 @@
+- assert:
+    that: telegraf_state in ('present', 'absent')
+
+- name: stop and disable telegraf service
+  service: name=telegrafql state=stopped enabled=no
+  register: service_result
+  failed_when:
+    - service_result|failed
+    - "'not find' not in service_result.msg"
+  when: telegraf_state == 'absent'
+
+- name: add/remove influxdb gpg signing key
+  apt_key:
+    url: https://repos.influxdata.com/influxdb.key
+    state: "{{ telegraf_state }}"
+
+- name: add/remove influxdb repository
+  apt_repository:
+    repo: 'deb https://repos.influxdata.com/ubuntu {{ ansible_distribution_release }} stable'
+    state: "{{ telegraf_state }}"
+
+- name: install telegraf
+  apt: name=telegraf state=latest
+  when: telegraf_state == 'present'
+
+- name: uninstall telegraf
+  apt: name=telegraf state=absent
+  when: telegraf_state == 'absent'
+
+- include_tasks: present.yml
+  when: telegraf_state == 'present'
+
+- meta: flush_handlers

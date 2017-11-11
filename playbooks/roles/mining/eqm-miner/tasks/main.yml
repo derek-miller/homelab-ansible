@@ -1,0 +1,33 @@
+- assert:
+    that: eqm_state == 'present'
+- assert:
+    that: ansible_distribution == 'Ubuntu'
+- assert:
+    that: ansible_distribution_version == '16.04'
+- assert:
+    that: ansible_service_mgr == 'systemd'
+
+- name: copy eqm executable
+  copy:
+    src: eqm_ubuntu_16
+    dest: "{{ eqm_exe }}"
+    owner: root
+    group: root
+    mode: 0700
+
+- name: create eqm service
+  template:
+    src: eqm.service.jinja2
+    dest: /etc/systemd/system/{{ eqm_service }}.service
+    owner: root
+    group: root
+    mode: 0644
+  notify: restart eqm
+
+- name: enable eqm
+  systemd: name={{ eqm_service }} enabled=yes daemon_reload=yes
+
+- meta: flush_handlers
+
+- name: start eqm
+  systemd: name={{ eqm_service }} state=started

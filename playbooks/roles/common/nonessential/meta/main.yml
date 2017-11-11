@@ -1,0 +1,11 @@
+dependencies:
+  - role: generic/sysctl
+  - role: galaxy/postfix
+    postfix_aliases:
+      - user: root
+        alias: "{{ alert_email_address }}"
+    postfix_relaytls: yes
+    postfix_smtp_tls_cafile: "{{ pki_tls_ca_bundle }}"
+    postfix_inet_protocols: ipv4
+  - role: generic/telegraf
+  - role: generic/vnc-server

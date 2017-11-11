@@ -1,0 +1,7 @@
+telegraf_state: present
+telegraf_collection_interval: 10s
+telegraf_collection_jitter: 0s
+telegraf_flush_interval: "{{ telegraf_collection_interval }}"
+telegraf_flush_jitter: 5s
+telegraf_conf: /etc/telegraf/telegraf.conf
+telegraf_conf_dir: /etc/telegraf/telegraf.d

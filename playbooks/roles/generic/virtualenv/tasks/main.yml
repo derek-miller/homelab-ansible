@@ -1,0 +1,11 @@
+- assert:
+    that: virtualenv_state in ('present', 'absent')
+
+- include_tasks: present.yml
+  when: virtualenv_state == 'present'
+
+- name: delete virtualenv {{ virtualenv_path }}
+  file:
+    path: "{{ virtualenv_path }}"
+    state: absent
+  when: virtualenv_state == 'absent'

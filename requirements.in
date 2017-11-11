@@ -1,0 +1,13 @@
+--index-url https://cheeseshop.corp.spacex.com/root/pypi/+simple/
+ansible
+chardet  # implicitly required by python-debian
+click
+cryptography
+dnspython
+jinja2
+keyring
+passlib
+python-debian
+pyyaml
+requests[security]
+semantic-version

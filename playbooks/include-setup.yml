@@ -1,0 +1,29 @@
+- name: set up connection before gathering facts
+  hosts: "{{ setup_hosts }}"
+  gather_facts: no
+  roles:
+    - ansible/setup/connection
+  tags:
+    - always
+
+- name: connect and gather facts
+  hosts: "{{ setup_hosts }}"
+  tasks:
+    - name: node summary
+      debug:
+        msg: >-
+          {{ ansible_all_ipv4_addresses | join(' ') }},
+          {{ ansible_distribution }} {{ ansible_distribution_version }},
+          {{ ansible_processor_vcpus }} CPU(s),
+          {{ ansible_memtotal_mb }} MB memory
+  tags:
+    - always
+    - connect
+
+- name: bootstrap connection credentials
+  hosts: "{{ setup_hosts }}"
+  roles:
+    - role: ansible/setup/bootstrap
+      when: bootstrap|default(false)|bool
+      tags:
+        - bootstrap

@@ -1,0 +1,23 @@
+- assert:
+    that: telegraf_plugin_state in ('present', 'absent')
+
+- name: add telegraf plugin
+  template:
+    src: "{{ telegraf_plugin_conf_src }}"
+    dest: "{{ telegraf_conf_dir }}/{{ telegraf_plugin_conf }}"
+    owner: root
+    group: root
+    mode: 0644
+  notify: reload telegraf
+  when:
+    - telegraf_state == 'present'
+    - telegraf_plugin_state == 'present'
+
+- name: remove telegraf plugin
+  file:
+    path: "{{ telegraf_conf_dir }}/{{ telegraf_plugin_conf }}"
+    state: absent
+  notify: reload telegraf
+  when:
+    - telegraf_state == 'present'
+    - telegraf_plugin_state == 'absent'

@@ -1,0 +1,18 @@
+eqm_state: present
+eqm_exe: /usr/local/bin/eqm
+eqm_service: eqm
+
+eqm_api_ip: 0.0.0.0
+eqm_api_port: 0
+eqm_location: usa
+eqm_logging_level: 1
+
+eqm_cuda_devices: all
+eqm_cuda_threads_per: 1
+eqm_cuda_mode: 0
+
+eqm_overclock_command:
+
+# must set:
+# eqm_worker_name
+# eqm_bitcoin_address
