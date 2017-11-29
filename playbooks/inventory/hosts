@@ -14,9 +14,9 @@ miner1
 
 [nvidia-equihash-gtx1070-miner:vars]
 nvidia_persistence_mode=1
-nvidia_power_limit=120
-nvidia_gpu_clock_offset=60
-nvidia_mem_clock_offset=1050
+nvidia_power_limit=117
+nvidia_gpu_clock_offset=150
+nvidia_mem_clock_offset=800
 nvidia_fan_speed=40
 
 [nicehash-miner]

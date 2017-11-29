@@ -32,7 +32,7 @@ From the project directory:
 Passing Ansible flags
 ---------------------
 
-To provision, e.g., only the hyperion database and web app:
+To provision and pass ansible flags:
 
     make run ansible_flags='--tags=eqm-miner'
     make run hosts=miner1  # shorthand for passing the --limit flag

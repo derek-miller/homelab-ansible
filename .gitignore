@@ -7,3 +7,4 @@
 /.vault_pass
 /playbooks/*.retry
 /playbooks/roles/galaxy/
+/.venv/
