@@ -1,7 +1,7 @@
 [Unit]
-Description=EQM Miner
+Description=EQM Miner GPU %i
 After=network.target
-OnFailure=status-mail@%n.service
+OnFailure=status-mail@gpu%i.service
 
 [Service]
 Type=simple
@@ -18,12 +18,12 @@ ExecStart={{ eqm_exe }} \
 {% endif %}
     -d {{ eqm_logging_level|int }} \
     -t 0 \
-    {{ (('-ca ' if eqm_cuda_devices == 'all' else '-cd ' + eqm_cuda_devices|trim + ' ') * eqm_cuda_threads_per|int)|trim }} \
+    {{ ('-cd %i ' * eqm_cuda_threads_per|int)|trim }} \
     -cm {{ eqm_cuda_mode|int }}
-RuntimeDirectory={{ eqm_service }}
 WorkingDirectory=/tmp
 KillMode=mixed
 KillSignal=SIGKILL
+SyslogIdentifier={{ eqm_service }}@%i
 Restart=on-failure
 
 [Install]

@@ -7,7 +7,7 @@ nvidia-equihash-gtx1070-miner
 
 [nvidia-miner:vars]
 nvidia_overclock_exe=/usr/local/bin/nvidia-overclock
-overclock_command="{{ nvidia_overclock_exe }} -l {{ nvidia_power_limit }} -p {{ nvidia_persistence_mode }} -c {{ nvidia_gpu_clock_offset }} -m {{ nvidia_mem_clock_offset }} -f {{ nvidia_fan_speed }}"
+overclock_command="{{ nvidia_overclock_exe }} -i %i -l {{ nvidia_power_limit }} -p {{ nvidia_persistence_mode }} -c {{ nvidia_gpu_clock_offset }} -m {{ nvidia_mem_clock_offset }} -f {{ nvidia_fan_speed }}"
 
 [nvidia-equihash-gtx1070-miner]
 miner1

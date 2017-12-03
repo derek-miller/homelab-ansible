@@ -15,19 +15,34 @@
     group: root
     mode: 0700
 
-- name: create eqm service
+- name: create eqm template service
   template:
-    src: eqm.service.jinja2
-    dest: /etc/systemd/system/{{ eqm_service }}.service
+    src: eqm@.service.jinja2
+    dest: /etc/systemd/system/{{ eqm_service }}@.service
     owner: root
     group: root
     mode: 0644
   notify: restart eqm
 
-- name: enable eqm
-  systemd: name={{ eqm_service }} enabled=yes daemon_reload=yes
+- name: enable/disable eqm services
+  systemd:
+    name: "{{ eqm_service }}@{{ item.gpu }}"
+    enabled: "{{ item.state|default('present') == 'present' }}"
+    daemon_reload: yes
+  with_items: "{{ eqm_cuda_devices }}"
+
+- name: stop absent eqm services
+  systemd:
+    name: "{{ eqm_service }}@{{ item.gpu }}"
+    state: stopped
+  when: item.state|default('present') == 'absent'
+  with_items: "{{ eqm_cuda_devices }}"
 
 - meta: flush_handlers
 
-- name: start eqm
-  systemd: name={{ eqm_service }} state=started
+- name: start present eqm services
+  systemd:
+    name: "{{ eqm_service }}@{{ item.gpu }}"
+    state: started
+  when: item.state|default('present') == 'present'
+  with_items: "{{ eqm_cuda_devices }}"

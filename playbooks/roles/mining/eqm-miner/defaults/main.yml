@@ -7,7 +7,19 @@ eqm_api_port: 0
 eqm_location: usa
 eqm_logging_level: 1
 
-eqm_cuda_devices: all
+eqm_cuda_devices:
+  - gpu: 0
+    state: present
+  - gpu: 1
+    state: present
+  - gpu: 2
+    state: present
+  - gpu: 3
+    state: present
+  - gpu: 4
+    state: present
+  - gpu: 5
+    state: present
 eqm_cuda_threads_per: 1
 eqm_cuda_mode: 0
 
