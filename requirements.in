@@ -1,4 +1,3 @@
---index-url https://cheeseshop.corp.spacex.com/root/pypi/+simple/
 ansible
 chardet  # implicitly required by python-debian
 click
