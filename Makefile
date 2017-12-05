@@ -24,7 +24,7 @@ ansible_setup = ansible -m setup $(ansible_default_flags) $(ansible_flags)
 ansible_bootstrap_flags = --user="miner" --ask-pass --ask-become-pass
 
 .PHONY: all
-all: init install check-all
+all: init install check
 
 -include install-git-hooks
 .PHONY: install-git-hooks
