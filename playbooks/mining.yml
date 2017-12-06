@@ -34,6 +34,7 @@
     - role: mining/nicehash-stats
       nicehash_api_id: "{{ vault_nicehash_api_id }}"
       nicehash_api_key: "{{ vault_nicehash_api_key_read_only }}"
+      nicehash_stats_state: "{{ nicehash_miner_state }}"
       tags:
         - nicehash-stats
         - nicehash-miner
@@ -41,6 +42,7 @@
       eqm_worker_name: "{{ nicehash_worker_name }}"
       eqm_bitcoin_address: "{{ nicehash_bitcoin_address }}"
       eqm_overclock_command: "{{ overclock_command|default() }}"
+      eqm_state: "{{ nicehash_miner_state }}"
       tags:
         - eqm-miner
         - nicehash-miner

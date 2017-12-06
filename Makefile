@@ -1,3 +1,5 @@
+PIP_INDEX_URL = https://pypi.python.org/simple
+
 ifeq ($(VIRTUAL_ENV),)
 $(error must run in a virtualenv)
 else
@@ -36,11 +38,11 @@ install-git-hooks: .git/hooks/pre-commit
 
 .PHONY: init
 init:
-	pip install -U setuptools pip pip-tools
+	pip install -i $(PIP_INDEX_URL) -U setuptools pip pip-tools
 
 .PHONY: install
 install: requirements.txt
-	pip-sync
+	pip-sync -i $(PIP_INDEX_URL)
 	mkdir -p playbooks/roles/galaxy
 	ansible-galaxy install -r requirements.yml --roles-path playbooks/roles/galaxy
 
@@ -48,7 +50,7 @@ upgrade = $(or UPGRADE,0)
 ifneq ($(upgrade),0)
 pip_compile_flags += --upgrade --rebuild
 endif
-pip_compile = pip-compile $(pip_compile_flags)
+pip_compile = pip-compile -i $(PIP_INDEX_URL) $(pip_compile_flags)
 
 requirements.txt: requirements.in
 	$(pip_compile) $< -o requirements.txt

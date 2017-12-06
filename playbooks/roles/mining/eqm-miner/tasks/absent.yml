@@ -1,0 +1,20 @@
+- name: disable and stop eqm services
+  systemd:
+    name: "{{ eqm_service }}@{{ item.gpu }}"
+    enabled: no
+    state: stopped
+  with_items: "{{ eqm_cuda_devices }}"
+
+- name: delete eqm template service
+  file:
+    path: /etc/systemd/system/{{ eqm_service }}@.service
+    state: absent
+
+- name: systemd daemon reload
+  systemd:
+    daemon_reload: yes
+
+- name: delete eqm executable
+  file:
+    path: "{{ eqm_exe }}"
+    state: absent
