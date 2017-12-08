@@ -3,6 +3,7 @@
     name: "{{ eqm_service }}@{{ item.gpu }}"
     enabled: no
     state: stopped
+  failed_when: false
   with_items: "{{ eqm_cuda_devices }}"
 
 - name: delete eqm template service

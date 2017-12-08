@@ -5,7 +5,7 @@ OnFailure=status-mail@x11vnc.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/x11vnc -geometry {{ x11vnc_resolution }} -xkb -noxrecord -noxfixes -noxdamage -display {{ x11vnc_display }} -auth "{{ x11vnc_auth }}" -forever -rfbauth "{{ x11vnc_rfb_pass_file }}" -rfbport {{ x11vnc_rfb_port|int }}
+ExecStart=/usr/bin/x11vnc -scale {{ x11vnc_scale }} -xkb -ncache 10 -noxrecord -noxfixes -noxdamage -display {{ x11vnc_display }} -auth "{{ x11vnc_auth }}" -forever -rfbauth "{{ x11vnc_rfb_pass_file }}" -rfbport {{ x11vnc_rfb_port|int }}
 Restart=on-failure
 
 [Install]

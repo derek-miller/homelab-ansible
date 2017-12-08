@@ -41,8 +41,38 @@
     - role: mining/eqm-miner
       eqm_worker_name: "{{ nicehash_worker_name }}"
       eqm_bitcoin_address: "{{ nicehash_bitcoin_address }}"
-      eqm_overclock_command: "{{ overclock_command|default() }}"
+      eqm_overclock_command: "{{ nvidia_overclock_exe }} -i %i -l {{ nvidia_power_limit }} -p {{ nvidia_persistence_mode }} -c {{ nvidia_gpu_clock_offset }} -m {{ nvidia_mem_clock_offset }} -f {{ nvidia_fan_speed }}"
       eqm_state: "{{ nicehash_miner_state }}"
       tags:
         - eqm-miner
         - nicehash-miner
+
+- hosts: monacoin
+  roles:
+    - role: mining/ccminer
+      ccminer_coin: monacoin
+      # TODO: Fix host/group vars
+      ccminer_api_bind: 0.0.0.0:5001
+      ccminer_cuda_devices:
+        - 0
+        - 1
+        - 2
+      ccminer_overclock_command: "{{ nvidia_overclock_exe }} -l {{ nvidia_power_limit }} -p {{ nvidia_persistence_mode }} -c {{ nvidia_gpu_clock_offset }} -m {{ nvidia_mem_clock_offset }} -f {{ nvidia_fan_speed }}"
+      tags:
+        - monacoin
+        - ccminer
+
+- hosts: vertcoin
+  roles:
+    - role: mining/ccminer
+      ccminer_coin: vertcoin
+      # TODO: Fix host/group vars
+      ccminer_api_bind: 0.0.0.0:5002
+      ccminer_cuda_devices:
+        - 3
+        - 4
+        - 5
+      ccminer_overclock_command: "{{ nvidia_overclock_exe }} -l {{ nvidia_power_limit }} -p {{ nvidia_persistence_mode }} -c {{ nvidia_gpu_clock_offset }} -m {{ nvidia_mem_clock_offset }} -f {{ nvidia_fan_speed }}"
+      tags:
+        - vertcoin
+        - ccminer
