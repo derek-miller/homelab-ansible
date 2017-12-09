@@ -1,42 +1,17 @@
-[mining:children]
-nvidia-miner
-nicehash-miner
-
 [hs110-stats]
 miner1 hs110_stats_ip_address=192.168.1.5
 
-[nvidia-miner:children]
-nvidia-gtx1070-equihash-miner
-nvidia-gtx1070-lyra2v2-miner
+[nvidia-miner]
+miner1
 
 [nvidia-miner:vars]
 nvidia_overclock_exe=/usr/local/bin/nvidia-overclock
 
-[nvidia-gtx1070-equihash-miner]
-miner1
-
-[nvidia-gtx1070-equihash-miner:vars]
-nvidia_persistence_mode=1
-nvidia_power_limit=117
-nvidia_gpu_clock_offset=160
-nvidia_mem_clock_offset=600
-nvidia_fan_speed=40
-
 [nicehash-miner]
 miner1 nicehash_worker_name=miner1 nicehash_bitcoin_address=3C8DxZGimzMiWEjg2rmcUd2RHAHZjFo6FS nicehash_miner_state=absent
 
-[nvidia-gtx1070-lyra2v2-miner]
-miner1
-
-[nvidia-gtx1070-lyra2v2-miner:vars]
-nvidia_persistence_mode=1
-nvidia_power_limit=117
-nvidia_gpu_clock_offset=160
-nvidia_mem_clock_offset=600
-nvidia_fan_speed=40
-
 [vertcoin]
-miner1 ccminer_cuda_devices=0,1,2 ccminer_nvcc_arch=gtx1070 ccminer_api_bind=0.0.0.0:5001 ccminer_overclock_at_start=no
+miner1 vertcoin_pool=coinotron vertcoin_gpu_type=nvidia-gtx1070 vertcoin_gpu_devices=0,1,2 vertcoin_api_bind=0.0.0.0:5001 vertcoin_overclock_at_start=yes
 
 [monacoin]
-miner1 ccminer_cuda_devices=3,4,5 ccminer_nvcc_arch=gtx1070 ccminer_api_bind=0.0.0.0:5002 ccminer_overclock_at_start=no
+miner1 monacoin_pool=suprnova monacoin_gpu_type=nvidia-gtx1070 monacoin_gpu_devices=3,4,5 monacoin_api_bind=0.0.0.0:5002 monacoin_overclock_at_start=no

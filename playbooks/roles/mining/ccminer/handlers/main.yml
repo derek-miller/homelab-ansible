@@ -1,9 +1,4 @@
-- name: restart ccminer-vertcoin
+- name: restart ccminer
   systemd:
-    name: "{{ ccminer_service }}-vertcoin"
-    state: restarted
-
-- name: restart ccminer-monacoin
-  systemd:
-    name: "{{ ccminer_service }}-monacoin"
+    name: "{{ ccminer_service }}"
     state: restarted

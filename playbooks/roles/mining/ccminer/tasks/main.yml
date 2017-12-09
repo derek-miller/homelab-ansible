@@ -5,7 +5,6 @@
 - assert:
     that: ansible_service_mgr == 'systemd'
 
-
 - name: create/delete ccminer directories
   become: yes
   file:
@@ -57,6 +56,7 @@
 #  args:
 #    chdir: "{{ ccminer_install_dir }}"
 #    creates: "{{ ccminer_install_dir }}/ccminer"
+#  register: restart ccminer
 
 - name: create ccminer {{ ccminer_coin }} config
   template:
@@ -65,26 +65,26 @@
     owner: root
     group: root
     mode: 0600
-  notify: restart {{ ccminer_service }}-{{ ccminer_coin }}
+  notify: restart ccminer
 
-- name: create {{ ccminer_service }}-{{ ccminer_coin }} service
+- name: create {{ ccminer_service }} service
   template:
     src: ccminer.service.jinja2
-    dest: /etc/systemd/system/{{ ccminer_service }}-{{ ccminer_coin }}.service
+    dest: /etc/systemd/system/{{ ccminer_service }}.service
     owner: root
     group: root
     mode: 0644
-  notify: restart {{ ccminer_service }}-{{ ccminer_coin }}
+  notify: restart ccminer
 
-- name: enable {{ ccminer_service }}-{{ ccminer_coin }} service
+- name: enable {{ ccminer_service }} service
   systemd:
-    name: "{{ ccminer_service }}-{{ ccminer_coin }}"
+    name: "{{ ccminer_service }}"
     enabled: yes
     daemon_reload: yes
 
 - meta: flush_handlers
 
-- name: start {{ ccminer_service }}-{{ ccminer_coin }} service
+- name: start {{ ccminer_service }} service
   systemd:
-    name: "{{ ccminer_service }}-{{ ccminer_coin }}"
+    name: "{{ ccminer_service }}"
     state: started

@@ -1,1 +1,4 @@
 ansible_host: 192.168.1.6
+gpus:
+  - name: nvidia-gtx1070
+    count: 6

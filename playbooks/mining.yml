@@ -1,6 +1,6 @@
-- import_playbook: include-base.yml base_hosts=mining
+- import_playbook: include-base.yml base_hosts=all
 
-- hosts: mining
+- hosts: all
   roles:
     - role: common/nonessential
       tags:
@@ -47,32 +47,38 @@
         - eqm-miner
         - nicehash-miner
 
-- hosts: monacoin
-  roles:
-    - role: mining/ccminer
-      ccminer_coin: monacoin
-      # TODO: Fix host/group vars
-      ccminer_api_bind: 0.0.0.0:5001
-      ccminer_cuda_devices:
-        - 0
-        - 1
-        - 2
-      ccminer_overclock_command: "{{ nvidia_overclock_exe }} -l {{ nvidia_power_limit }} -p {{ nvidia_persistence_mode }} -c {{ nvidia_gpu_clock_offset }} -m {{ nvidia_mem_clock_offset }} -f {{ nvidia_fan_speed }}"
-      tags:
-        - monacoin
-        - ccminer
-
 - hosts: vertcoin
   roles:
     - role: mining/ccminer
+      ccminer_state: "{{ vertcoin_state|default('present') }}"
       ccminer_coin: vertcoin
-      # TODO: Fix host/group vars
-      ccminer_api_bind: 0.0.0.0:5002
-      ccminer_cuda_devices:
-        - 3
-        - 4
-        - 5
-      ccminer_overclock_command: "{{ nvidia_overclock_exe }} -l {{ nvidia_power_limit }} -p {{ nvidia_persistence_mode }} -c {{ nvidia_gpu_clock_offset }} -m {{ nvidia_mem_clock_offset }} -f {{ nvidia_fan_speed }}"
+      ccminer_pool: "{{ vertcoin_pool }}"
+      ccminer_gpu_type: "{{ vertcoin_gpu_type }}"
+      ccminer_gpu_devices: "{{ vertcoin_gpu_devices|default([]) }}"
+      ccminer_api_bind: "{{ vertcoin_api_bind|default('0') }}"
+      ccminer_api_remote: "{{ vertcoin_api_remote|default('no')|bool }}"
+      ccminer_intensity: "{{ vertcoin_intensity|default('auto') }}"
+      ccminer_cuda_schedule: "{{ vertcoin_cuda_schedule|default('auto') }}"
+      ccminer_cpu_priority: "{{ vertcoin_cpu_priority|default(3)|int }}"
+      ccminer_overclock_at_start: "{{ vertcoin_overclock_at_start|default('no')|bool }}"
       tags:
         - vertcoin
+        - ccminer
+
+- hosts: monacoin
+  roles:
+    - role: mining/ccminer
+      ccminer_state: "{{ monacoin_state|default('present') }}"
+      ccminer_coin: monacoin
+      ccminer_pool: "{{ monacoin_pool }}"
+      ccminer_gpu_type: "{{ monacoin_gpu_type }}"
+      ccminer_gpu_devices: "{{ monacoin_gpu_devices|default([]) }}"
+      ccminer_api_bind: "{{ monacoin_api_bind|default('0') }}"
+      ccminer_api_remote: "{{ monacoin_api_remote|default('no')|bool }}"
+      ccminer_intensity: "{{ monacoin_intensity|default('auto') }}"
+      ccminer_cuda_schedule: "{{ monacoin_cuda_schedule|default('auto') }}"
+      ccminer_cpu_priority: "{{ monacoin_cpu_priority|default(3)|int }}"
+      ccminer_overclock_at_start: "{{ monacoin_overclock_at_start|default('no')|bool }}"
+      tags:
+        - monacoin
         - ccminer

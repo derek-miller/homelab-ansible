@@ -1,24 +1,21 @@
 ccminer_state: present
-ccminer_service: ccminer
+ccminer_service: ccminer-{{ ccminer_coin }}
 
 ccminer_api_bind: 0
 ccminer_api_remote: no
 ccminer_intensity: auto
 ccminer_cuda_schedule: auto
 ccminer_cpu_priority: 3
+ccminer_gpu_devices: []
 
 ccminer_overclock_at_start: no
-ccminer_overclock_command:
-ccminer_cuda_devices: []
+ccminer_overclock_command: "{{ gpu_overclock_commands[ccminer_gpu_type][ccminer_supported_coins[ccminer_coin].alg]|trim }}"
 
 ccminer_config_dir: /etc/ccminer/conf.d
 ccminer_install_dir: /opt/ccminer
 
 ccminer_git_clone_url: https://github.com/tpruvot/ccminer.git
 ccminer_git_commit_hash: 2.2.3-tpruvot
-
-ccminer_nvcc_supported_archs:
-  - gtx1070: nvcc_ARCH = -gencode=arch=compute_61,code=\"sm_61,compute_61\"
 
 ccminer_apt_dependencies:
   - automake
@@ -29,95 +26,27 @@ ccminer_apt_dependencies:
   - libssl-dev
 
 ccminer_supported_coins:
-#  vertcoin:
-#    alg: lyra2v2
-#    pool_url: stratum+tcp://coinotron.com:3340
-#    pool_user: gitlit.001
-#    pool_pass: pass
   vertcoin:
     alg: lyra2v2
-    pool_url: stratum+tcp://vtc.give-me-coins.com:3337
-    pool_user: gitlit.bob
-    pool_pass: spaghetti14
+    pools:
+      coinotron:
+        url: stratum+tcp://coinotron.com:3340
+        user: gitlit.peter
+        pass: spaghetti14
+      give-me-coins:
+        url: stratum+tcp://vtc.give-me-coins.com:3337
+        user: gitlit.bob
+        pass: spaghetti14
   monacoin:
     alg: lyra2v2
-    pool_url: stratum+tcp://mona.suprnova.cc:2995
-    pool_user: gitlit.billy
-    pool_pass: spaghetti14
+    pools:
+      suprnova:
+        url: stratum+tcp://mona.suprnova.cc:2995
+        user: gitlit.billy
+        pass: spaghetti14
 
 # must set:
 # ccminer_coin
-# ccminer_nvcc_arch
-
-
-#*** ccminer 2.2.3 for nVidia GPUs by tpruvot@github ***
-#    Built with the nVidia CUDA Toolkit 9.0 64-bits
-#
-#  Originally based on Christian Buchner and Christian H. project
-#  Include some kernels from alexis78, djm34, djEzo, tsiv and krnlx.
-#
-#BTC donation address: 1AJdfCpLWPNoAMDfHF1wD5y8VgKSSTHxPo (tpruvot)
-#
-#Usage: ccminer [OPTIONS]
-#Options:
-#  -a, --algo=ALGO       specify the hash algorithm to use
-#  -d, --devices         Comma separated list of CUDA devices to use.
-#                        Device IDs start counting from 0! Alternatively takes
-#                        string names of your cards like gtx780ti or gt640#2
-#                        (matching 2nd gt640 in the PC)
-#  -i  --intensity=N[,N] GPU intensity 8.0-25.0 (default: auto)
-#                        Decimals are allowed for fine tuning
-#      --cuda-schedule   Set device threads scheduling mode (default: auto)
-#  -f, --diff-factor     Divide difficulty by this factor (default 1.0)
-#  -m, --diff-multiplier Multiply difficulty by this value (default 1.0)
-#      --vote=VOTE       vote (for decred and HeavyCoin)
-#      --trust-pool      trust the max block reward vote (maxvote) sent by the pool
-#  -o, --url=URL         URL of mining server
-#  -O, --userpass=U:P    username:password pair for mining server
-#  -u, --user=USERNAME   username for mining server
-#  -p, --pass=PASSWORD   password for mining server
-#      --cert=FILE       certificate for mining server using SSL
-#  -x, --proxy=[PROTOCOL://]HOST[:PORT]  connect through a proxy
-#  -t, --threads=N       number of miner threads (default: number of nVidia GPUs)
-#  -r, --retries=N       number of times to retry if a network call fails
-#                          (default: retry indefinitely)
-#  -R, --retry-pause=N   time to pause between retries, in seconds (default: 30)
-#      --shares-limit    maximum shares [s] to mine before exiting the program.
-#      --time-limit      maximum time [s] to mine before exiting the program.
-#  -T, --timeout=N       network timeout, in seconds (default: 300)
-#  -s, --scantime=N      upper bound on time spent scanning current work when
-#                          long polling is unavailable, in seconds (default: 10)
-#      --submit-stale    ignore stale jobs checks, may create more rejected shares
-#  -n, --ndevs           list cuda devices
-#  -N, --statsavg        number of samples used to compute hashrate (default: 30)
-#      --no-gbt          disable getblocktemplate support (height check in solo)
-#      --no-longpoll     disable X-Long-Polling support
-#      --no-stratum      disable X-Stratum support
-#      --no-extranonce   disable extranonce subscribe on stratum
-#  -q, --quiet           disable per-thread hashmeter output
-#      --no-color        disable colored output
-#  -D, --debug           enable debug output
-#  -P, --protocol-dump   verbose dump of protocol-level activities
-#      --cpu-affinity    set process affinity to cpu core(s), mask 0x3 for cores 0 and 1
-#      --cpu-priority    set process priority (default: 3) 0 idle, 2 normal to 5 highest
-#  -b, --api-bind=port   IP:port for the miner API (default: 127.0.0.1:4068), 0 disabled
-#      --api-remote      Allow remote control, like pool switching, imply --api-allow=0/0
-#      --api-allow=...   IP/mask of the allowed api client(s), 0/0 for all
-#      --max-temp=N      Only mine if gpu temp is less than specified value
-#      --max-rate=N[KMG] Only mine if net hashrate is less than specified value
-#      --max-diff=N      Only mine if net difficulty is less than specified value
-#                        Can be tuned with --resume-diff=N to set a resume value
-#      --max-log-rate    Interval to reduce per gpu hashrate logs (default: 3)
-#      --mem-clock=3505  Set the gpu memory max clock (346.72+ driver)
-#      --gpu-clock=1150  Set the gpu engine max clock (346.72+ driver)
-#      --pstate=0[,2]    Set the gpu power state (352.21+ driver)
-#      --plimit=100W     Set the gpu power limit (352.21+ driver)
-#  -S, --syslog          use system log for output messages
-#      --syslog-prefix=... allow to change syslog tool name
-#      --hide-diff       hide submitted block and net difficulty (old mode)
-#  -B, --background      run the miner in the background
-#      --benchmark       run in offline benchmark mode
-#      --cputest         debug hashes from cpu algorithms
-#  -c, --config=FILE     load a JSON-format configuration file
-#  -V, --version         display version information and exit
-#  -h, --help            display this help text and exit
+# ccminer_pool
+# ccminer_gpu_type
+# ccminer_gpu_devices

@@ -1,11 +1,11 @@
 [Unit]
-Description={{ ccminer_service }}-{{ ccminer_coin }}
+Description={{ ccminer_service }}
 After=network.target
-OnFailure=status-mail@{{ ccminer_service }}-{{ ccminer_coin }}.service
+OnFailure=status-mail@{{ ccminer_service }}.service
 
 [Service]
 Type=simple
-{% if ccminer_overclock_at_start|default()|bool and ccminer_overclock_command|default()|trim %}
+{% if ccminer_overclock_at_start|default()|bool and ccminer_overclock_command|trim %}
 ExecStartPre={{ ccminer_overclock_command|trim }}
 {% endif %}
 ExecStart={{ ccminer_install_dir }}/ccminer \
@@ -13,7 +13,7 @@ ExecStart={{ ccminer_install_dir }}/ccminer \
 WorkingDirectory=/tmp
 KillMode=mixed
 KillSignal=SIGINT
-SyslogIdentifier={{ ccminer_service }}-{{ ccminer_coin }}
+SyslogIdentifier={{ ccminer_service }}
 Restart=on-failure
 
 [Install]
