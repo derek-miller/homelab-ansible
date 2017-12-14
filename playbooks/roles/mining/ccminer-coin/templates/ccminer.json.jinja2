@@ -1,0 +1,29 @@
+{
+    "algo" : "{{ ccminer_coin_supported_coins[ccminer_coin_name].algorithm }}",
+
+    {% if ccminer_coin_gpu_devices|length > 0 -%}
+    "devices": "{{ ccminer_coin_gpu_devices|join(',') }}",
+    "threads": {{ ccminer_coin_gpu_devices|length }},
+    {% endif -%}
+    {% if ccminer_coin_intensity != 'auto' -%}
+    "intensity": {{ ccminer_coin_intensity|float|tojson }},
+    {% endif -%}
+    {% if ccminer_coin_cuda_schedule != 'auto' %}
+    "cuda-schedule": "{{ ccminer_coin_cuda_schedule }},"
+    {% endif -%}
+
+    {% if ccminer_coin_api_bind -%}
+    "api-bind": "{{ ccminer_coin_api_bind }}",
+    "api-remote": {{ ccminer_coin_api_remote|bool|tojson }},
+    {% endif -%}
+    "statsavg": 20,
+
+    "quiet" : false,
+    "debug" : false,
+    "protocol" : false,
+    "cpu-priority" : {{ ccminer_coin_cpu_priority|int|tojson }},
+
+    "url": "{{ ccminer_coin_supported_coins[ccminer_coin_name].pools[ccminer_coin_pool].url }}",
+    "user": "{{ ccminer_coin_supported_coins[ccminer_coin_name].pools[ccminer_coin_pool].user }}",
+    "pass" : "{{ ccminer_coin_supported_coins[ccminer_coin_name].pools[ccminer_coin_pool].pass }}"
+}

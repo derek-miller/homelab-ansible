@@ -1,0 +1,45 @@
+- name: create ccminer install directory
+  file:
+    dest: "{{ ccminer_exe_install_dir }}"
+    state: 'directory'
+    mode: 0755
+
+- name: install ccminer dependencies
+  apt: name={{ item }} state=present
+  with_items: "{{ ccminer_exe_apt_dependencies }}"
+
+- name: download ccminer src
+  git:
+    repo: "{{ ccminer_exe_git_clone_url }}"
+    dest: "{{ ccminer_exe_install_dir }}"
+    version: "{{ ccminer_exe_git_commit_hash }}"
+    force: yes
+  register: ccminer_coin_clone_result
+
+- name: delete ccminer if necessary for rebuild
+  file:
+    path: "{{ ccminer_exe_binary }}"
+    state: absent
+  when: ccminer_coin_clone_result.changed
+
+# TODO: Figure out how to edit makefile without rebuilding everytime
+- name: delete incompatible nvcc arch flags
+  lineinfile:
+    path: "{{ ccminer_exe_install_dir }}/Makefile.am"
+    regexp: '^nvcc_ARCH.*$'
+    state: absent
+
+- name: set nvcc arch flags
+  lineinfile:
+    path: "{{ ccminer_exe_install_dir }}/Makefile.am"
+    line: "{{ ccminer_exe_apt_dependencies[ccminer_coin_nvcc_arch] }}"
+    insertbefore: '^nvcc_FLAGS.*$'
+    regexp: '^nvcc_ARCH.*$'
+
+- name: build ccminer
+  command: ./build.sh
+  args:
+    chdir: "{{ ccminer_exe_install_dir }}"
+    creates: "{{ ccminer_exe_binary }}"
+
+# TODO: Link ccminer binary to /usr/local/bin?

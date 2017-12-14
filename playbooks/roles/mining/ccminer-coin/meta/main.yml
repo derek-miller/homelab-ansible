@@ -1,2 +1,3 @@
 dependencies:
   - role: generic/systemd-status-mail
+  - role: mining/ccminer-exe

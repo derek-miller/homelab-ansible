@@ -1,0 +1,36 @@
+- name: create ccminer config directory
+  file:
+    dest: "{{ ccminer_coin_config_dir }}"
+    state: directory
+    mode: 0755
+
+- name: create ccminer {{ ccminer_coin_name }} config
+  template:
+    src: ccminer.json.jinja2
+    dest: "{{ ccminer_coin_config_dir }}/{{ ccminer_coin_name }}.json"
+    owner: root
+    group: root
+    mode: 0644
+  notify: restart ccminer
+
+- name: create {{ ccminer_coin_service }} service
+  template:
+    src: ccminer.service.jinja2
+    dest: /etc/systemd/system/{{ ccminer_coin_service }}.service
+    owner: root
+    group: root
+    mode: 0644
+  notify: restart ccminer
+
+- name: enable {{ ccminer_coin_service }} service
+  systemd:
+    name: "{{ ccminer_coin_service }}"
+    enabled: yes
+    daemon_reload: yes
+
+- meta: flush_handlers
+
+- name: start {{ ccminer_coin_service }} service
+  systemd:
+    name: "{{ ccminer_coin_service }}"
+    state: started

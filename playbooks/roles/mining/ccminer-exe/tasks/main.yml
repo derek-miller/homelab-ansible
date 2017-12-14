@@ -1,0 +1,11 @@
+- assert:
+    that: ccminer_exe_state in ('present', 'absent')
+- assert:
+    that: ansible_distribution == 'Ubuntu'
+- assert:
+    that: ansible_distribution_version == '16.04'
+- assert:
+    that: ansible_service_mgr == 'systemd'
+
+# TODO: fix role
+#- include_tasks: "{{ ccminer_exe_state }}.yml"

@@ -1,4 +1,4 @@
 - name: restart ccminer
   systemd:
-    name: "{{ ccminer_service }}"
+    name: "{{ ccminer_coin_service }}"
     state: restarted

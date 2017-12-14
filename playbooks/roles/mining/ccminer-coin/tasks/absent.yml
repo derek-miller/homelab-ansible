@@ -1,0 +1,26 @@
+- name: stop {{ ccminer_coin_service }} service
+  systemd:
+    name: "{{ ccminer_coin_service }}"
+    state: stopped
+
+- name: disable {{ ccminer_coin_service }} service
+  systemd:
+    name: "{{ ccminer_coin_service }}"
+    enabled: no
+    daemon_reload: yes
+
+- name: delete {{ ccminer_coin_service }} service
+  file:
+    path: /etc/systemd/system/{{ ccminer_coin_service }}.service
+    state: absent
+
+- name: delete ccminer {{ ccminer_coin_name }} config
+  file:
+    path: "{{ ccminer_coin_config_dir }}/{{ ccminer_coin_name }}.json"
+    state: absent
+
+# TODO: Delete directory if empty
+#- name: delete ccminer config directory
+#  file:
+#    dest: "{{ ccminer_coin_config_dir }}"
+#    state: absent

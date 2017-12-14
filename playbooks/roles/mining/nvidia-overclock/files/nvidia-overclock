@@ -2,8 +2,7 @@
 set -e
 
 # Initialize our own variables:
-GPU_ID_SMI=""
-GPU_ID_SETTINGS=""
+DEVICES=""
 POWER=""
 PM=""
 CLOCK=""
@@ -29,8 +28,7 @@ function getOptions(){
    while getopts "i:l:p:c:m:f:h" opt ; do
      case $opt in
         i)
-           export GPU_ID_SMI="-i $OPTARG "
-           export GPU_ID_SETTINGS="[gpu:$OPTARG]/"
+           export DEVICES=$OPTARG
            ;;
         l)
            export POWER=$OPTARG
@@ -67,8 +65,7 @@ function getOptions(){
 
 function printValues(){
    # for debugging
-   echo "GPU_ID_SMI: ${GPU_ID_SMI}"
-   echo "GPU_ID_SETTINGS: ${GPU_ID_SETTINGS}"
+   echo "DEVICES: ${DEVICES}"
    echo "POWER: ${POWER}"
    echo "PM: ${PM}"
    echo "CLOCK: ${CLOCK}"
@@ -93,12 +90,26 @@ fi
 export DISPLAY=:0
 export XAUTHORITY=/var/run/lightdm/root/${DISPLAY}
 
-${NVIDIA_SETTINGS} -a ${GPU_ID_SETTINGS}GPUPowerMizerMode=1
-[ "$PM" != "" ] && ${NVIDIA_SMI} ${GPU_ID_SMI}-pm ${PM}
-[ "$POWER" != "" ] && ${NVIDIA_SMI} ${GPU_ID_SMI}-pl ${POWER}
-[ "$FAN" != "" ] && ${NVIDIA_SETTINGS} -a ${GPU_ID_SETTINGS}GPUFanControlState=1
-[ "$FAN" != "" ] && ${NVIDIA_SETTINGS} -a ${GPU_ID_SETTINGS}GPUTargetFanSpeed=${FAN}
-[ "$CLOCK" != "" ] && ${NVIDIA_SETTINGS} -a ${GPU_ID_SETTINGS}GPUGraphicsClockOffset[3]=${CLOCK}
-[ "$MEM" != "" ] && ${NVIDIA_SETTINGS} -a ${GPU_ID_SETTINGS}GPUMemoryTransferRateOffset[3]=${MEM}
+if [ "$DEVICES" != "" ]; then
+    IFS=","
+    for device in ${DEVICES}
+    do
+        ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUPowerMizerMode=1
+        [ "$PM" != "" ] && ${NVIDIA_SMI} -i ${device} -pm ${PM}
+        [ "$POWER" != "" ] && ${NVIDIA_SMI} -i ${device} -pl ${POWER}
+        [ "$FAN" != "" ] && ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUFanControlState=1
+        [ "$FAN" != "" ] && ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUTargetFanSpeed=${FAN}
+        [ "$CLOCK" != "" ] && ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUGraphicsClockOffset[3]=${CLOCK}
+        [ "$MEM" != "" ] && ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUMemoryTransferRateOffset[3]=${MEM}
+    done
+else
+    ${NVIDIA_SETTINGS} -a GPUPowerMizerMode=1
+    [ "$PM" != "" ] && ${NVIDIA_SMI} -pm ${PM}
+    [ "$POWER" != "" ] && ${NVIDIA_SMI} -pl ${POWER}
+    [ "$FAN" != "" ] && ${NVIDIA_SETTINGS} -a GPUFanControlState=1
+    [ "$FAN" != "" ] && ${NVIDIA_SETTINGS} -a GPUTargetFanSpeed=${FAN}
+    [ "$CLOCK" != "" ] && ${NVIDIA_SETTINGS} -a GPUGraphicsClockOffset[3]=${CLOCK}
+    [ "$MEM" != "" ] && ${NVIDIA_SETTINGS} -a GPUMemoryTransferRateOffset[3]=${MEM}
+fi
 
 exit 0

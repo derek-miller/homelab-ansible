@@ -29,8 +29,19 @@ vnc_password: "{{ vault_vnc_password }}"
 sudoers: []
 alert_email_address: alerts@gitlit.io
 
-gpu_overclock_commands:
+gpu_overclock_vars:
   nvidia-gtx1070:
-    equihash: "{{ nvidia_overclock_exe }} -l 117 -p 1 -c 160 -m 600 -f 40"
-    lyra2v2: "{{ nvidia_overclock_exe }} -l 117 -p 1 -c 160 -m 600 -f 40"
+    exe:
+      all_gpus: "{{ nvidia_overclock_exe }}"
+      multi_gpus: "{{ nvidia_overclock_exe }} -i"
+    algorithms:
+      neoscrypt: "-l 117 -p 1 -c 160 -m 600 -f 40"
+      equihash: "-l 117 -p 1 -c 160 -m 600 -f 40"
+      lyra2v2: "-l 117 -p 1 -c 160 -m 600 -f 40"
 
+suprnova_user: "{{ vault_suprnova_user }}"
+suprnova_pass: "{{ vault_suprnova_pass }}"
+coinotron_user: "{{ vault_coinotron_user }}"
+coinotron_pass: "{{ vault_coinotron_pass }}"
+give_me_coins_user: "{{ vault_give_me_coins_user }}"
+give_me_coins_pass: "{{ vault_give_me_coins_pass }}"

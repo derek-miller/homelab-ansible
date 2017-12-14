@@ -1,0 +1,16 @@
+- assert:
+    that: ccminer_coin_state in ('present', 'absent')
+- assert:
+    that: ansible_distribution == 'Ubuntu'
+- assert:
+    that: ansible_distribution_version == '16.04'
+- assert:
+    that: ansible_service_mgr == 'systemd'
+
+- include_tasks: absent.yml
+  when: ccminer_coin_state == 'absent' or ccminer_coin_gpu_devices|length == 0
+
+- include_tasks: present.yml
+  when:
+    - ccminer_coin_state == 'present'
+    - ccminer_coin_gpu_devices|length > 0

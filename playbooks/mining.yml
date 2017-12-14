@@ -15,6 +15,7 @@
 
 - hosts: nvidia-miner
   roles:
+# TODO: Install cuda with ansible
 #    - role: galaxy/nvidia-cuda
 #      gpu: True
 #      tags:
@@ -49,36 +50,55 @@
 
 - hosts: vertcoin
   roles:
-    - role: mining/ccminer
-      ccminer_state: "{{ vertcoin_state|default('present') }}"
-      ccminer_coin: vertcoin
-      ccminer_pool: "{{ vertcoin_pool }}"
-      ccminer_gpu_type: "{{ vertcoin_gpu_type }}"
-      ccminer_gpu_devices: "{{ vertcoin_gpu_devices|default([]) }}"
-      ccminer_api_bind: "{{ vertcoin_api_bind|default('0') }}"
-      ccminer_api_remote: "{{ vertcoin_api_remote|default('no')|bool }}"
-      ccminer_intensity: "{{ vertcoin_intensity|default('auto') }}"
-      ccminer_cuda_schedule: "{{ vertcoin_cuda_schedule|default('auto') }}"
-      ccminer_cpu_priority: "{{ vertcoin_cpu_priority|default(3)|int }}"
-      ccminer_overclock_at_start: "{{ vertcoin_overclock_at_start|default('no')|bool }}"
+    - role: mining/ccminer-coin
+      # TODO: Check all defaults
+      ccminer_coin_state: "{{ vertcoin_state|default('present') }}"
+      ccminer_coin_name: vertcoin
+      ccminer_coin_pool: "{{ vertcoin_pool }}"
+      ccminer_coin_gpu_type: "{{ vertcoin_gpu_type }}"
+      ccminer_coin_gpu_devices: "{{ vertcoin_gpu_devices|default([]) }}"
+      ccminer_coin_api_bind: "{{ vertcoin_api_bind|default('0') }}"
+      ccminer_coin_api_remote: "{{ vertcoin_api_remote|default('no')|bool }}"
+      ccminer_coin_intensity: "{{ vertcoin_intensity|default('auto') }}"
+      ccminer_coin_cuda_schedule: "{{ vertcoin_cuda_schedule|default('auto') }}"
+      ccminer_coin_cpu_priority: "{{ vertcoin_cpu_priority|default(3)|int }}"
+      ccminer_coin_overclock_at_start: "{{ vertcoin_overclock_at_start|default('no')|bool }}"
       tags:
         - vertcoin
         - ccminer
 
 - hosts: monacoin
   roles:
-    - role: mining/ccminer
-      ccminer_state: "{{ monacoin_state|default('present') }}"
-      ccminer_coin: monacoin
-      ccminer_pool: "{{ monacoin_pool }}"
-      ccminer_gpu_type: "{{ monacoin_gpu_type }}"
-      ccminer_gpu_devices: "{{ monacoin_gpu_devices|default([]) }}"
-      ccminer_api_bind: "{{ monacoin_api_bind|default('0') }}"
-      ccminer_api_remote: "{{ monacoin_api_remote|default('no')|bool }}"
-      ccminer_intensity: "{{ monacoin_intensity|default('auto') }}"
-      ccminer_cuda_schedule: "{{ monacoin_cuda_schedule|default('auto') }}"
-      ccminer_cpu_priority: "{{ monacoin_cpu_priority|default(3)|int }}"
-      ccminer_overclock_at_start: "{{ monacoin_overclock_at_start|default('no')|bool }}"
+    - role: mining/ccminer-coin
+      ccminer_coin_state: "{{ monacoin_state|default('present') }}"
+      ccminer_coin_name: monacoin
+      ccminer_coin_pool: "{{ monacoin_pool }}"
+      ccminer_coin_gpu_type: "{{ monacoin_gpu_type }}"
+      ccminer_coin_gpu_devices: "{{ monacoin_gpu_devices|default([]) }}"
+      ccminer_coin_api_bind: "{{ monacoin_api_bind|default('0') }}"
+      ccminer_coin_api_remote: "{{ monacoin_api_remote|default('no')|bool }}"
+      ccminer_coin_intensity: "{{ monacoin_intensity|default('auto') }}"
+      ccminer_coin_cuda_schedule: "{{ monacoin_cuda_schedule|default('auto') }}"
+      ccminer_coin_cpu_priority: "{{ monacoin_cpu_priority|default(3)|int }}"
+      ccminer_coin_overclock_at_start: "{{ monacoin_overclock_at_start|default('no')|bool }}"
       tags:
         - monacoin
+        - ccminer
+
+- hosts: vivocoin
+  roles:
+    - role: mining/ccminer-coin
+      ccminer_coin_state: "{{ vivocoin_state|default('present') }}"
+      ccminer_coin_name: vivocoin
+      ccminer_coin_pool: "{{ vivocoin_pool }}"
+      ccminer_coin_gpu_type: "{{ vivocoin_gpu_type }}"
+      ccminer_coin_gpu_devices: "{{ vivocoin_gpu_devices|default([]) }}"
+      ccminer_coin_api_bind: "{{ vivocoin_api_bind|default('0') }}"
+      ccminer_coin_api_remote: "{{ vivocoin_api_remote|default('no')|bool }}"
+      ccminer_coin_intensity: "{{ vivocoin_intensity|default('auto') }}"
+      ccminer_coin_cuda_schedule: "{{ vivocoin_cuda_schedule|default('auto') }}"
+      ccminer_coin_cpu_priority: "{{ vivocoin_cpu_priority|default(3)|int }}"
+      ccminer_coin_overclock_at_start: "{{ vivocoin_overclock_at_start|default('no')|bool }}"
+      tags:
+        - vivocoin
         - ccminer

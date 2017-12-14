@@ -1,0 +1,12 @@
+ccminer_exe_state: present
+ccminer_exe_install_dir: /opt/ccminer
+ccminer_exe_binary: "{{ ccminer_exe_install_dir }}/ccminer"
+ccminer_exe_git_clone_url: https://github.com/tpruvot/ccminer.git
+ccminer_exe_git_commit_hash: 2.2.3-tpruvot
+ccminer_exe_apt_dependencies:
+  - automake
+  - autotools-dev
+  - build-essential
+  - libcurl4-openssl-dev
+  - libjansson-dev
+  - libssl-dev
