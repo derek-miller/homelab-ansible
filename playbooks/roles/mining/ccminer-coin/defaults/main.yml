@@ -35,7 +35,7 @@ ccminer_coin_supported_coins:
     algorithm: neoscrypt
     pools:
       altminer:
-        url: stratum+tcp://eu1.altminer.net:4233
+        url: stratum+tcp://eu1.altminer.net:10001
         # TODO: make sure vivocoin_wallet is passed
         user: "{{ vivocoin_wallet }}"
         pass: c=VIVO
