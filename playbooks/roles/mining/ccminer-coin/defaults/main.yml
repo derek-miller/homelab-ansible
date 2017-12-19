@@ -31,6 +31,11 @@ ccminer_coin_supported_coins:
         url: stratum+tcp://mona.suprnova.cc:2995
         user: gitlit.billy
         pass: spaghetti14
+      poolmining:
+        url: stratum+tcp://mona.poolmining.org:3092
+        # TODO: make sure monacoin_wallet is passed
+        user: "{{ monacoin_wallet }}"
+        pass: d=8
   vivocoin:
     algorithm: neoscrypt
     pools:
