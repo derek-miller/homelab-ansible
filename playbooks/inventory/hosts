@@ -10,6 +10,9 @@ nvidia_overclock_exe=/usr/local/bin/nvidia-overclock
 [nicehash-miner]
 miner1 nicehash_worker_name=miner1 nicehash_bitcoin_address=3C8DxZGimzMiWEjg2rmcUd2RHAHZjFo6FS nicehash_miner_state=absent
 
+[coin-stats]
+miner1 coinmarketcap_ids=vivo,monacoin,vertcoin,bitcoin
+
 [vertcoin]
 miner1 vertcoin_pool=coinotron vertcoin_gpu_type=nvidia-gtx1070 vertcoin_gpu_devices=0,1 vertcoin_api_bind=0.0.0.0:5001 vertcoin_overclock_at_start=yes
 
