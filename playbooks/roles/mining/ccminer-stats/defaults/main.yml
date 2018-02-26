@@ -1,0 +1,8 @@
+ccminer_stats_state: present
+ccminer_stats_virtualenv_path: /opt/ccminer-stats/{{ ccminer_coin_name }}/virtualenv
+ccminer_stats_script_install_dir: "{{ ccminer_stats_virtualenv_path }}/bin"
+ccminer_stats_timeout_s: 5
+
+# must set:
+# ccminer_coin_name
+# ccminer_api_url

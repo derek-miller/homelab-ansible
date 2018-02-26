@@ -1,0 +1,6 @@
+[[inputs.exec]]
+  commands = [
+    "{{ coin_stats_script_install_dir }}/coin-stats {{ ' '.join(coin_stats_coinmarketcap_ids) }}",
+  ]
+  timeout = "{{ coin_stats_timeout_s|int }}s"
+  data_format = "influx"

@@ -1,0 +1,35 @@
+- assert:
+    that: ccminer_stats_state in ('present', 'absent')
+
+- when: ccminer_stats_state == 'present'
+  block:
+    - name: install python dependencies
+      pip:
+        virtualenv: "{{ ccminer_stats_virtualenv_path }}"
+        name: "{{ item }}"
+        extra_args: --upgrade-strategy only-if-needed
+        state: latest
+      with_items:
+        - click
+        - websocket-client
+
+    - name: copy ccminer-stats script
+      template:
+        src: ccminer-stats.jinja2
+        dest: "{{ ccminer_stats_script_install_dir }}/ccminer-stats"
+        owner: root
+        group: root
+        mode: 0755
+
+- name: delete ccminer-stats script
+  file:
+    path: "{{ ccminer_stats_script_install_dir }}/ccminer-stats"
+    state: absent
+  when: ccminer_stats_state == 'absent'
+
+- include_role:
+    name: generic/telegraf/plugin
+  vars:
+      telegraf_plugin_conf_src: ccminer-stats.conf.jinja2
+      telegraf_plugin_conf: ccminer-stats-{{ ccminer_coin_name }}.conf
+      telegraf_plugin_state: "{{ ccminer_stats_state }}"

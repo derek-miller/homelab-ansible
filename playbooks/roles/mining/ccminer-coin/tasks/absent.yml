@@ -2,12 +2,14 @@
   systemd:
     name: "{{ ccminer_coin_service }}"
     state: stopped
+  failed_when: False
 
 - name: disable {{ ccminer_coin_service }} service
   systemd:
     name: "{{ ccminer_coin_service }}"
     enabled: no
     daemon_reload: yes
+  failed_when: False
 
 - name: delete {{ ccminer_coin_service }} service
   file:
