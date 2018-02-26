@@ -13,6 +13,13 @@
       tags:
         - hs110-stats
 
+- hosts: coin-stats
+  roles:
+    - role: generic/coin-stats
+      coin_stats_coinmarketcap_ids: "{{ coinmarketcap_ids.split(',') }}"
+      tags:
+        - coin-stats
+
 - hosts: nvidia-miner
   roles:
 # TODO: Install cuda with ansible
