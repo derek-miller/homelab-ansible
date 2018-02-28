@@ -44,6 +44,15 @@ ccminer_coin_supported_coins:
         # TODO: make sure vivocoin_wallet is passed
         user: "{{ vivocoin_wallet }}"
         pass: c=VIVO
+  zcash:
+    algorithm: equihash
+    pools:
+      flypool:
+        url: stratum+tcp://us1-zcash.flypool.org:3333
+        # TODO: make sure zcash_wallet is passed
+        user: "{{ zcash_wallet }}"
+        pass:
+
 
 # must set:
 # ccminer_coin_name

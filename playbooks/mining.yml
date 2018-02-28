@@ -20,6 +20,14 @@
       tags:
         - coin-stats
 
+- hosts: zcash-wallet
+  roles:
+    - role: mining/zcash-wallet
+      zcash_wallet_rpc_user: miner
+      zcash_wallet_rpc_password: "{{ vault_zcash_wallet_rpc_password }}"
+      tags:
+        - zcash-wallet
+
 - hosts: nvidia-miner
   roles:
 # TODO: Install cuda with ansible
@@ -108,4 +116,22 @@
       ccminer_coin_overclock_at_start: "{{ vivocoin_overclock_at_start|default('no')|bool }}"
       tags:
         - vivocoin
+        - ccminer
+
+- hosts: zcash
+  roles:
+    - role: mining/ccminer-coin
+      ccminer_coin_state: "{{ zcash_state|default('present') }}"
+      ccminer_coin_name: zcash
+      ccminer_coin_pool: "{{ zcash_pool }}"
+      ccminer_coin_gpu_type: "{{ zcash_gpu_type }}"
+      ccminer_coin_gpu_devices: "{{ zcash_gpu_devices|default([]) }}"
+      ccminer_coin_api_bind: "{{ zcash_api_bind|default('0') }}"
+      ccminer_coin_api_remote: "{{ zcash_api_remote|default('no')|bool }}"
+      ccminer_coin_intensity: "{{ zcash_intensity|default('auto') }}"
+      ccminer_coin_cuda_schedule: "{{ zcash_cuda_schedule|default('auto') }}"
+      ccminer_coin_cpu_priority: "{{ zcash_cpu_priority|default(3)|int }}"
+      ccminer_coin_overclock_at_start: "{{ zcash_overclock_at_start|default('no')|bool }}"
+      tags:
+        - zcash
         - ccminer

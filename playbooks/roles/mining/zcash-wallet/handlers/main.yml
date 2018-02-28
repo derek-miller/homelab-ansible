@@ -1,0 +1,4 @@
+- name: restart zcashd
+  systemd:
+    name: "{{ zcash_wallet_service }}"
+    state: restarted
