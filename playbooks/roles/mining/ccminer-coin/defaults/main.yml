@@ -33,24 +33,21 @@ ccminer_coin_supported_coins:
         pass: spaghetti14
       poolmining:
         url: stratum+tcp://mona.poolmining.org:3092
-        # TODO: make sure monacoin_wallet is passed
-        user: "{{ monacoin_wallet }}"
+        user: "{{ monacoin_wallet|mandatory }}"
         pass: d=8
   vivocoin:
     algorithm: neoscrypt
     pools:
       altminer:
         url: stratum+tcp://eu1.altminer.net:10001
-        # TODO: make sure vivocoin_wallet is passed
-        user: "{{ vivocoin_wallet }}"
+        user: "{{ vivocoin_wallet|mandatory }}"
         pass: c=VIVO
   zcash:
     algorithm: equihash
     pools:
       flypool:
         url: stratum+tcp://us1-zcash.flypool.org:3333
-        # TODO: make sure zcash_wallet is passed
-        user: "{{ zcash_wallet }}"
+        user: "{{ zcash_wallet|mandatory }}"
         pass:
 
 
