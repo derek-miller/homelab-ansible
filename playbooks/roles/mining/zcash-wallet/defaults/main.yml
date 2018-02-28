@@ -1,0 +1,20 @@
+zcash_wallet_state: present
+zcash_wallet_system_user: miner
+zcash_wallet_service: zcashd
+zcash_wallet_config_dir: ~{{ zcash_wallet_system_user }}/.zcash
+zcash_wallet_daemon: /usr/bin/zcashd
+zcash_wallet_fetch_params: /usr/bin/zcash-fetch-params
+zcash_wallet_apt_dependencies:
+  - apt-transport-https
+
+zcash_wallet_nodes:
+  - mainnet.z.cash
+
+zcash_wallet_rpc_port: 8232
+zcash_wallet_rpc_bind: 0.0.0.0
+zcash_wallet_rpc_allow_ips:
+  - 192.168.1.0/255.255.255.0
+
+# must set:
+# zcash_wallet_rpc_user
+# zcash_wallet_rpc_password
