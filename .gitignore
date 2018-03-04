@@ -5,6 +5,6 @@
 /.python-version
 /.ssh/
 /.vault_pass
-/playbooks/*.retry
-/playbooks/roles/galaxy/
+*.retry
+/roles/galaxy/
 /.venv/

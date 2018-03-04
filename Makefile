@@ -8,11 +8,11 @@ endif
 
 playbook ?= $(or $(PLAYBOOK),$(DEPLOY_PLAYBOOK),mining)
 
-inventory_file = playbooks/inventory/hosts
-playbook_file = playbooks/mining.yml
+inventory_file = hosts
+playbook_file = mining.yml
 vault_password_file = .vault_pass
 
-vault_files = $(shell find playbooks/files playbooks/host_vars playbooks/group_vars playbooks/inventory -type f -path '*vault*')
+vault_files = $(shell find files host_vars group_vars -type f -path '*vault*')
 
 ansible_default_flags = --inventory=$(inventory_file) \
 						$(if $(vault_password_file),--vault-password-file=$(vault_password_file))
@@ -43,8 +43,8 @@ init:
 .PHONY: install
 install: requirements.txt
 	pip-sync -i $(PIP_INDEX_URL)
-	mkdir -p playbooks/roles/galaxy
-	ansible-galaxy install -r requirements.yml --roles-path playbooks/roles/galaxy
+	mkdir -p roles/galaxy
+	ansible-galaxy install -r requirements.yml --roles-path roles/ --force
 
 upgrade = $(or UPGRADE,0)
 ifneq ($(upgrade),0)

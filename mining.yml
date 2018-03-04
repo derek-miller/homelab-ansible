@@ -1,4 +1,50 @@
-- import_playbook: include-base.yml base_hosts=all
+- name: set up connection before gathering facts
+  hosts: all
+  gather_facts: no
+  roles:
+    - ansible/setup/connection
+  tags:
+    - always
+
+- name: connect and gather facts
+  hosts: all
+  tasks:
+    - name: node summary
+      debug:
+        msg: >-
+          {{ ansible_all_ipv4_addresses | join(' ') }},
+          {{ ansible_distribution }} {{ ansible_distribution_version }},
+          {{ ansible_processor_vcpus }} CPU(s),
+          {{ ansible_memtotal_mb }} MB memory
+  tags:
+    - always
+    - connect
+
+- name: bootstrap connection credentials
+  hosts: all
+  roles:
+    - role: ansible/setup/bootstrap
+      when: bootstrap|default(false)|bool
+      tags:
+        - bootstrap
+
+- name: set up ansible environment on remote
+  hosts: all
+  roles:
+    - ansible/remote
+  tags:
+    - always
+    - base-setup  # not part of base tag since really a setup task but needs apt mirrors, etc. from previous base plays
+    - ansible-remote
+
+- name: common
+  hosts: all
+  roles:
+    - common/essential
+  tags:
+    - always
+    - base
+    - common-essential
 
 - hosts: all
   roles:
