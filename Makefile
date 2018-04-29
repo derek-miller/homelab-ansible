@@ -44,7 +44,7 @@ init:
 install: requirements.txt
 	pip-sync -i $(PIP_INDEX_URL)
 	mkdir -p roles/galaxy
-	ansible-galaxy install -r requirements.yml --roles-path roles/ --force
+	ansible-galaxy install -r roles/requirements.yml --roles-path roles/ --force
 
 upgrade = $(or UPGRADE,0)
 ifneq ($(upgrade),0)
