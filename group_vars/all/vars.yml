@@ -36,9 +36,9 @@ gpu_overclock_vars:
       all_gpus: "{{ nvidia_overclock_exe }}"
       multi_gpus: "{{ nvidia_overclock_exe }} -i"
     algorithms:
-      neoscrypt: "-l 117 -p 1 -c 0 -m 0 -f 50"
-      equihash: "-l 117 -p 1 -c 0 -m 0 -f 50"
-      lyra2v2: "-l 117 -p 1 -c 0 -m 0 -f 50"
+      neoscrypt: "-l 120 -p 1 -c 0 -m 0 -f auto"
+      equihash: "-l 120 -p 1 -c 0 -m 0 -f auto"
+      lyra2v2: "-l 120 -p 1 -c 0 -m 0 -f auto"
 
 suprnova_user: "{{ vault_suprnova_user }}"
 suprnova_pass: "{{ vault_suprnova_pass }}"
