@@ -97,8 +97,9 @@ if [ "$DEVICES" != "" ]; then
         ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUPowerMizerMode=1
         [ "$PM" != "" ] && ${NVIDIA_SMI} -i ${device} -pm ${PM}
         [ "$POWER" != "" ] && ${NVIDIA_SMI} -i ${device} -pl ${POWER}
-        [ "$FAN" != "" ] && ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUFanControlState=1
-        [ "$FAN" != "" ] && ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUTargetFanSpeed=${FAN}
+        [ "$FAN" == "auto" ] && ${NVIDIA_SETTINGS} -i ${device} -a GPUFanControlState=0
+        [ "$FAN" != "" -a "$FAN" != "auto" ] && ${NVIDIA_SETTINGS} -i ${device} -a GPUFanControlState=1
+        [ "$FAN" != "" -a "$FAN" != "auto" ] && ${NVIDIA_SETTINGS} -i ${device} -a GPUTargetFanSpeed=${FAN}
         [ "$CLOCK" != "" ] && ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUGraphicsClockOffset[3]=${CLOCK}
         [ "$MEM" != "" ] && ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUMemoryTransferRateOffset[3]=${MEM}
     done
@@ -106,8 +107,9 @@ else
     ${NVIDIA_SETTINGS} -a GPUPowerMizerMode=1
     [ "$PM" != "" ] && ${NVIDIA_SMI} -pm ${PM}
     [ "$POWER" != "" ] && ${NVIDIA_SMI} -pl ${POWER}
-    [ "$FAN" != "" ] && ${NVIDIA_SETTINGS} -a GPUFanControlState=1
-    [ "$FAN" != "" ] && ${NVIDIA_SETTINGS} -a GPUTargetFanSpeed=${FAN}
+    [ "$FAN" == "auto" ] && ${NVIDIA_SETTINGS} -a GPUFanControlState=0
+    [ "$FAN" != "" -a "$FAN" != "auto" ] && ${NVIDIA_SETTINGS} -a GPUFanControlState=1
+    [ "$FAN" != "" -a "$FAN" != "auto" ] && ${NVIDIA_SETTINGS} -a GPUTargetFanSpeed=${FAN}
     [ "$CLOCK" != "" ] && ${NVIDIA_SETTINGS} -a GPUGraphicsClockOffset[3]=${CLOCK}
     [ "$MEM" != "" ] && ${NVIDIA_SETTINGS} -a GPUMemoryTransferRateOffset[3]=${MEM}
 fi
