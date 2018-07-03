@@ -15,29 +15,36 @@ def to_line_protocol(measurement_name, tags, fields):
 
 
 @click.command()
-@click.argument('coinmarketcap_ids', nargs=-1, required=True)
+@click.argument('coinmarketcap_slugs', nargs=-1, required=True)
 @click.pass_context
-def cli(ctx, coinmarketcap_ids):
+def cli(ctx, coinmarketcap_slugs):
     try:
         coinmarketcap = Market()
-        for coinmarketcap_id in coinmarketcap_ids:
-            data = coinmarketcap.ticker(coinmarketcap_id, convert='USD')
-            if isinstance(data, list):
-                data = data[-1]
-            assert isinstance(data, dict)
-            if 'error' in data:
-                raise Exception(data['error'].replace('id not found', '{} not found'.format(coinmarketcap_id)))
-
+        slug_to_id = {listing['website_slug']: listing['id'] for listing in coinmarketcap.listings()['data']}
+        for coinmarketcap_slug in coinmarketcap_slugs:
+            if coinmarketcap_slug not in slug_to_id:
+                raise Exception('id for slug "{}" not found'.format(coinmarketcap_slug))
+            data = coinmarketcap.ticker(slug_to_id[coinmarketcap_slug], convert='USD')
+            if 'metadata' in data and data['metadata'].get('error'):
+                raise Exception(data['metadata']['error'])
+            elif 'data' in data:
+                data = data['data']
             click.echo(to_line_protocol(measurement_name='coin_stats',
                                         tags={
-                                            'coin': data['id'].replace('vivo', 'vivocoin'),
+                                            'slug': data['website_slug'],
+                                            'name': data['name'],
+                                            'symbol': data['symbol'],
                                         },
                                         fields={
-                                            'available_supply': data['available_supply'],
-                                            'market_cap': data['market_cap_usd'],
-                                            'price': data['price_usd'],
-                                            'rank': data['rank'],
                                             'total_supply': data['total_supply'],
+                                            'circulating_supply': data['circulating_supply'],
+                                            'rank': data['rank'],
+                                            'market_cap': data['quotes']['USD']['market_cap'],
+                                            'percent_change_1h': data['quotes']['USD']['percent_change_1h'],
+                                            'percent_change_24h': data['quotes']['USD']['percent_change_24h'],
+                                            'percent_change_7d': data['quotes']['USD']['percent_change_7d'],
+                                            'price': data['quotes']['USD']['price'],
+                                            'volume_24h': data['quotes']['USD']['volume_24h'],
                                         }), file=sys.stdout)
     except Exception as e:
         click.echo(str(e), err=True)
