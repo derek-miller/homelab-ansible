@@ -7,12 +7,6 @@ miner1
 [nvidia-miner:vars]
 nvidia_overclock_exe=/usr/local/bin/nvidia-overclock
 
-[nicehash-stats]
-miner1 nicehash_bitcoin_address=3DjUJTd47Uj4uw389wG8UWQtgzVRNfYeqP nicehash_stats_state=present
-
-[nicehash-miner]
-miner1 nicehash_worker_name=miner1 nicehash_bitcoin_address=3DjUJTd47Uj4uw389wG8UWQtgzVRNfYeqP nicehash_miner_state=absent
-
 [coin-stats]
 miner1 coinmarketcap_ids=vivo,monacoin,vertcoin,bitcoin,zcash,ethereum
 
