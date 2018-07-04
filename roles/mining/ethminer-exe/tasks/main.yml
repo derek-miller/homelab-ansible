@@ -1,0 +1,10 @@
+- assert:
+    that: ethminer_exe_state in ('present', 'absent')
+- assert:
+    that: ansible_distribution == 'Ubuntu'
+- assert:
+    that: ansible_distribution_version == '16.04'
+- assert:
+    that: ansible_service_mgr == 'systemd'
+
+- include_tasks: "{{ ethminer_exe_state }}.yml"

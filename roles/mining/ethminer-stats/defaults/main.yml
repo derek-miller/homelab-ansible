@@ -1,0 +1,9 @@
+ethminer_stats_state: present
+ethminer_stats_virtualenv_path: /opt/ethminer-stats/{{ ethminer_coin_name }}/virtualenv
+ethminer_stats_script_install_dir: "{{ ethminer_stats_virtualenv_path }}/bin"
+ethminer_stats_timeout_s: 5
+
+# must set:
+# ethminer_coin_name
+# ethminer_api_host
+# ethminer_api_port
