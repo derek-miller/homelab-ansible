@@ -1,6 +1,0 @@
-- name: restart eqm
-  systemd:
-    name: "{{ eqm_service }}@{{ item.gpu }}"
-    state: restarted
-  when: item.state|default('present') == 'present'
-  with_items: "{{ eqm_cuda_devices }}"

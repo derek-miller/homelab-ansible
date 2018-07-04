@@ -34,7 +34,7 @@ Passing Ansible flags
 
 To provision and pass ansible flags:
 
-    make run ansible_flags='--tags=eqm-miner'
+    make run ansible_flags='--skip-tags=common,base --tags=ethereum'
     make run hosts=miner1  # shorthand for passing the --limit flag
 
 Bootstrapping

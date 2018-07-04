@@ -7,4 +7,4 @@ nicehash_stats_timeout_s: 5
 # must set:
 # nicehash_api_id
 # nicehash_api_key
-# nicehash_bitcoin_address
+# nicehash_worker_address

@@ -91,25 +91,6 @@
         - nvidia-overclock
         - nvidia-miner
 
-- hosts: nicehash-stats
-  roles:
-    - role: mining/nicehash-stats
-      nicehash_api_id: "{{ vault_nicehash_api_id }}"
-      nicehash_api_key: "{{ vault_nicehash_api_key_read_only }}"
-      tags:
-        - nicehash-stats
-
-- hosts: nicehash-miner
-  roles:
-    - role: mining/eqm-miner
-      eqm_worker_name: "{{ nicehash_worker_name }}"
-      eqm_bitcoin_address: "{{ nicehash_bitcoin_address }}"
-      eqm_overclock_command: "{{ nvidia_overclock_exe }} -i %i -l {{ nvidia_power_limit }} -p {{ nvidia_persistence_mode }} -c {{ nvidia_gpu_clock_offset }} -m {{ nvidia_mem_clock_offset }} -f {{ nvidia_fan_speed }}"
-      eqm_state: "{{ nicehash_miner_state }}"
-      tags:
-        - eqm-miner
-        - nicehash-miner
-
 - hosts: vertcoin
   roles:
     - role: mining/ccminer-coin
@@ -185,6 +166,13 @@
 
 - hosts: ethereum
   roles:
+    - role: mining/nicehash-stats
+      nicehash_stats_state: "{{ ethereum_state|default('present') }}"
+      nicehash_api_id: "{{ vault_nicehash_api_id }}"
+      nicehash_api_key: "{{ vault_nicehash_api_key_read_only }}"
+      when: ethereum_pool == 'nicehash'
+      tags:
+        - nicehash-stats
     - role: mining/ethminer-coin
       ethminer_coin_state: "{{ ethereum_state|default('present') }}"
       ethminer_coin_name: ethereum
