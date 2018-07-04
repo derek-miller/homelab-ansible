@@ -1,0 +1,4 @@
+- name: delete ethminer install directory
+  file:
+    dest: "{{ ethminer_coin_install_dir }}"
+    state: absent

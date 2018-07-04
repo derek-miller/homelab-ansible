@@ -1,0 +1,26 @@
+ethminer_coin_state: present
+ethminer_coin_service: ethminer-{{ ethminer_coin_name }}
+
+ethminer_coin_api_port: '0'
+ethminer_coin_cuda_devices: []
+ethminer_coin_cuda_block_size: 128
+ethminer_coin_cuda_grid_size: 8192
+ethminer_coin_cuda_streams: 2
+ethminer_coin_cuda_schedule: auto
+ethminer_coin_cuda_parallel_hash: 4
+
+ethminer_coin_overclock_at_start: no
+ethminer_coin_overclock_command: "{{ gpu_overclock_vars[ethminer_coin_gpu_type].exe.multi_gpus }} {{ ethminer_coin_cuda_devices|join(',') }} {{ gpu_overclock_vars[ethminer_coin_gpu_type].algorithms[ethminer_coin_supported_coins[ethminer_coin_name].algorithm] }}"
+
+ethminer_coin_supported_coins:
+  ethereum:
+    algorithm: ethash
+    pools:
+      nicehash:
+        url: stratum2+tcp://{{ nicehash_worker_address|mandatory }}.{{ ansible_hostname }}@daggerhashimoto.usa.nicehash.com:3353
+
+
+# must set:
+# ethminer_coin_name
+# ethminer_coin_pool
+# ethminer_coin_gpu_type

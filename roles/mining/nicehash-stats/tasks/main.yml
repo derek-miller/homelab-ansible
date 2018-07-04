@@ -1,20 +1,43 @@
 - assert:
     that: nicehash_stats_state in ('present', 'absent')
 
-- name: copy nicehash-worker-stats script
-  copy:
-    src: nicehash-worker-stats
-    dest: "{{ nicehash_stats_script_install_dir }}/nicehash-worker-stats"
-    owner: root
-    group: root
-    mode: 0755
-  when: nicehash_stats_state == 'present'
+- when: nicehash_stats_state == 'present'
+  block:
+    - name: install python dependencies
+      pip:
+        virtualenv: "{{ nicehash_stats_virtualenv_path }}"
+        name: "{{ item }}"
+        extra_args: --upgrade-strategy only-if-needed
+        state: latest
+      with_items: []
 
-- name: delete nicehash-worker-stats script
-  file:
-    path: "{{ nicehash_stats_script_install_dir }}/nicehash-worker-stats"
-    state: absent
-  when: nicehash_stats_state == 'absent'
+    - name: copy nicehash-wallet-stats script
+      template:
+        src: nicehash-wallet-stats.jinja2
+        dest: "{{ nicehash_stats_script_install_dir }}/nicehash-wallet-stats"
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: copy nicehash-worker-stats script
+      template:
+        src: nicehash-worker-stats.jinja2
+        dest: "{{ nicehash_stats_script_install_dir }}/nicehash-worker-stats"
+        owner: root
+        group: root
+        mode: 0755
+
+- when: nicehash_stats_state == 'absent'
+  block:
+    - name: delete nicehash-wallet-stats script
+      file:
+        path: "{{ nicehash_stats_script_install_dir }}/nicehash-wallet-stats"
+        state: absent
+
+    - name: delete nicehash-worker-stats script
+      file:
+        path: "{{ nicehash_stats_script_install_dir }}/nicehash-worker-stats"
+        state: absent
 
 - include_role:
     name: generic/telegraf/plugin
@@ -22,21 +45,6 @@
       telegraf_plugin_conf_src: nicehash-worker-stats.conf.jinja2
       telegraf_plugin_conf: nicehash-worker-stats.conf
       telegraf_plugin_state: "{{ nicehash_stats_state }}"
-
-- name: copy nicehash-wallet-stats script
-  copy:
-    src: nicehash-wallet-stats
-    dest: "{{ nicehash_stats_script_install_dir }}/nicehash-wallet-stats"
-    owner: root
-    group: root
-    mode: 0755
-  when: nicehash_stats_state == 'present'
-
-- name: delete nicehash-wallet-stats script
-  file:
-    path: "{{ nicehash_stats_script_install_dir }}/nicehash-wallet-stats"
-    state: absent
-  when: nicehash_stats_state == 'absent'
 
 - include_role:
     name: generic/telegraf/plugin

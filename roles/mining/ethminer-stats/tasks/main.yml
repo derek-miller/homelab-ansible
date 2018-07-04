@@ -1,0 +1,34 @@
+- assert:
+    that: ethminer_stats_state in ('present', 'absent')
+
+- when: ethminer_stats_state == 'present'
+  block:
+    - name: install python dependencies
+      pip:
+        virtualenv: "{{ ethminer_stats_virtualenv_path }}"
+        name: "{{ item }}"
+        extra_args: --upgrade-strategy only-if-needed
+        state: latest
+      with_items:
+        - click
+
+    - name: copy ethminer-stats script
+      template:
+        src: ethminer-stats.jinja2
+        dest: "{{ ethminer_stats_script_install_dir }}/ethminer-stats"
+        owner: root
+        group: root
+        mode: 0755
+
+- name: delete ethminer-stats script
+  file:
+    path: "{{ ethminer_stats_script_install_dir }}/ethminer-stats"
+    state: absent
+  when: ethminer_stats_state == 'absent'
+
+- include_role:
+    name: generic/telegraf/plugin
+  vars:
+      telegraf_plugin_conf_src: ethminer-stats.conf.jinja2
+      telegraf_plugin_conf: ethminer-stats-{{ ethminer_coin_name }}.conf
+      telegraf_plugin_state: "{{ ethminer_stats_state }}"

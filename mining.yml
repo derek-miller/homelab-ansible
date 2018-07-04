@@ -91,15 +91,16 @@
         - nvidia-overclock
         - nvidia-miner
 
-- hosts: nicehash-miner
+- hosts: nicehash-stats
   roles:
     - role: mining/nicehash-stats
       nicehash_api_id: "{{ vault_nicehash_api_id }}"
       nicehash_api_key: "{{ vault_nicehash_api_key_read_only }}"
-      nicehash_stats_state: "{{ nicehash_miner_state }}"
       tags:
         - nicehash-stats
-        - nicehash-miner
+
+- hosts: nicehash-miner
+  roles:
     - role: mining/eqm-miner
       eqm_worker_name: "{{ nicehash_worker_name }}"
       eqm_bitcoin_address: "{{ nicehash_bitcoin_address }}"
@@ -181,3 +182,22 @@
       tags:
         - zcash
         - ccminer
+
+- hosts: ethereum
+  roles:
+    - role: mining/ethminer-coin
+      ethminer_coin_state: "{{ ethereum_state|default('present') }}"
+      ethminer_coin_name: ethereum
+      ethminer_coin_pool: "{{ ethereum_pool }}"
+      ethminer_coin_gpu_type: "{{ ethereum_gpu_type }}"
+      ethminer_coin_cuda_devices: "{{ ethereum_cuda_devices|default([]) }}"
+      ethminer_coin_api_port: "{{ ethereum_api_port|default('0') }}"
+      ethminer_coin_cuda_block_size: "{{ ethereum_cuda_block_size|default(128)|int }}"
+      ethminer_coin_cuda_grid_size: "{{ ethereum_cuda_grid_size|default(8192)|int }}"
+      ethminer_coin_cuda_streams: "{{ ethereum_cuda_streams|default(2)|int }}"
+      ethminer_coin_cuda_schedule: "{{ ethereum_cuda_schedule|default('auto') }}"
+      ethminer_coin_cuda_parallel_hash: "{{ ethereum_cuda_parallel_hash|default(4)|int }}"
+      ethminer_coin_overclock_at_start: "{{ ethereum_overclock_at_start|default('no')|bool }}"
+      tags:
+        - ethminer
+        - ethereum

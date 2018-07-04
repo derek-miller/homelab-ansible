@@ -1,0 +1,41 @@
+- name: create ethminer install directory
+  file:
+    dest: "{{ ethminer_exe_install_dir }}"
+    state: 'directory'
+    mode: 0755
+
+- name: install ethminer dependencies
+  apt: name={{ item }} state=present
+  with_items: "{{ ethminer_exe_apt_dependencies }}"
+
+- name: download ethminer src
+  git:
+    repo: "{{ ethminer_exe_git_clone_url }}"
+    dest: "{{ ethminer_exe_install_dir }}"
+    version: "{{ ethminer_exe_git_commit_hash }}"
+    force: yes
+  register: ethminer_coin_clone_result
+
+- name: delete ethminer if necessary for rebuild
+  file:
+    path: "{{ ethminer_exe_build_dir }}"
+    state: absent
+  when: ethminer_coin_clone_result.changed
+
+- name: create ethminer build directory
+  file:
+    dest: "{{ ethminer_exe_build_dir }}"
+    state: 'directory'
+    mode: 0755
+
+- name: configure ethminer
+  command: cmake .. -DETHASHCUDA=ON -DETHASHCL=OFF
+  args:
+    chdir: "{{ ethminer_exe_build_dir }}"
+    creates: "{{ ethminer_exe_build_dir }}/CMakeCache.txt"
+
+- name: build ethminer cmake
+  command: cmake --build .
+  args:
+    chdir: "{{ ethminer_exe_build_dir }}"
+    creates: "{{ ethminer_exe_binary }}"
