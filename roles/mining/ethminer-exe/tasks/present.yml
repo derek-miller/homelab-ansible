@@ -14,6 +14,7 @@
     dest: "{{ ethminer_exe_install_dir }}"
     version: "{{ ethminer_exe_git_commit_hash }}"
     force: yes
+  changed_when: ethminer_coin_clone_result.before != ethminer_coin_clone_result.after
   register: ethminer_coin_clone_result
 
 - name: delete ethminer if necessary for rebuild
