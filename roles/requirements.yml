@@ -1,4 +1,4 @@
-- src: tersmitten.postfix
+- src: https://github.com/Oefenweb/ansible-postfix
   name: galaxy/postfix
 - src: CSCfi.cuda
   name: galaxy/nvidia-cuda
