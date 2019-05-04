@@ -17,7 +17,7 @@ def get_api_data(ethminer_api_host, ethminer_api_port, method, chunk_size=4096):
             'id': 0,
             'jsonrpc': '2.0',
             'method': method,
-        })))
+        })).encode('utf-8'))
         while True:
             chunk = s.recv(chunk_size)
             if not chunk:

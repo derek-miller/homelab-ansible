@@ -38,7 +38,7 @@ install-git-hooks: .git/hooks/pre-commit
 
 .PHONY: init
 init:
-	pip install -i $(PIP_INDEX_URL) -U setuptools pip pip-tools
+	pip3 install -i $(PIP_INDEX_URL) -U setuptools pip pip-tools
 
 .PHONY: install
 install: requirements.txt
