@@ -2,7 +2,7 @@
     that: telegraf_state in ('present', 'absent')
 
 - name: stop and disable telegraf service
-  service: name=telegrafql state=stopped enabled=no
+  service: name=telegraf state=stopped enabled=no
   register: service_result
   failed_when:
     - service_result|failed

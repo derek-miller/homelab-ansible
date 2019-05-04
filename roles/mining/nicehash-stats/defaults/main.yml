@@ -2,7 +2,7 @@ nicehash_stats_state: present
 nicehash_stats_metric_name: nicehash
 nicehash_stats_virtualenv_path: /opt/nicehash-stats/virtualenv
 nicehash_stats_script_install_dir: "{{ nicehash_stats_virtualenv_path }}/bin"
-nicehash_stats_timeout_s: 5
+nicehash_stats_timeout_s: 8
 
 # must set:
 # nicehash_api_id

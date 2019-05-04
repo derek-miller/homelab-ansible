@@ -7,7 +7,7 @@ SUBJECT="$UNIT $(echo "$STATUS" | grep 'Active:' | sed 's/\s*Active:\s*//')"
 
 /usr/sbin/sendmail -t <<EOF
 To: {{ alert_email_address }}
-From: "systemd@{{ ansible_hostname }}" <systemd@{{ ansible_fqdn }}>
+From: "systemd@{{ ansible_hostname }}" <{{ alert_email_address }}>
 Subject: $SUBJECT
 Content-Transfer-Encoding: 8bit
 Content-Type: text/plain; charset=UTF-8

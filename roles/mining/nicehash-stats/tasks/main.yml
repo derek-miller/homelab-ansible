@@ -6,10 +6,10 @@
     - name: install python dependencies
       pip:
         virtualenv: "{{ nicehash_stats_virtualenv_path }}"
-        name: "{{ item }}"
+        name:
+          - requests
         extra_args: --upgrade-strategy only-if-needed
         state: latest
-      with_items: []
 
     - name: copy nicehash-wallet-stats script
       template:

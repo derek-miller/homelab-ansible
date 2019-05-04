@@ -6,12 +6,11 @@
     - name: install python dependencies
       pip:
         virtualenv: "{{ ccminer_stats_virtualenv_path }}"
-        name: "{{ item }}"
+        name:
+          - click
+          - websocket-client
         extra_args: --upgrade-strategy only-if-needed
         state: latest
-      with_items:
-        - click
-        - websocket-client
 
     - name: copy ccminer-stats script
       template:

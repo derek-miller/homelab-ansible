@@ -7,14 +7,14 @@
 - name: check if pip needs upgrade before using disable-pip-version-check flag
   command: pip --version
   register: pip_no_disable_pip_version_check
-  changed_when: pip_no_disable_pip_version_check.stdout | regex_replace('^pip ([^ ]+).*$', '\\1') | version_compare('6.0', '<')
+  changed_when: (pip_no_disable_pip_version_check.stdout | regex_replace('^pip ([^ ]+).*$', '\\1')) is version_compare('6.0', '<')
 
 - name: upgrade/downgrade setuptools and pip
   pip:
     name:
       - setuptools{{ setuptools_version_spec }}
       - pip{{ pip_version_spec }}
-    extra_args: "{{ '' if pip_no_disable_pip_version_check|changed else '--disable-pip-version-check' }}"
+    extra_args: "{{ '' if pip_no_disable_pip_version_check is changed else '--disable-pip-version-check' }}"
     state: latest
 
 - name: install/upgrade virtualenv

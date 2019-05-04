@@ -6,11 +6,10 @@
     - name: install python dependencies
       pip:
         virtualenv: "{{ ethminer_stats_virtualenv_path }}"
-        name: "{{ item }}"
+        name:
+          - click
         extra_args: --upgrade-strategy only-if-needed
         state: latest
-      with_items:
-        - click
 
     - name: copy ethminer-stats script
       template:

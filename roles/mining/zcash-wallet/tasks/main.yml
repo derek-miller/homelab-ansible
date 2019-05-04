@@ -4,8 +4,9 @@
     that: ansible_service_mgr == 'systemd'
 
 - name: install zcash dependencies
-  apt: name={{ item }} state=present
-  with_items: "{{ zcash_wallet_apt_dependencies }}"
+  apt:
+    name: "{{ zcash_wallet_apt_dependencies }}"
+    state: present
 
 - name: add zcash gpg signing key
   apt_key:

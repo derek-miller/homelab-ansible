@@ -21,14 +21,15 @@ influxdb_database_name: telegraf
 telegraf_udp_host: 127.0.0.1
 telegraf_udp_port: 8094
 
-postfix_relayhost: smtp.gmail.com  # smtp-relay.gmail.com
-postfix_sasl_user: 20miller10@gmail.com  # derek@gitlit.io
+postfix_relayhost: smtp-relay.gmail.com
+postfix_relayhost_port: 587
+postfix_sasl_user: derek@dmiller.me
 postfix_sasl_password: "{{ vault_postfix_sasl_password }}"
 
 vnc_password: "{{ vault_vnc_password }}"
 
 sudoers: []
-alert_email_address: alerts@gitlit.io
+alert_email_address: alerts@dmiller.me
 
 gpu_overclock_vars:
   nvidia-gtx1070:

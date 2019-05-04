@@ -4,7 +4,7 @@ import argparse
 import json
 import sys
 import traceback
-import urllib2
+import requests
 
 
 # https://www.nicehash.com/doc-api
@@ -14,9 +14,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
     worker_stats = []
     try:
-        bitcoin_value = float(json.load(urllib2.urlopen('https://blockchain.info/ticker'))['USD']['last'])
-        response = urllib2.urlopen('https://api.nicehash.com/api?method=stats.provider.ex&addr={}'.format(args.bitcoin_address))
-        data = json.load(response)
+        response = requests.get('https://blockchain.info/ticker')
+        response.raise_for_status()
+        bitcoin_value = float(response.json()['USD']['last'])
+        response = requests.get('https://api.nicehash.com/api?method=stats.provider.ex&addr={}'.format(args.bitcoin_address))
+        response.raise_for_status()
+        data = response.json()
         if not data['result'].get('error'):
             for alg_stats in data['result']['current']:
                 alg_speed = alg_stats['data'][0] if alg_stats.get('data') else []
