@@ -8,7 +8,7 @@
     owner: root
     group: root
     mode: 0644
-  notify: reload telegraf
+  notify: restart telegraf
   when:
     - telegraf_state == 'present'
     - telegraf_plugin_state == 'present'
@@ -17,7 +17,7 @@
   file:
     path: "{{ telegraf_conf_dir }}/{{ telegraf_plugin_conf }}"
     state: absent
-  notify: reload telegraf
+  notify: restart telegraf
   when:
     - telegraf_state == 'present'
     - telegraf_plugin_state == 'absent'
