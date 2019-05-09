@@ -6,7 +6,7 @@
     group: root
     mode: 0644
     backup: yes
-  notify: reload telegraf
+  notify: restart telegraf
 
 - name: enable telegraf
   service: name=telegraf enabled=yes

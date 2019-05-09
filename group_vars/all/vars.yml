@@ -40,7 +40,7 @@ gpu_overclock_vars:
       neoscrypt: "-l 120 -p 1 -c 0 -m 0 -f auto"
       equihash: "-l 120 -p 1 -c 0 -m 0 -f auto"
       lyra2v2: "-l 120 -p 1 -c 0 -m 0 -f auto"
-      ethash: "-l 120 -p 1 -c 0 -m 650 -f auto"
+      ethash: "-l 100 -p 1 -c 0 -m 700 -f auto"
 
 suprnova_user: "{{ vault_suprnova_user }}"
 suprnova_pass: "{{ vault_suprnova_pass }}"
