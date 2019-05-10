@@ -19,6 +19,12 @@
     repo: 'deb https://repos.influxdata.com/ubuntu {{ ansible_distribution_release }} stable'
     state: "{{ telegraf_state }}"
 
+- name: install telegraf dependencies
+  apt:
+    name: "{{ telegraf_apt_dependencies }}"
+    state: present
+  when: telegraf_state == 'present'
+
 - name: install telegraf
   apt: name=telegraf state=latest
   when: telegraf_state == 'present'
