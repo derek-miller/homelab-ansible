@@ -1,12 +1,15 @@
 ansible
 chardet  # implicitly required by python-debian
 click
+coinmarketcap
 cryptography
 dnspython
 jinja2
 keyring
+paramiko
 passlib
 python-debian
 pyyaml
 requests[security]
 semantic-version
+websocket-client

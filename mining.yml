@@ -76,11 +76,10 @@
 
 - hosts: nvidia-miner
   roles:
-# TODO: Install cuda with ansible
-#    - role: galaxy/nvidia-cuda
-#      gpu: True
+#    - role: galaxy/nvidia-drivers
+#      nvidia_driver_package_version: "430.14"
 #      tags:
-#        - nvidia-cuda
+#        - nvidia-drivers
 #        - nvidia-miner
     - role: mining/nvidia-smi-stats
       tags:
