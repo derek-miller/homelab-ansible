@@ -1,11 +1,10 @@
-#!/usr/bin/env python
-
+#!/usr/bin/env python3
 import argparse
 import json
 import sys
 import traceback
-import urllib2
 
+import requests
 
 # https://www.nicehash.com/doc-api
 if __name__ == '__main__':
@@ -15,13 +14,21 @@ if __name__ == '__main__':
     parser.add_argument('bitcoin_address')
     args = parser.parse_args()
     worker_stats = []
+    # noinspection PyBroadException
     try:
-        response = urllib2.urlopen('https://api.nicehash.com/api?method=balance&id={}&key={}'.format(args.api_id, args.api_key))
-        data = json.load(response)
+        response = requests.get('https://api.nicehash.com/api',
+                                params={"method": "balance",
+                                        "id": args.api_id,
+                                        "key": args.api_key})
+        response.raise_for_status()
+        data = response.json()
         if not data['result'].get('error'):
+            response = requests.get('https://blockchain.info/ticker')
+            response.raise_for_status()
+            ticker_data = response.json()
             json.dump({
                 'address': args.bitcoin_address,
-                'bitcoin_value': float(json.load(urllib2.urlopen('https://blockchain.info/ticker'))['USD']['last']),
+                'bitcoin_value': float(ticker_data['USD']['last']),
                 'confirmed_balance': float(data['result']['balance_confirmed']),
                 'pending_balance': float(data['result']['balance_pending']),
             }, sys.stdout)

@@ -1,4 +1,4 @@
-- src: https://github.com/Oefenweb/ansible-postfix
+- src: oefenweb.postfix
   name: galaxy/postfix
-- src: CSCfi.cuda
-  name: galaxy/nvidia-cuda
+- src: nvidia.nvidia_driver
+  name: galaxy/nvidia_driver

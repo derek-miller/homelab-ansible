@@ -1,11 +1,12 @@
 - assert:
     that: python_state == 'present'
 
-- name: install pip
-  apt: name=python-pip
+- name: install pip3
+  apt:
+    name: python3-pip
 
-- name: check if pip needs upgrade before using disable-pip-version-check flag
-  command: pip --version
+- name: check if pip3 needs upgrade before using disable-pip-version-check flag
+  command: pip3 --version
   register: pip_no_disable_pip_version_check
   changed_when: (pip_no_disable_pip_version_check.stdout | regex_replace('^pip ([^ ]+).*$', '\\1')) is version_compare('6.0', '<')
 
@@ -14,11 +15,13 @@
     name:
       - setuptools{{ setuptools_version_spec }}
       - pip{{ pip_version_spec }}
+    executable: pip3
     extra_args: "{{ '' if pip_no_disable_pip_version_check is changed else '--disable-pip-version-check' }}"
     state: latest
 
 - name: install/upgrade virtualenv
   pip:
     name: virtualenv{{ virtualenv_version_spec }}
+    executable: pip3
     extra_args: --disable-pip-version-check
     state: latest

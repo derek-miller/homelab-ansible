@@ -1,11 +1,10 @@
-#!/usr/bin/env python
-
+#!/usr/bin/env python3
 import argparse
 import json
 import sys
 import traceback
-import requests
 
+import requests
 
 # https://www.nicehash.com/doc-api
 if __name__ == '__main__':
@@ -13,11 +12,14 @@ if __name__ == '__main__':
     parser.add_argument('bitcoin_address')
     args = parser.parse_args()
     worker_stats = []
+    # noinspection PyBroadException
     try:
         response = requests.get('https://blockchain.info/ticker')
         response.raise_for_status()
         bitcoin_value = float(response.json()['USD']['last'])
-        response = requests.get('https://api.nicehash.com/api?method=stats.provider.ex&addr={}'.format(args.bitcoin_address))
+        response = requests.get('https://api.nicehash.com/api',
+                                params={"method": "stats.provider.ex",
+                                        "addr": args.bitcoin_address})
         response.raise_for_status()
         data = response.json()
         if not data['result'].get('error'):
@@ -26,7 +28,7 @@ if __name__ == '__main__':
                 alg_speed = alg_stats['data'][0] if alg_stats.get('data') else []
                 worker_stats.append({
                     'address': args.bitcoin_address,
-                    'accepted': float(alg_speed.get('a')),
+                    'accepted': float(alg_speed.get('a', 0)),
                     'rejected_target': float(alg_speed.get('rt', 0)),
                     'rejected_stale': float(alg_speed.get('rs', 0)),
                     'rejected_duplicate': float(alg_speed.get('rd', 0)),
