@@ -1,6 +1,4 @@
 - name: delete ccminer install directory
   file:
-    dest: "{{ ccminer_coin_install_dir }}"
+    dest: "{{ ccminer_exe_install_dir }}"
     state: absent
-
-# TODO: Delete ccminer binary soft link from /usr/local/bin

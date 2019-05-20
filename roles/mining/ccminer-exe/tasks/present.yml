@@ -22,24 +22,15 @@
     state: absent
   when: ccminer_coin_clone_result.changed
 
-# TODO: Figure out how to edit makefile without rebuilding everytime
-- name: delete incompatible nvcc arch flags
-  lineinfile:
-    path: "{{ ccminer_exe_install_dir }}/Makefile.am"
-    regexp: '^nvcc_ARCH.*$'
-    state: absent
-
-- name: set nvcc arch flags
-  lineinfile:
-    path: "{{ ccminer_exe_install_dir }}/Makefile.am"
-    line: "{{ ccminer_exe_apt_dependencies[ccminer_coin_nvcc_arch] }}"
-    insertbefore: '^nvcc_FLAGS.*$'
-    regexp: '^nvcc_ARCH.*$'
+- name: update alternatives to link gcc-5 to gcc
+  alternatives:
+    name: gcc
+    link: /usr/bin/gcc
+    path: /usr/bin/gcc-5
+    priority: 1
 
 - name: build ccminer
   command: ./build.sh
   args:
     chdir: "{{ ccminer_exe_install_dir }}"
     creates: "{{ ccminer_exe_binary }}"
-
-# TODO: Link ccminer binary to /usr/local/bin?
