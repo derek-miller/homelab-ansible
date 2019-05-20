@@ -66,13 +66,13 @@
       tags:
         - coin-stats
 
-- hosts: zcash-wallet
+- hosts: nicehash-stats
   roles:
-    - role: mining/zcash-wallet
-      zcash_wallet_rpc_user: miner
-      zcash_wallet_rpc_password: "{{ vault_zcash_wallet_rpc_password }}"
+    - role: mining/nicehash-stats
+      nicehash_api_id: "{{ vault_nicehash_api_id }}"
+      nicehash_api_key: "{{ vault_nicehash_api_key_read_only }}"
       tags:
-        - zcash-wallet
+        - nicehash-stats
 
 - hosts: nvidia-miner
   roles:
@@ -90,87 +90,8 @@
         - nvidia-overclock
         - nvidia-miner
 
-- hosts: vertcoin
-  roles:
-    - role: mining/ccminer-coin
-      ccminer_coin_state: "{{ vertcoin_state|default('present') }}"
-      ccminer_coin_name: vertcoin
-      ccminer_coin_pool: "{{ vertcoin_pool }}"
-      ccminer_coin_gpu_type: "{{ vertcoin_gpu_type }}"
-      ccminer_coin_gpu_devices: "{{ vertcoin_gpu_devices|default([]) }}"
-      ccminer_coin_api_bind: "{{ vertcoin_api_bind|default('0') }}"
-      ccminer_coin_api_remote: "{{ vertcoin_api_remote|default('no')|bool }}"
-      ccminer_coin_intensity: "{{ vertcoin_intensity|default('auto') }}"
-      ccminer_coin_cuda_schedule: "{{ vertcoin_cuda_schedule|default('auto') }}"
-      ccminer_coin_cpu_priority: "{{ vertcoin_cpu_priority|default(3)|int }}"
-      ccminer_coin_overclock_at_start: "{{ vertcoin_overclock_at_start|default('no')|bool }}"
-      tags:
-        - vertcoin
-        - ccminer
-
-- hosts: monacoin
-  roles:
-    - role: mining/ccminer-coin
-      ccminer_coin_state: "{{ monacoin_state|default('present') }}"
-      ccminer_coin_name: monacoin
-      ccminer_coin_pool: "{{ monacoin_pool }}"
-      ccminer_coin_gpu_type: "{{ monacoin_gpu_type }}"
-      ccminer_coin_gpu_devices: "{{ monacoin_gpu_devices|default([]) }}"
-      ccminer_coin_api_bind: "{{ monacoin_api_bind|default('0') }}"
-      ccminer_coin_api_remote: "{{ monacoin_api_remote|default('no')|bool }}"
-      ccminer_coin_intensity: "{{ monacoin_intensity|default('auto') }}"
-      ccminer_coin_cuda_schedule: "{{ monacoin_cuda_schedule|default('auto') }}"
-      ccminer_coin_cpu_priority: "{{ monacoin_cpu_priority|default(3)|int }}"
-      ccminer_coin_overclock_at_start: "{{ monacoin_overclock_at_start|default('no')|bool }}"
-      tags:
-        - monacoin
-        - ccminer
-
-- hosts: vivocoin
-  roles:
-    - role: mining/ccminer-coin
-      ccminer_coin_state: "{{ vivocoin_state|default('present') }}"
-      ccminer_coin_name: vivocoin
-      ccminer_coin_pool: "{{ vivocoin_pool }}"
-      ccminer_coin_gpu_type: "{{ vivocoin_gpu_type }}"
-      ccminer_coin_gpu_devices: "{{ vivocoin_gpu_devices|default([]) }}"
-      ccminer_coin_api_bind: "{{ vivocoin_api_bind|default('0') }}"
-      ccminer_coin_api_remote: "{{ vivocoin_api_remote|default('no')|bool }}"
-      ccminer_coin_intensity: "{{ vivocoin_intensity|default('auto') }}"
-      ccminer_coin_cuda_schedule: "{{ vivocoin_cuda_schedule|default('auto') }}"
-      ccminer_coin_cpu_priority: "{{ vivocoin_cpu_priority|default(3)|int }}"
-      ccminer_coin_overclock_at_start: "{{ vivocoin_overclock_at_start|default('no')|bool }}"
-      tags:
-        - vivocoin
-        - ccminer
-
-- hosts: zcash
-  roles:
-    - role: mining/ccminer-coin
-      ccminer_coin_state: "{{ zcash_state|default('present') }}"
-      ccminer_coin_name: zcash
-      ccminer_coin_pool: "{{ zcash_pool }}"
-      ccminer_coin_gpu_type: "{{ zcash_gpu_type }}"
-      ccminer_coin_gpu_devices: "{{ zcash_gpu_devices|default([]) }}"
-      ccminer_coin_api_bind: "{{ zcash_api_bind|default('0') }}"
-      ccminer_coin_api_remote: "{{ zcash_api_remote|default('no')|bool }}"
-      ccminer_coin_intensity: "{{ zcash_intensity|default('auto') }}"
-      ccminer_coin_cuda_schedule: "{{ zcash_cuda_schedule|default('auto') }}"
-      ccminer_coin_cpu_priority: "{{ zcash_cpu_priority|default(3)|int }}"
-      ccminer_coin_overclock_at_start: "{{ zcash_overclock_at_start|default('no')|bool }}"
-      tags:
-        - zcash
-        - ccminer
-
 - hosts: ethereum
   roles:
-    - role: mining/nicehash-stats
-      nicehash_stats_state: "{{ ethereum_state|default('present') }}"
-      nicehash_api_id: "{{ vault_nicehash_api_id }}"
-      nicehash_api_key: "{{ vault_nicehash_api_key_read_only }}"
-      when: ethereum_pool == 'nicehash'
-      tags:
-        - nicehash-stats
     - role: mining/ethminer-coin
       ethminer_coin_state: "{{ ethereum_state|default('present') }}"
       ethminer_coin_name: ethereum

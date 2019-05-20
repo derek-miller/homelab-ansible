@@ -12,43 +12,13 @@ ccminer_coin_cpu_priority: 3
 ccminer_coin_overclock_at_start: no
 ccminer_coin_overclock_command: "{{ gpu_overclock_vars[ccminer_coin_gpu_type].exe.multi_gpus }} {{ ccminer_coin_gpu_devices|join(',') }} {{ gpu_overclock_vars[ccminer_coin_gpu_type].algorithms[ccminer_coin_supported_coins[ccminer_coin_name].algorithm] }}"
 
-ccminer_coin_supported_coins:
-  vertcoin:
-    algorithm: lyra2v2
-    pools:
-      coinotron:
-        url: stratum+tcp://coinotron.com:3340
-        user: gitlit.peter
-        pass: spaghetti14
-      give-me-coins:
-        url: stratum+tcp://vtc.give-me-coins.com:3337
-        user: gitlit.bob
-        pass: spaghetti14
-  monacoin:
-    algorithm: lyra2v2
-    pools:
-      suprnova:
-        url: stratum+tcp://mona.suprnova.cc:2995
-        user: gitlit.billy
-        pass: spaghetti14
-      poolmining:
-        url: stratum+tcp://mona.poolmining.org:3092
-        user: "{{ monacoin_wallet|mandatory }}"
-        pass: d=8
-  vivocoin:
-    algorithm: neoscrypt
-    pools:
-      altminer:
-        url: stratum+tcp://eu1.altminer.net:10001
-        user: "{{ vivocoin_wallet|mandatory }}"
-        pass: c=VIVO
-  zcash:
-    algorithm: equihash
-    pools:
-      flypool:
-        url: stratum+tcp://us1-zcash.flypool.org:3333
-        user: "{{ zcash_wallet|mandatory }}"
-        pass:
+ccminer_coin_supported_coins: []
+#  <coin-name>:
+#    algorithm: <alg>
+#    pools:
+#      <pool-name>:
+#        url: <url>
+#        user: <wallet>
 
 
 # must set:
