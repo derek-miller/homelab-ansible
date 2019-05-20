@@ -19,9 +19,6 @@ miner1 monacoin_pool=poolmining monacoin_wallet=MTZnm2iouyoNrew8bk3ugggDjYqvgUWQ
 [vivocoin]
 miner1 vivocoin_pool=altminer vivocoin_wallet=VWpmFK11YU8Qu7agTJ8ZZg8WwecT4TKVTd vivocoin_gpu_type=nvidia-gtx1070 vivocoin_gpu_devices=4,5 vivocoin_api_bind=0.0.0.0:5003 vivocoin_overclock_at_start=yes vivocoin_state=absent
 
-[zcash-wallet]
-miner1
-
 [zcash]
 miner1 zcash_pool=flypool zcash_wallet=t1e4Mkt2rAr3PdgngPbSoMQhREue1E5h17x zcash_gpu_type=nvidia-gtx1070 zcash_gpu_devices=0,1,2,3,4,5 zcash_api_bind=0.0.0.0:5004 zcash_overclock_at_start=yes zcash_state=absent
 

@@ -7,5 +7,4 @@
 - assert:
     that: ansible_service_mgr == 'systemd'
 
-# TODO: fix role
-#- include_tasks: "{{ ccminer_exe_state }}.yml"
+- include_tasks: "{{ ccminer_exe_state }}.yml"

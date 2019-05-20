@@ -93,7 +93,6 @@
 - hosts: vertcoin
   roles:
     - role: mining/ccminer-coin
-      # TODO: Check all defaults
       ccminer_coin_state: "{{ vertcoin_state|default('present') }}"
       ccminer_coin_name: vertcoin
       ccminer_coin_pool: "{{ vertcoin_pool }}"
