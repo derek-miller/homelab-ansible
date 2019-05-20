@@ -23,13 +23,13 @@ telegraf_udp_port: 8094
 
 postfix_relayhost: smtp-relay.gmail.com
 postfix_relayhost_port: 587
-postfix_sasl_user: derek@dmiller.me
+postfix_sasl_user: "{{ vault_postfix_sasl_user }}"
 postfix_sasl_password: "{{ vault_postfix_sasl_password }}"
 
 vnc_password: "{{ vault_vnc_password }}"
 
 sudoers: []
-alert_email_address: alerts@dmiller.me
+alert_email_address: "{{ vault_alert_email_address }}"
 
 gpu_overclock_vars:
   nvidia-gtx1070:
@@ -37,14 +37,7 @@ gpu_overclock_vars:
       all_gpus: "{{ nvidia_overclock_exe }}"
       multi_gpus: "{{ nvidia_overclock_exe }} -i"
     algorithms:
-      neoscrypt: "-l 120 -p 1 -c 0 -m 0 -f auto"
-      equihash: "-l 120 -p 1 -c 0 -m 0 -f auto"
-      lyra2v2: "-l 120 -p 1 -c 0 -m 0 -f auto"
+      neoscrypt: "-l 100 -p 1 -c 0 -m 700 -f auto"
+      equihash: "-l 100 -p 1 -c 0 -m 700 -f auto"
+      lyra2v2: "-l 100 -p 1 -c 0 -m 700 -f auto"
       ethash: "-l 100 -p 1 -c 0 -m 700 -f auto"
-
-suprnova_user: "{{ vault_suprnova_user }}"
-suprnova_pass: "{{ vault_suprnova_pass }}"
-coinotron_user: "{{ vault_coinotron_user }}"
-coinotron_pass: "{{ vault_coinotron_pass }}"
-give_me_coins_user: "{{ vault_give_me_coins_user }}"
-give_me_coins_pass: "{{ vault_give_me_coins_pass }}"

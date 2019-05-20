@@ -31,7 +31,7 @@ def cli(ctx, coinmarketcap_slugs):
             click.echo(to_line_protocol(measurement_name='coin_stats',
                                         tags={
                                             'slug': data['website_slug'],
-                                            'coin': data['name'].lower().replace('vivo', 'vivocoin'),
+                                            'coin': data['name'].lower(),
                                             'symbol': data['symbol'],
                                         },
                                         fields={

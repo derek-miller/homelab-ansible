@@ -8,19 +8,10 @@ miner1
 nvidia_overclock_exe=/usr/local/bin/nvidia-overclock
 
 [coin-stats]
-miner1 coinmarketcap_ids=vivo,monacoin,vertcoin,bitcoin,zcash,ethereum
+miner1 coinmarketcap_ids=bitcoin,ethereum
 
-[vertcoin]
-miner1 vertcoin_pool=coinotron vertcoin_gpu_type=nvidia-gtx1070 vertcoin_gpu_devices=0,1 vertcoin_api_bind=0.0.0.0:5001 vertcoin_overclock_at_start=yes vertcoin_state=absent
-
-[monacoin]
-miner1 monacoin_pool=poolmining monacoin_wallet=MTZnm2iouyoNrew8bk3ugggDjYqvgUWQ4j monacoin_gpu_type=nvidia-gtx1070 monacoin_gpu_devices=2,3 monacoin_api_bind=0.0.0.0:5002 monacoin_overclock_at_start=yes monacoin_state=absent
-
-[vivocoin]
-miner1 vivocoin_pool=altminer vivocoin_wallet=VWpmFK11YU8Qu7agTJ8ZZg8WwecT4TKVTd vivocoin_gpu_type=nvidia-gtx1070 vivocoin_gpu_devices=4,5 vivocoin_api_bind=0.0.0.0:5003 vivocoin_overclock_at_start=yes vivocoin_state=absent
-
-[zcash]
-miner1 zcash_pool=flypool zcash_wallet=t1e4Mkt2rAr3PdgngPbSoMQhREue1E5h17x zcash_gpu_type=nvidia-gtx1070 zcash_gpu_devices=0,1,2,3,4,5 zcash_api_bind=0.0.0.0:5004 zcash_overclock_at_start=yes zcash_state=absent
+[nicehash-stats]
+miner1 nicehash_worker_address=3DjUJTd47Uj4uw389wG8UWQtgzVRNfYeqP nicehash_stats_state=present
 
 [ethereum]
-miner1 ethereum_pool=nicehash nicehash_worker_address=3DjUJTd47Uj4uw389wG8UWQtgzVRNfYeqP ethereum_gpu_type=nvidia-gtx1070 ethereum_cuda_devices=0,1,2,3,4,5 ethereum_api_port=5005 ethereum_overclock_at_start=yes ethereum_state=present
+miner1 ethereum_pool=nicehash ethereum_gpu_type=nvidia-gtx1070 ethereum_cuda_devices=0,1,2,3,4,5 ethereum_api_port=5005 ethereum_overclock_at_start=yes ethereum_state=present
