@@ -1,6 +1,8 @@
 common_pkgs:
   apt:
     - build-essential
+    - cmake
+    - git-core
     - htop
     - ifstat
     - iftop
