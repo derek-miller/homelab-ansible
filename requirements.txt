@@ -14,7 +14,7 @@ cffi==1.12.3              # via bcrypt, cryptography, pynacl
 chardet==3.0.4
 click==7.0
 coinmarketcap==5.0.3
-cryptography==2.6.1
+cryptography==2.7
 dnspython==1.16.0
 entrypoints==0.3          # via keyring
 idna==2.8                 # via requests
@@ -33,5 +33,5 @@ requests-cache==0.5.0     # via coinmarketcap
 requests[security]==2.22.0
 semantic-version==2.6.0
 six==1.12.0               # via bcrypt, cryptography, pynacl, pyopenssl, python-debian, websocket-client
-urllib3==1.25.2           # via requests
+urllib3==1.25.3           # via requests
 websocket-client==0.56.0
