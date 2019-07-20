@@ -5,6 +5,6 @@ nicehash_stats_script_install_dir: "{{ nicehash_stats_virtualenv_path }}/bin"
 nicehash_stats_timeout_s: 8
 
 # must set:
-# nicehash_api_id
 # nicehash_api_key
-# nicehash_worker_address
+# nicehash_api_secret
+# nicehash_organization_id

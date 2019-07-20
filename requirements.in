@@ -1,4 +1,5 @@
 ansible
+black
 chardet  # implicitly required by python-debian
 click
 coinmarketcap

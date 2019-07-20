@@ -25,6 +25,10 @@ ansible_setup = ansible -m setup $(ansible_default_flags) $(ansible_flags)
 
 ansible_bootstrap_flags = --user="miner" --ask-pass --ask-become-pass
 
+python_version_full := $(wordlist 2,4,$(subst ., ,$(shell python --version 2>&1)))
+python_version_major := $(word 1,${python_version_full})
+python_version_minor := $(word 2,${python_version_full})
+
 .PHONY: all
 all: init install check
 
@@ -54,6 +58,10 @@ pip_compile = pip-compile -i $(PIP_INDEX_URL) $(pip_compile_flags)
 
 requirements.txt: requirements.in
 	$(pip_compile) $< -o requirements.txt
+
+.PHONY: check
+fmt:
+	black . --line-length 100 --target-version py$(python_version_major)$(python_version_minor)
 
 .PHONY: check
 check:

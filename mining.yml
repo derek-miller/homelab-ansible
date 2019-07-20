@@ -69,8 +69,9 @@
 - hosts: nicehash-stats
   roles:
     - role: mining/nicehash-stats
-      nicehash_api_id: "{{ vault_nicehash_api_id }}"
-      nicehash_api_key: "{{ vault_nicehash_api_key_read_only }}"
+      nicehash_api_key: "{{ vault_nicehash_api_key }}"
+      nicehash_api_secret: "{{ vault_nicehash_api_secret }}"
+      nicehash_organization_id: "{{ vault_nicehash_organization_id }}"
       tags:
         - nicehash-stats
 

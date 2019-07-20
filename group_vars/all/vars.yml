@@ -40,4 +40,4 @@ gpu_overclock_vars:
       neoscrypt: "-l 100 -p 1 -c 0 -m 700 -f auto"
       equihash: "-l 100 -p 1 -c 0 -m 700 -f auto"
       lyra2v2: "-l 100 -p 1 -c 0 -m 700 -f auto"
-      ethash: "-l 100 -p 1 -c 0 -m 700 -f auto"
+      daggerhashimoto: "-l 100 -p 1 -c 0 -m 700 -f auto"

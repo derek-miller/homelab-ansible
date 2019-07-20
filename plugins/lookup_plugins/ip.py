@@ -5,7 +5,6 @@ import socket
 
 
 class LookupModule(LookupBase):
-
     def __init__(self, basedir=None, **kwargs):
         self.basedir = basedir
         super().__init__(**kwargs)
@@ -21,5 +20,5 @@ class LookupModule(LookupBase):
         try:
             resolved = socket.gethostbyname(hostname)
         except:
-            resolved = '127.0.0.1'
+            resolved = "127.0.0.1"
         return [resolved]
