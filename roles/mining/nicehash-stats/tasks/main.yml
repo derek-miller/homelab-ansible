@@ -8,47 +8,27 @@
         virtualenv: "{{ nicehash_stats_virtualenv_path }}"
         name:
           - requests
+          - click
         extra_args: --upgrade-strategy only-if-needed
         state: latest
 
-    - name: copy nicehash-wallet-stats script
+    - name: copy nicehash-stats script
       template:
-        src: nicehash-wallet-stats.jinja2
-        dest: "{{ nicehash_stats_script_install_dir }}/nicehash-wallet-stats"
+        src: nicehash-stats.jinja2
+        dest: "{{ nicehash_stats_script_install_dir }}/nicehash-stats"
         owner: root
         group: root
         mode: 0755
 
-    - name: copy nicehash-worker-stats script
-      template:
-        src: nicehash-worker-stats.jinja2
-        dest: "{{ nicehash_stats_script_install_dir }}/nicehash-worker-stats"
-        owner: root
-        group: root
-        mode: 0755
-
-- when: nicehash_stats_state == 'absent'
-  block:
-    - name: delete nicehash-wallet-stats script
-      file:
-        path: "{{ nicehash_stats_script_install_dir }}/nicehash-wallet-stats"
-        state: absent
-
-    - name: delete nicehash-worker-stats script
-      file:
-        path: "{{ nicehash_stats_script_install_dir }}/nicehash-worker-stats"
-        state: absent
+- name: delete nicehash-stats script
+  file:
+    path: "{{ nicehash_stats_script_install_dir }}/nicehash-stats"
+    state: absent
+  when: nicehash_stats_state == 'absent'
 
 - include_role:
     name: generic/telegraf/plugin
   vars:
-      telegraf_plugin_conf_src: nicehash-worker-stats.conf.jinja2
-      telegraf_plugin_conf: nicehash-worker-stats.conf
-      telegraf_plugin_state: "{{ nicehash_stats_state }}"
-
-- include_role:
-    name: generic/telegraf/plugin
-  vars:
-      telegraf_plugin_conf_src: nicehash-wallet-stats.conf.jinja2
-      telegraf_plugin_conf: nicehash-wallet-stats.conf
-      telegraf_plugin_state: "{{ nicehash_stats_state }}"
+    telegraf_plugin_conf_src: nicehash-stats.conf.jinja2
+    telegraf_plugin_conf: nicehash-stats.conf
+    telegraf_plugin_state: "{{ nicehash_stats_state }}"

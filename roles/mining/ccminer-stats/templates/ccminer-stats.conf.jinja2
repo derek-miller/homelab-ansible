@@ -1,7 +1,7 @@
 [[inputs.exec]]
   commands = [
-    "{{ ccminer_stats_script_install_dir }}/ccminer-stats --coin '{{ ccminer_coin_name }}' --url '{{ ccminer_api_url }}' summary",
-    "{{ ccminer_stats_script_install_dir }}/ccminer-stats --coin '{{ ccminer_coin_name }}' --url '{{ ccminer_api_url }}' pool"
+    "{{ ccminer_stats_script_install_dir }}/ccminer-stats --url '{{ ccminer_api_url }}' summary",
+    "{{ ccminer_stats_script_install_dir }}/ccminer-stats --url '{{ ccminer_api_url }}' pool"
   ]
   timeout = "{{ ccminer_stats_timeout_s|int }}s"
   data_format = "influx"

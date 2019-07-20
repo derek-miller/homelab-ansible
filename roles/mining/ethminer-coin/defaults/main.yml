@@ -14,10 +14,10 @@ ethminer_coin_overclock_command: "{{ gpu_overclock_vars[ethminer_coin_gpu_type].
 
 ethminer_coin_supported_coins:
   ethereum:
-    algorithm: ethash
+    algorithm: daggerhashimoto
     pools:
       nicehash:
-        url: stratum2+tcp://{{ nicehash_worker_address|mandatory }}.{{ ansible_hostname }}@daggerhashimoto.usa.nicehash.com:3353
+        url: stratum2+tcp://34v4vG57U9YiK5Nur8te8PzMDUKmtr6zLo.{{ ansible_hostname }}@daggerhashimoto.usa-new.nicehash.com:3353
 
 
 # must set:

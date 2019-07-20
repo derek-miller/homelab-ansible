@@ -4,6 +4,6 @@ import os
 
 while True:
     p = base64.b64encode(os.urandom(72))
-    if '+' not in p and '/' not in p:
+    if "+" not in p and "/" not in p:
         print(p)
         break
