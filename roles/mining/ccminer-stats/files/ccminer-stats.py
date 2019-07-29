@@ -77,7 +77,7 @@ def pool(ctx):
         click.echo(
             to_line_protocol(
                 measurement_name="ccminer.pool",
-                tags=["algo", "pool", "url", "user"],
+                tags={k: data[k] for k in ["algo", "pool", "url", "user"]},
                 fields={
                     k: data[k]
                     for k in [

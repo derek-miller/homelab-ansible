@@ -37,7 +37,8 @@ gpu_overclock_vars:
       all_gpus: "{{ nvidia_overclock_exe }}"
       multi_gpus: "{{ nvidia_overclock_exe }} -i"
     algorithms:
-      neoscrypt: "-l 100 -p 1 -c 0 -m 700 -f auto"
+      daggerhashimoto: "-l 100 -p 1 -c 0 -m 700 -f auto"
       equihash: "-l 100 -p 1 -c 0 -m 700 -f auto"
       lyra2v2: "-l 100 -p 1 -c 0 -m 700 -f auto"
-      daggerhashimoto: "-l 100 -p 1 -c 0 -m 700 -f auto"
+      neoscrypt: "-l 100 -p 1 -c 0 -m 700 -f auto"
+      x16r: "-l 117 -p 1 -c 100 -m 400 -f auto"
