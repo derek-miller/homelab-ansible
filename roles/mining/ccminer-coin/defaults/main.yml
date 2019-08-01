@@ -2,8 +2,8 @@ ccminer_coin_state: present
 ccminer_coin_service: ccminer-{{ ccminer_coin_name }}
 ccminer_coin_config_dir: /etc/ccminer/conf.d
 
-ccminer_coin_gpu_devices: []
 ccminer_coin_api_bind: 0
+ccminer_coin_gpu_devices: []
 ccminer_coin_api_remote: no
 ccminer_coin_intensity: auto
 ccminer_coin_cuda_schedule: auto
@@ -20,16 +20,7 @@ ccminer_coin_supported_coins:
         url: stratum+tcp://x16r.usa-new.nicehash.com:3366
         user: 34v4vG57U9YiK5Nur8te8PzMDUKmtr6zLo.{{ ansible_hostname }}
 
-#  <coin-name>:
-#    algorithm: <alg>
-#    pools:
-#      <pool-name>:
-#        url: <url>
-#        user: <wallet>
-
-
 # must set:
 # ccminer_coin_name
 # ccminer_coin_pool
 # ccminer_coin_gpu_type
-# ccminer_coin_gpu_devices

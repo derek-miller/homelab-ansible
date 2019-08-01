@@ -140,10 +140,10 @@ def rig(ctx):
                     measurement_name="nicehash.rig",
                     tags={
                         "address": bitcoin_mining_address,
-                        "status": rig_status,
-                        "type": rig_type,
-                        "rig_id": rig_id,
-                        "name": rig_name,
+                        "status": rig_status.lower(),
+                        "type": rig_type.lower(),
+                        "rig_id": rig_id.lower(),
+                        "name": rig_name.lower(),
                     },
                     fields={
                         "bitcoin_value": bitcoin_value,
@@ -172,11 +172,11 @@ def rig(ctx):
                         measurement_name="nicehash.rig_stat",
                         tags={
                             "address": bitcoin_mining_address,
-                            "status": rig_status,
-                            "type": rig_type,
-                            "rig_id": rig_id,
-                            "name": rig_name,
-                            "algo": algorithm,
+                            "status": rig_status.lower(),
+                            "type": rig_type.lower(),
+                            "rig_id": rig_id.lower(),
+                            "name": rig_name.lower(),
+                            "algo": algorithm.lower(),
                         },
                         fields={
                             "bitcoin_value": bitcoin_value,
