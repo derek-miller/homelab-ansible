@@ -20,11 +20,12 @@
         group: root
         mode: 0755
 
-- name: delete ccminer-stats script
-  file:
-    path: "{{ ccminer_stats_script_install_dir }}/ccminer-stats"
-    state: absent
-  when: ccminer_stats_state == 'absent'
+- when: ccminer_stats_state == 'absent'
+  block:
+    - name: delete ccminer-stats script
+      file:
+        path: "{{ ccminer_stats_script_install_dir }}/ccminer-stats"
+        state: absent
 
 - include_role:
     name: generic/telegraf/plugin
