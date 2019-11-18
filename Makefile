@@ -23,7 +23,7 @@ override ansible_flags += $(if $(hosts),--limit='$(hosts)')
 ansible_playbook_cmd = ansible-playbook $(playbook_file) $(ansible_default_flags) $(ansible_flags)
 ansible_setup = ansible -m setup $(ansible_default_flags) $(ansible_flags)
 
-ansible_bootstrap_flags = --user="miner" --ask-pass --ask-become-pass
+ansible_bootstrap_flags = -c paramiko --user="miner" --ask-pass --ask-become-pass
 
 python_version_full := $(wordlist 2,4,$(subst ., ,$(shell python --version 2>&1)))
 python_version_major := $(word 1,${python_version_full})

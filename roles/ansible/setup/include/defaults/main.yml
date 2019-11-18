@@ -1,6 +1,6 @@
 ansible_surrogate_public_key_file: "{{ ansible_surrogate_user }}-id_rsa.pub"
 ansible_surrogate_private_key_file: "{{ vault_dir_name }}/{{ ansible_surrogate_user }}-id_rsa"
-local_ssh_key_dir: "{{ playbook_dir }}/../.ssh"
+local_ssh_key_dir: "{{ playbook_dir }}/.ssh"
 
 # must set:
 # ansible_surrogate_user
