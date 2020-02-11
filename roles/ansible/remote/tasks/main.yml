@@ -24,6 +24,6 @@
 
 - name: set ansible python interpreter
   set_fact:
-    ansible_python_interpreter: "{{ ansible_python_virtualenv }}/bin/python"
+    ansible_python_interpreter: "{{ ansible_python_virtualenv }}/bin/python3"
 
 - meta: flush_handlers

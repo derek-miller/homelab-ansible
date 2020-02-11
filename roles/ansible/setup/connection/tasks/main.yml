@@ -26,6 +26,10 @@
   when: ansible_ssh_user == ansible_surrogate_user
   check_mode: no
 
+- name: set default ansible python interpreter
+  set_fact:
+    ansible_python_interpreter: /usr/bin/python3
+
 - name: become root
   set_fact:
     ansible_become: yes
