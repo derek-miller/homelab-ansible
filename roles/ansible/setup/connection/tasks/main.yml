@@ -1,3 +1,7 @@
+- name: set default ansible python interpreter
+  set_fact:
+    ansible_python_interpreter: /usr/bin/python3
+
 - name: make local ssh key dir
   local_action:
     module: file
@@ -25,10 +29,6 @@
   set_fact: ansible_ssh_private_key_file={{ local_ssh_key_dir }}/{{ ansible_surrogate_private_key_file|basename }}
   when: ansible_ssh_user == ansible_surrogate_user
   check_mode: no
-
-- name: set default ansible python interpreter
-  set_fact:
-    ansible_python_interpreter: /usr/bin/python3
 
 - name: become root
   set_fact:
