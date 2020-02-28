@@ -28,6 +28,9 @@ postfix_sasl_password: "{{ vault_postfix_sasl_password }}"
 
 vnc_password: "{{ vault_vnc_password }}"
 
+qnap_user: "{{ vault_qnap_user }}"
+qnap_password: "{{ vault_qnap_password }}"
+
 sudoers: []
 alert_email_address: "{{ vault_alert_email_address }}"
 

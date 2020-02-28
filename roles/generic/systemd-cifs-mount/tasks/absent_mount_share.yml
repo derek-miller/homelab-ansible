@@ -1,0 +1,52 @@
+- set_fact: cifs_mount_service_name={{ cifs_mount_dir | mandatory | regex_replace('^\\/+|\\/+$', '')  | replace('/', "-") }}-{{ cifs_share_name | mandatory }}
+- set_fact: cifs_mount_path={{ cifs_mount_dir | regex_replace('\\/+$', '') }}/{{ cifs_share_name }}
+
+# Automount cleanup
+
+- name: check if {{ cifs_mount_service_name }}.automount is a valid service
+  stat:
+    path: /etc/systemd/system/{{ cifs_mount_service_name }}.automount
+  register: systemd_automount_stat
+
+- name: stop {{ cifs_mount_service_name }}.automount
+  when: systemd_automount_stat.stat.exists
+  systemd:
+    name: "{{ cifs_mount_service_name }}.automount"
+    state: stopped
+    enabled: no
+
+- name: delete {{ cifs_mount_service_name }}.automount service
+  file:
+    path: /etc/systemd/system/{{ cifs_mount_service_name }}.automount
+    state: absent
+  register: systemd_automount_delete_result
+
+# Mount cleanup
+
+- name: check if {{ cifs_mount_service_name }}.mount is a valid service
+  stat:
+    path: /etc/systemd/system/{{ cifs_mount_service_name }}.mount
+  register: systemd_mount_stat
+
+- name: stop {{ cifs_mount_service_name }}.mount
+  when: systemd_mount_stat.stat.exists
+  systemd:
+    name: "{{ cifs_mount_service_name }}.mount"
+    state: stopped
+    enabled: no
+
+- name: delete {{ cifs_mount_service_name }}.mount service
+  file:
+    path: /etc/systemd/system/{{ cifs_mount_service_name }}.mount
+    state: absent
+  register: systemd_mount_delete_result
+
+- when: systemd_automount_delete_result.changed or systemd_mount_delete_result.changed
+  name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: delete {{ cifs_mount_path }}
+  file:
+    path: "{{ cifs_mount_path }}"
+    state: absent

@@ -1,0 +1,31 @@
+- set_fact: cifs_mount_service_name={{ cifs_mount_dir | mandatory | regex_replace('^\\/+|\\/+$', '')  | replace('/', "-") }}-{{ cifs_share_name | mandatory }}
+- set_fact: cifs_mount_path={{ cifs_mount_dir | regex_replace('\\/+$', '') }}/{{ cifs_share_name }}
+
+- name: configure {{ cifs_mount_service_name }}.mount service
+  template:
+    src: systemd_mount.j2
+    dest: /etc/systemd/system/{{ cifs_mount_service_name }}.mount
+  register: systemd_mount_result
+
+- name: configure {{ cifs_mount_service_name }}.automount service
+  template:
+    src: systemd_automount.j2
+    dest: /etc/systemd/system/{{ cifs_mount_service_name }}.automount
+  register: systemd_automount_result
+
+- when: systemd_mount_result.changed or systemd_automount_result.changed
+  name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: start {{ cifs_mount_service_name }}.automount
+  systemd:
+    name: "{{ cifs_mount_service_name }}.automount"
+    state: "{{ 'restarted' if systemd_automount_result.changed else 'started' }}"
+    enabled: yes
+
+- name: start {{ cifs_mount_service_name }}.mount
+  systemd:
+    name: "{{ cifs_mount_service_name }}.mount"
+    state: "{{ 'restarted' if systemd_mount_result.changed else 'started' }}"
+    enabled: yes
