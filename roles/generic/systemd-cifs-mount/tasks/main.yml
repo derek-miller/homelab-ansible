@@ -1,0 +1,32 @@
+- assert:
+    that: cifs_mount_state in ('present', 'absent')
+
+- when: cifs_mount_state == 'present'
+  block:
+    - name: install cifs dependencies
+      apt:
+        name:
+          - cifs-utils
+        state: present
+
+    - name: create cifs credentials file
+      copy:
+        content: |
+          username={{ cifs_share_username | mandatory }}
+          password={{ cifs_share_password | mandatory }}
+        dest: "{{ cifs_credentials_path | mandatory }}"
+        owner: root
+        group: root
+        mode: 0600
+
+- include_tasks: "{{ cifs_mount_state }}_mount_share.yml"
+  with_items: "{{ cifs_share_names | mandatory }}"
+  loop_control:
+    loop_var: cifs_share_name
+
+- when: cifs_mount_state == 'absent'
+  block:
+    - name: delete cifs credentials file
+      file:
+        path: "{{ cifs_credentials_path | mandatory }}"
+        state: absent

@@ -1,4 +1,4 @@
 - src: oefenweb.postfix
   name: galaxy/postfix
-- src: nvidia.nvidia_driver
-  name: galaxy/nvidia_driver
+- src: ksiig.plexmediaserver
+  name: galaxy/plexmediaserver

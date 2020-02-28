@@ -1,0 +1,13 @@
+[Unit]
+Description=mount {{ cifs_share_name }}
+After=network.target multi-user.target
+
+[Mount]
+What=//{{ cifs_share_host | mandatory | regex_replace('^\\/+|\\/+$', '') }}/{{ cifs_share_name }}
+Where={{ cifs_mount_path }}
+
+Type=cifs
+Options=credentials={{ cifs_credentials_path }}{{ ',' + cifs_mount_options if cifs_mount_options else '' }}
+
+[Install]
+WantedBy=default.target
