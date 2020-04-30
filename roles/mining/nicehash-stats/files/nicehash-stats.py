@@ -117,7 +117,7 @@ def rig(ctx):
             ctx.obj["api_secret"],
             ctx.obj["org_id"],
             "get",
-            "/main/api/v2/mining/rigs/",
+            "/main/api/v2/mining/rigs2/",
         )
         response.raise_for_status()
         data = response.json()
@@ -215,7 +215,7 @@ def wallet(ctx):
             ctx.obj["api_secret"],
             ctx.obj["org_id"],
             "get",
-            "/main/api/v2/accounting/accounts",
+            "/main/api/v2/accounting/accounts2",
         )
         response.raise_for_status()
         data = response.json()
@@ -224,14 +224,14 @@ def wallet(ctx):
             ctx.obj["api_key"], ctx.obj["api_secret"], ctx.obj["org_id"]
         )
 
-        for account in data:
+        for account in data.get("currencies") or []:
             click.echo(
                 to_line_protocol(
                     measurement_name="nicehash.wallet",
                     tags={"currency": account["currency"]},
                     fields={
                         "exchange_rate": exchange_rates[(account["currency"], "USD")],
-                        "balance": float(account["balance"]),
+                        "balance": float(account["totalBalance"]),
                     },
                 ),
                 file=sys.stdout,
