@@ -21,4 +21,3 @@ miner1 ethereum_pool=nicehash ethereum_gpu_type=nvidia-gtx1070 ethereum_cuda_dev
 
 [plex]
 miner1
-

@@ -2,6 +2,8 @@ coin_stats_state: present
 coin_stats_virtualenv_path: /opt/coin-stats/virtualenv
 coin_stats_script_install_dir: "{{ coin_stats_virtualenv_path }}/bin"
 coin_stats_timeout_s: 5
+coin_stats_interval_s: 3600
 
 # must set:
 # coin_stats_coinmarketcap_ids
+# coin_stats_coinmarketcap_api_key

@@ -84,6 +84,7 @@
 - hosts: coin-stats
   roles:
     - role: generic/coin-stats
+      coin_stats_coinmarketcap_api_key: "{{ vault_coinmarketcap_api_key }}"
       coin_stats_coinmarketcap_ids: "{{ coinmarketcap_ids.split(',') }}"
       tags:
         - coin-stats

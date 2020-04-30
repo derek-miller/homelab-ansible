@@ -8,7 +8,7 @@
         virtualenv: "{{ coin_stats_virtualenv_path }}"
         name:
           - click
-          - coinmarketcap
+          - requests
         extra_args: --upgrade-strategy only-if-needed
         state: latest
 

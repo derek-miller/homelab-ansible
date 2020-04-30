@@ -8,6 +8,7 @@ common_pkgs:
     - iftop
     - iotop
     - iptraf
+    - jq
     - ntp
     - pigz
     - tmux
