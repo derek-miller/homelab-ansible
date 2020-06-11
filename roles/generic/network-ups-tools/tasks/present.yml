@@ -1,0 +1,34 @@
+- name: install nut
+  apt:
+    name: nut
+  notify: restart nut
+
+- name: create nut configuration dir
+  file:
+    path: /etc/nut/
+    owner: root
+    group: nut
+    mode: 0750
+    state: directory
+
+- name: configure nut
+  template:
+    src: "{{ item }}.j2"
+    dest: /etc/nut/{{ item }}
+    owner: root
+    group: nut
+    mode: 0640
+  with_items:
+    - ups.conf
+    - upsd.conf
+    - upsd.users
+    - upsmon.conf
+    - nut.conf
+  notify: restart nut
+
+- name: delete systemd shutdown script
+  file:
+    path: /lib/systemd/system-shutdown/nutshutdown
+    state: absent
+
+- meta: flush_handlers

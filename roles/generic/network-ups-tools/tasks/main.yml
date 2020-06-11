@@ -1,0 +1,8 @@
+- assert:
+    that: ansible_os_family == 'Debian'
+- assert:
+    that: ansible_service_mgr == 'systemd'
+- assert:
+    that: nut_state in ('present', 'absent')
+
+- include_tasks: "{{ nut_state }}.yml"

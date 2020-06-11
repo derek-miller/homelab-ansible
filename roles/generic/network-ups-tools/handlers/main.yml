@@ -1,0 +1,11 @@
+- name: restart nut
+  systemd:
+    name: "{{ item }}"
+    enabled: yes
+    daemon_reload: yes
+    state: restarted
+  with_items:
+    - nut-client
+    - nut-driver
+    - nut-monitor
+    - nut-server

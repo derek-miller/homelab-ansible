@@ -1,4 +1,8 @@
-- src: oefenweb.postfix
-  name: galaxy/postfix
-- src: ksiig.plexmediaserver
-  name: galaxy/plexmediaserver
+---
+roles:
+  - src: oefenweb.postfix
+    name: galaxy/postfix
+  - src: ksiig.plexmediaserver
+    name: galaxy/plexmediaserver
+  - src: geerlingguy.docker
+    name: galaxy/docker

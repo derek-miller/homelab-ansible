@@ -6,10 +6,10 @@ else
 $(info running in virtualenv $(VIRTUAL_ENV))
 endif
 
-playbook ?= $(or $(PLAYBOOK),$(DEPLOY_PLAYBOOK),mining)
+playbook ?= $(or $(PLAYBOOK),$(DEPLOY_PLAYBOOK),playbook)
 
 inventory_file = hosts
-playbook_file = mining.yml
+playbook_file = $(playbook).yml
 vault_password_file = .vault_pass
 
 vault_files = $(shell find files host_vars group_vars -type f -path '*vault*')
@@ -23,7 +23,7 @@ override ansible_flags += $(if $(hosts),--limit='$(hosts)')
 ansible_playbook_cmd = ansible-playbook $(playbook_file) $(ansible_default_flags) $(ansible_flags)
 ansible_setup = ansible -m setup $(ansible_default_flags) $(ansible_flags)
 
-ansible_bootstrap_flags = -c paramiko --user="miner" --ask-pass --ask-become-pass
+ansible_bootstrap_flags = -c paramiko --ask-pass --ask-become-pass
 
 python_version_full := $(wordlist 2,4,$(subst ., ,$(shell python --version 2>&1)))
 python_version_major := $(word 1,${python_version_full})
@@ -48,7 +48,7 @@ init:
 install: requirements.txt
 	pip-sync -i $(PIP_INDEX_URL)
 	mkdir -p roles/galaxy
-	ansible-galaxy install -r roles/requirements.yml --roles-path roles/ --force
+	ansible-galaxy role install -r roles/requirements.yml --roles-path roles/ --force
 
 upgrade = $(or UPGRADE,0)
 ifneq ($(upgrade),0)
