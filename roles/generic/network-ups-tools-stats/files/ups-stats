@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+#
+# Query NUT UPS status and output in InfluxDB Line Protocol
+#
+# Usage: ups-stats upsname[@hostname[:port]]
+# (same as `upsc`, see https://networkupstools.org/docs/man/upsc.html)
+
+set -euo pipefail
+IFS=$'\n\t'
+
+function join() {
+  local IFS="$1"
+  shift
+  echo "$*"
+}
+
+declare -A vars
+
+# read UPS status into `vars`
+while IFS=": " read -r k v; do
+  vars[$k]="$v"
+done < <(upsc "$*" 2>/dev/null)
+
+# exit if empty/unsuccessful
+[[ -z "${vars-}" ]] || exit 1
+
+# print a metric in InfluxDB line format
+tags=(
+  "ups=${1%%@*}"
+  "manufacturer=${vars["ups.mfr"]/ /\\ }"
+  "model=${vars["ups.model"]/ /\\ }"
+  "product_id=${vars["ups.productid"]/ /\\ }"
+  "vendor_id=${vars["ups.vendorid"]/ /\\ }"
+  "battery_type=${vars["battery.type"]/ /\\ }"
+)
+fields=(
+  "battery_charge=${vars["battery.charge"]}"
+  "battery_charge_low=${vars["battery.charge.low"]}"
+  "battery_charge_warning=${vars["battery.charge.warning"]}"
+  "battery_runtime=${vars["battery.runtime"]}"
+  "battery_runtime_low=${vars["battery.runtime.low"]}"
+  "battery_voltage=${vars["battery.voltage"]}"
+  "battery_voltage_nominal=${vars["battery.voltage.nominal"]}"
+  "beeper_status=\"${vars["ups.beeper.status"]}\""
+  "delay_shutdown=${vars["ups.delay.shutdown"]}"
+  "delay_start=${vars["ups.delay.start"]}"
+  "input_voltage=${vars["input.voltage"]}"
+  "input_voltage_nominal=${vars["input.voltage.nominal"]}"
+  "load=${vars["ups.load"]}"
+  "output_voltage=${vars["output.voltage"]}"
+  "realpower_nominal=${vars["ups.realpower.nominal"]}"
+  "serial_number=\"${vars["ups.serial"]+_}\""
+  "status=\"${vars["ups.status"]}\""
+  "test_result=\"${vars["ups.test.result"]+_}\""
+  "timer_shutdown=${vars["ups.timer.shutdown"]}"
+  "timer_start=${vars["ups.timer.start"]}"
+)
+
+[[ -n "${vars["input.transfer.low"]+_}" ]] && fields+=("input_transfer_low=${vars["input.transfer.low"]}")
+[[ -n "${vars["input.transfer.high"]+_}" ]] && fields+=("input_transfer_high=${vars["input.transfer.high"]}")
+
+time=$(date +%s%N)
+echo "ups,$(join , "${tags[@]}") $(join , "${fields[@]}") $time"

@@ -8,4 +8,3 @@ dependencies:
     postfix_smtp_tls_cafile: "{{ pki_tls_ca_bundle }}"
     postfix_inet_protocols: ipv4
   - role: generic/telegraf
-  - role: generic/vnc-server

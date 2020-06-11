@@ -2,7 +2,9 @@
   apt:
     name:
       - build-essential
-      - libpython-dev
+      - libssl-dev
+      - libffi-dev
+      - python-dev
     state: present
 
 - name: create ansible remote dir

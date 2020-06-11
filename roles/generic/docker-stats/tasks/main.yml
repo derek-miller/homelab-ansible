@@ -1,0 +1,9 @@
+- assert:
+    that: docker_stats_state in ('present', 'absent')
+
+- include_role:
+    name: generic/telegraf/plugin
+  vars:
+    telegraf_plugin_conf_src: docker-stats.conf.jinja2
+    telegraf_plugin_conf: docker-stats.conf
+    telegraf_plugin_state: "{{ docker_stats_state }}"

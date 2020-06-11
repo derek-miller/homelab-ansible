@@ -1,0 +1,16 @@
+# TODO: Properly delete systemd services
+- name: uninstall nut
+  apt:
+    name: nut
+    state: absent
+  register: uninstall_nut_result
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  when: uninstall_nut_result.changed
+
+- name: delete nut configuration
+  file:
+    path: /etc/nut
+    state: absent
