@@ -4,7 +4,7 @@
       - build-essential
       - libssl-dev
       - libffi-dev
-      - python-dev
+      - python3-dev
     state: present
 
 - name: create ansible remote dir

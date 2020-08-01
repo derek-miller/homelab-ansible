@@ -1,7 +1,0 @@
-dependencies:
-  - role: generic/systemd-status-mail
-  - role: mining/ccminer-exe
-  - role: mining/ccminer-stats
-    ccminer_api_url: "{{ ccminer_coin_api_bind }}"
-    ccminer_stats_state: "{{ ccminer_coin_state }}"
-    when: ccminer_coin_api_bind|default('0') != '0'
