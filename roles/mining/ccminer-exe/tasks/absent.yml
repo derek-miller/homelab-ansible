@@ -1,4 +1,0 @@
-- name: delete ccminer install directory
-  file:
-    dest: "{{ ccminer_exe_install_dir }}"
-    state: absent

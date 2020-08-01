@@ -3,8 +3,6 @@
 - assert:
     that: ansible_distribution == 'Ubuntu'
 - assert:
-    that: ansible_distribution_version == '18.04'
-- assert:
     that: ansible_service_mgr == 'systemd'
 
 - include_tasks: absent.yml
