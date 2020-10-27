@@ -4,8 +4,6 @@
 #
 #    pip-compile --index-url=https://pypi.python.org/simple --output-file=requirements.txt requirements.in
 #
---index-url https://pypi.python.org/simple
-
 ansible==2.9.7            # via -r requirements.in
 appdirs==1.4.3            # via black
 attrs==19.3.0             # via black
@@ -16,9 +14,10 @@ cffi==1.14.0              # via bcrypt, cryptography, pynacl
 chardet==3.0.4            # via -r requirements.in, python-debian, requests
 click==7.1.2              # via -r requirements.in, black
 coinmarketcap==5.0.3      # via -r requirements.in
-cryptography==2.9.2       # via -r requirements.in, ansible, paramiko, pyopenssl, requests
+cryptography==3.2         # via -r requirements.in, ansible, paramiko, pyopenssl, requests, secretstorage
 dnspython==1.16.0         # via -r requirements.in
 idna==2.9                 # via requests
+jeepney==0.4.3            # via keyring, secretstorage
 jinja2==2.11.2            # via -r requirements.in, ansible
 keyring==21.2.0           # via -r requirements.in
 markupsafe==1.1.1         # via jinja2
@@ -33,6 +32,7 @@ pyyaml==5.3.1             # via -r requirements.in, ansible
 regex==2020.4.4           # via black
 requests-cache==0.5.2     # via coinmarketcap
 requests[security]==2.23.0  # via -r requirements.in, coinmarketcap, requests-cache
+secretstorage==3.1.2      # via keyring
 semantic-version==2.8.5   # via -r requirements.in
 six==1.14.0               # via bcrypt, cryptography, pynacl, pyopenssl, python-debian, websocket-client
 toml==0.10.0              # via black
