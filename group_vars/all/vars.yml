@@ -11,11 +11,11 @@ pki_tls_dir: /etc/ssl
 pki_tls_private_dir: /etc/ssl/private
 pki_tls_private_group: ssl-cert
 
-influxdb_host: 192.168.1.3
+influxdb_host: influxdb.home.dmiller.me
 influxdb_username: "{{ vault_influxdb_username }}"
 influxdb_password: "{{ vault_influxdb_password }}"
-influxdb_scheme: http
-influxdb_port: 8086
+influxdb_scheme: https
+influxdb_port: 443
 influxdb_url: "{{ influxdb_scheme }}://{{ influxdb_host }}:{{ influxdb_port }}"
 influxdb_database_name: telegraf
 telegraf_udp_host: 127.0.0.1
@@ -40,7 +40,7 @@ gpu_overclock_vars:
       all_gpus: "{{ nvidia_overclock_exe }}"
       multi_gpus: "{{ nvidia_overclock_exe }} -i"
     algorithms:
-      daggerhashimoto: "-l 100 -p 1 -c 0 -m 700 -f auto"
+      daggerhashimoto: "-l 125 -p 1 -c 150 -m 650 -f auto"
       equihash: "-l 100 -p 1 -c 0 -m 700 -f auto"
       lyra2v2: "-l 100 -p 1 -c 0 -m 700 -f auto"
       neoscrypt: "-l 100 -p 1 -c 0 -m 700 -f auto"
