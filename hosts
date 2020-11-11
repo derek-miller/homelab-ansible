@@ -1,5 +1,5 @@
 [hs110-stats]
-miner1 hs110_stats_ip_address=192.168.1.5
+miner1 hs110_stats_ip_address=192.168.1.5 hs110_stats_state=absent
 
 [nvidia-miner]
 miner1
@@ -15,9 +15,6 @@ miner1
 
 [ethereum]
 miner1 ethereum_pool=nicehash ethereum_gpu_type=nvidia-gtx1070 ethereum_cuda_devices=0,1,2,3,4,5 ethereum_api_port=5005 ethereum_overclock_at_start=yes ethereum_state=present
-
-[plex]
-miner1
 
 [x11vnc]
 miner1

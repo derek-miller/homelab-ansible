@@ -1,4 +1,4 @@
-ansible
+ansible==2.10.3
 black
 chardet  # implicitly required by python-debian
 click
