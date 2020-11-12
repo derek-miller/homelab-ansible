@@ -5,5 +5,4 @@ coin_stats_timeout_s: 5
 coin_stats_interval_s: 3600
 
 # must set:
-# coin_stats_coinmarketcap_ids
-# coin_stats_coinmarketcap_api_key
+# coin_stats_coingecko_ids
