@@ -8,7 +8,7 @@ miner1
 nvidia_overclock_exe=/usr/local/bin/nvidia-overclock
 
 [coin-stats]
-miner1 coinmarketcap_ids=bitcoin,ethereum
+miner1 coingecko_ids=bitcoin,ethereum
 
 [nicehash-stats]
 miner1

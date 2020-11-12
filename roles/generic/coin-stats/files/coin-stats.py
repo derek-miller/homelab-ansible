@@ -14,48 +14,105 @@ def to_line_protocol(measurement_name, tags, fields, ts=None):
 
 
 @click.command()
-@click.option("--api-key", help="Coinmarketcap api key.", required=True)
-@click.argument("coinmarketcap_slugs", nargs=-1, required=True)
+@click.argument("coingecko_ids", nargs=-1, required=True)
 @click.pass_context
-def cli(ctx, api_key, coinmarketcap_slugs):
-    try:
-        response = requests.get(
-            "https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest",
-            params={"limit": "5000"},
-            headers={
-                "Accepts": "application/json",
-                "X-CMC_PRO_API_KEY": api_key,
-            },
-        )
-        response.raise_for_status()
-        for listing in response.json()["data"]:
-            if listing["slug"] not in coinmarketcap_slugs:
-                continue
+def cli(ctx, coingecko_ids):
+    for coin_id in coingecko_ids:
+        try:
+            response = requests.get(
+                f"https://api.coingecko.com/api/v3/coins/{coin_id}?localization=false",
+                params={"limit": "5000"},
+                headers={
+                    "Accepts": "application/json",
+                    "localization": "false",
+                },
+            )
+            response.raise_for_status()
+            stats = response.json()
             click.echo(
                 to_line_protocol(
                     measurement_name="coin_stats",
                     tags={
-                        "slug": listing["slug"],
-                        "coin": listing["name"].lower(),
-                        "symbol": listing["symbol"],
+                        "id": stats["id"],
+                        "symbol": stats["symbol"],
+                        "name": stats["name"],
+                        "hashing_algorithm": stats["hashing_algorithm"],
                     },
                     fields={
-                        "total_supply": listing["total_supply"],
-                        "circulating_supply": listing["circulating_supply"],
-                        "rank": listing["cmc_rank"],
-                        "market_cap": listing["quote"]["USD"]["market_cap"],
-                        "percent_change_1h": listing["quote"]["USD"]["percent_change_1h"],
-                        "percent_change_24h": listing["quote"]["USD"]["percent_change_24h"],
-                        "percent_change_7d": listing["quote"]["USD"]["percent_change_7d"],
-                        "price": listing["quote"]["USD"]["price"],
-                        "volume_24h": listing["quote"]["USD"]["volume_24h"],
+                        "block_time_minutes": stats["block_time_in_minutes"],
+                        "thumbnail": stats.get("image", {}).get("thumb"),
+                        "sentiment_votes_up_percentage": stats["sentiment_votes_up_percentage"],
+                        "sentiment_votes_down_percentage": stats["sentiment_votes_down_percentage"],
+                        "market_cap_rank": stats["market_cap_rank"],
+                        "coingecko_rank": stats["coingecko_rank"],
+                        "coingecko_score": stats["coingecko_score"],
+                        "developer_score": stats["developer_score"],
+                        "community_score": stats["community_score"],
+                        "liquidity_score": stats["liquidity_score"],
+                        "public_interest_score": stats["public_interest_score"],
+                        # Market Data
+                        "current_price": stats["market_data"]["current_price"]["usd"],
+                        "all_time_high": stats["market_data"]["ath"]["usd"],
+                        "all_time_high_change_percentage": stats["market_data"]["ath_change_percentage"]["usd"],
+                        "all_time_high_date": stats["market_data"]["ath_date"]["usd"],
+                        "all_time_low": stats["market_data"]["atl"]["usd"],
+                        "all_time_low_change_percentage": stats["market_data"]["atl_change_percentage"]["usd"],
+                        "all_time_low_date": stats["market_data"]["atl_date"]["usd"],
+                        "market_cap": stats["market_data"]["market_cap"]["usd"],
+                        "fully_diluted_valuation": stats["market_data"]["fully_diluted_valuation"],
+                        "total_volume": stats["market_data"]["total_volume"]["usd"],
+                        "high_24h": stats["market_data"]["high_24h"]["usd"],
+                        "low_24h": stats["market_data"]["low_24h"]["usd"],
+                        "price_change_24h": stats["market_data"]["price_change_24h"],
+                        "price_change_percentage_24h": stats["market_data"]["price_change_percentage_24h"],
+                        "price_change_percentage_7d": stats["market_data"]["price_change_percentage_7d"],
+                        "price_change_percentage_14d": stats["market_data"]["price_change_percentage_14d"],
+                        "price_change_percentage_30d": stats["market_data"]["price_change_percentage_30d"],
+                        "price_change_percentage_60d": stats["market_data"]["price_change_percentage_60d"],
+                        "price_change_percentage_200d": stats["market_data"]["price_change_percentage_200d"],
+                        "price_change_percentage_1y": stats["market_data"]["price_change_percentage_1y"],
+                        "market_cap_change_24h": stats["market_data"]["market_cap_change_24h"],
+                        "market_cap_change_percentage_24h": stats["market_data"]["market_cap_change_percentage_24h"],
+                        "price_change_24h_in_usd": stats["market_data"]["price_change_24h_in_currency"]["usd"],
+                        "price_change_percentage_1h_in_usd": stats["market_data"]["price_change_percentage_1h_in_currency"]["usd"],
+                        "price_change_percentage_24h_in_usd": stats["market_data"]["price_change_percentage_24h_in_currency"]["usd"],
+                        "price_change_percentage_7d_in_usd": stats["market_data"]["price_change_percentage_7d_in_currency"]["usd"],
+                        "price_change_percentage_14d_in_usd": stats["market_data"]["price_change_percentage_14d_in_currency"]["usd"],
+                        "price_change_percentage_30d_in_usd": stats["market_data"]["price_change_percentage_30d_in_currency"]["usd"],
+                        "price_change_percentage_60d_in_usd": stats["market_data"]["price_change_percentage_60d_in_currency"]["usd"],
+                        "price_change_percentage_200d_in_usd": stats["market_data"]["price_change_percentage_200d_in_currency"]["usd"],
+                        "price_change_percentage_1y_in_usd": stats["market_data"]["price_change_percentage_1y_in_currency"]["usd"],
+                        "market_cap_change_24h_in_usd": stats["market_data"]["market_cap_change_24h_in_currency"]["usd"],
+                        "market_cap_change_percentage_24h_in_usd": stats["market_data"]["market_cap_change_percentage_24h_in_currency"]["usd"],
+                        "total_supply": stats["market_data"]["total_supply"],
+                        "max_supply": stats["market_data"]["max_supply"],
+                        "circulating_supply": stats["market_data"]["circulating_supply"],
+                        # Community Data
+                        "facebook_likes": stats["community_data"]["facebook_likes"],
+                        "twitter_followers": stats["community_data"]["twitter_followers"],
+                        "reddit_average_posts_48h": stats["community_data"]["reddit_average_posts_48h"],
+                        "reddit_average_comments_48h": stats["community_data"]["reddit_average_comments_48h"],
+                        "reddit_subscribers": stats["community_data"]["reddit_subscribers"],
+                        "reddit_accounts_active_48h": stats["community_data"]["reddit_accounts_active_48h"],
+                        # Developer Data
+                        "developer_forks": stats["developer_data"]["forks"],
+                        "developer_stars": stats["developer_data"]["stars"],
+                        "developer_subscribers": stats["developer_data"]["subscribers"],
+                        "developer_total_issues": stats["developer_data"]["total_issues"],
+                        "developer_closed_issues": stats["developer_data"]["closed_issues"],
+                        "developer_open_issues": max(0, (stats["developer_data"]["total_issues"] or 0) - (stats["developer_data"]["closed_issues"] or 0)),
+                        "developer_pull_requests_merged": stats["developer_data"]["pull_requests_merged"],
+                        "developer_pull_request_contributors": stats["developer_data"]["pull_request_contributors"],
+                        "developer_code_additions_4_weeks": stats["developer_data"]["code_additions_deletions_4_weeks"]["additions"],
+                        "developer_code_deletions_4_weeks": stats["developer_data"]["code_additions_deletions_4_weeks"]["deletions"],
+                        "developer_commit_count_4_weeks": stats["developer_data"]["commit_count_4_weeks"],
                     },
                 ),
                 file=sys.stdout,
             )
-    except Exception as e:
-        click.echo(str(e), err=True)
-        ctx.exit(1)
+        except Exception as e:
+            click.echo(str(e), err=True)
+            ctx.exit(1)
 
 
 if __name__ == "__main__":

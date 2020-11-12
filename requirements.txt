@@ -15,7 +15,6 @@ certifi==2020.11.8        # via requests
 cffi==1.14.3              # via bcrypt, cryptography, pynacl
 chardet==3.0.4            # via -r requirements.in, python-debian, requests
 click==7.1.2              # via -r requirements.in, black
-coinmarketcap==5.0.3      # via -r requirements.in
 cryptography==3.2.1       # via -r requirements.in, ansible-base, paramiko, pyopenssl, requests
 dnspython==2.0.0          # via -r requirements.in
 idna==2.10                # via requests
@@ -33,13 +32,12 @@ pyopenssl==19.1.0         # via requests
 pyparsing==2.4.7          # via packaging
 python-debian==0.1.38     # via -r requirements.in
 pyyaml==5.3.1             # via -r requirements.in, ansible-base
-regex==2020.10.28         # via black
-requests-cache==0.5.2     # via coinmarketcap
-requests[security]==2.24.0  # via -r requirements.in, coinmarketcap, requests-cache
+regex==2020.11.11         # via black
+requests[security]==2.25.0  # via -r requirements.in
 semantic-version==2.8.5   # via -r requirements.in
 six==1.15.0               # via bcrypt, cryptography, packaging, pynacl, pyopenssl, python-debian, websocket-client
 toml==0.10.2              # via black
 typed-ast==1.4.1          # via black
 typing-extensions==3.7.4.3  # via black
-urllib3==1.25.11          # via requests
+urllib3==1.26.1           # via requests
 websocket-client==0.57.0  # via -r requirements.in

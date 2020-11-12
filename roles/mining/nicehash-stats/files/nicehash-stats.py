@@ -241,5 +241,40 @@ def wallet(ctx):
         ctx.exit(1)
 
 
+@cli.command()
+@click.pass_context
+def market(ctx):
+    response = nicehash_request(
+        ctx.obj["api_key"], ctx.obj["api_secret"], ctx.obj["org_id"], "get", "/exchange/api/v2/info/marketStats"
+    )
+    response.raise_for_status()
+    for market_symbol, stats in response.json().items():
+        if not market_symbol.endswith('USDT'):
+            continue
+        symbol, _ = market_symbol.split('USDT', 1)
+
+        price_stat = stats['csjs'][-1]
+        click.echo(
+            to_line_protocol(
+                measurement_name="coin_market_stats",
+                tags={
+                    "symbol": symbol
+                },
+                fields={
+                    "price": float(price_stat["v"]),
+                    "lowest_price_in_24h": float(stats["l24"]),
+                    "highest_price_in_24h": float(stats["h24"]),
+                    "volume_in_btc_in_24h": float(stats["v24"]),
+                    "volume_in_base_cur_in_24h": float(stats["v24b"]),
+                    "volume_in_quote_cur_in_24h": float(stats["v24q"]),
+                    "trades_in_24h": float(stats["t24"]),
+                    "percent_change_in_24h": stats["c24"] * 100.0,
+                },
+                ts=price_stat["d"]
+            ),
+            file=sys.stdout,
+        )
+
+
 if __name__ == "__main__":
     cli()
