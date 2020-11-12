@@ -90,8 +90,14 @@ def get_nicehash_exchange_rates(api_key, api_secret, org_id):
 
 
 def to_line_protocol(measurement_name, tags, fields, ts=None):
-    tags = ",".join("{}={}".format(tag, tag_value) for tag, tag_value in tags.items() if tag_value)
-    fields = ",".join("{}={}".format(field, field_value) for field, field_value in fields.items())
+    tags = ",".join(
+        "{}={}".format(tag, tag_value) for tag, tag_value in tags.items() if tag_value is not None
+    )
+    fields = ",".join(
+        "{}={}".format(field, field_value)
+        for field, field_value in fields.items()
+        if field_value is not None
+    )
     ts = int(round(float(ts or time.time()) * 1e9))
     return "{},{} {} {}".format(measurement_name, tags, fields, ts)
 
@@ -245,21 +251,23 @@ def wallet(ctx):
 @click.pass_context
 def market(ctx):
     response = nicehash_request(
-        ctx.obj["api_key"], ctx.obj["api_secret"], ctx.obj["org_id"], "get", "/exchange/api/v2/info/marketStats"
+        ctx.obj["api_key"],
+        ctx.obj["api_secret"],
+        ctx.obj["org_id"],
+        "get",
+        "/exchange/api/v2/info/marketStats",
     )
     response.raise_for_status()
     for market_symbol, stats in response.json().items():
-        if not market_symbol.endswith('USDT'):
+        if not market_symbol.endswith("USDT"):
             continue
-        symbol, _ = market_symbol.split('USDT', 1)
+        symbol, _ = market_symbol.split("USDT", 1)
 
-        price_stat = stats['csjs'][-1]
+        price_stat = stats["csjs"][-1]
         click.echo(
             to_line_protocol(
                 measurement_name="coin_market_stats",
-                tags={
-                    "symbol": symbol
-                },
+                tags={"symbol": symbol},
                 fields={
                     "price": float(price_stat["v"]),
                     "lowest_price_in_24h": float(stats["l24"]),
@@ -270,7 +278,7 @@ def market(ctx):
                     "trades_in_24h": float(stats["t24"]),
                     "percent_change_in_24h": stats["c24"] * 100.0,
                 },
-                ts=price_stat["d"]
+                ts=price_stat["d"],
             ),
             file=sys.stdout,
         )

@@ -27,8 +27,14 @@ def get_api_data(ethminer_api_host, ethminer_api_port, method, chunk_size=4096):
 
 
 def to_line_protocol(measurement_name, tags, fields, ts=None):
-    tags = ",".join("{}={}".format(tag, tag_value) for tag, tag_value in tags.items())
-    fields = ",".join("{}={}".format(field, field_value) for field, field_value in fields.items())
+    tags = ",".join(
+        "{}={}".format(tag, tag_value) for tag, tag_value in tags.items() if tag_value is not None
+    )
+    fields = ",".join(
+        "{}={}".format(field, field_value)
+        for field, field_value in fields.items()
+        if field_value is not None
+    )
     ts = int(round(float(ts or time.time()) * 1e9))
     return "{},{} {} {}".format(measurement_name, tags, fields, ts)
 
