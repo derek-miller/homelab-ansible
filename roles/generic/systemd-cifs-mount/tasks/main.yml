@@ -5,9 +5,8 @@
   block:
     - name: install cifs dependencies
       apt:
-        name:
-          - cifs-utils
-        state: present
+        name: cifs-utils
+        state: latest
 
     - name: create cifs credentials file
       copy:

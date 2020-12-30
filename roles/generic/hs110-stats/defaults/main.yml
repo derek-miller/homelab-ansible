@@ -1,8 +1,11 @@
 hs110_stats_state: present
 hs110_stats_metric_name: hs110
-hs110_stats_script_install_dir: /usr/local/bin
+hs110_stats_metric_tags: {}
+hs110_stats_dir: /opt/hs110-stats
+hs110_stats_script_path: "{{ hs110_stats_dir }}/bin/hs110-stats"
 hs110_stats_timeout_s: 5
 hs110_stats_port: 9999
 
 # must set:
 # hs110_stats_ip_address
+# hs110_stats_device

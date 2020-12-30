@@ -1,0 +1,22 @@
+- name: stop ddclient service
+  systemd:
+    name: ddclient
+    state: stopped
+  failed_when: False
+
+- name: disable ddclient service
+  systemd:
+    name: ddclient
+    enabled: no
+    daemon_reload: yes
+  failed_when: False
+
+- name: uninstall the ddclient packages
+  apt:
+    name: ddclient
+    state: absent
+
+- name: delete ddclient config
+  file:
+    path: /etc/ddclient.conf
+    state: absent

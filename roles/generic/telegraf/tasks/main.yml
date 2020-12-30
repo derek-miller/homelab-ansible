@@ -2,7 +2,10 @@
     that: telegraf_state in ('present', 'absent')
 
 - name: stop and disable telegraf service
-  service: name=telegraf state=stopped enabled=no
+  service:
+    name: telegraf
+    state: stopped
+    enabled: no
   register: service_result
   failed_when:
     - service_result|failed
@@ -22,15 +25,21 @@
 - name: install telegraf dependencies
   apt:
     name: "{{ telegraf_apt_dependencies }}"
-    state: present
+    state: latest
   when: telegraf_state == 'present'
+  notify: restart telegraf
 
 - name: install telegraf
-  apt: name=telegraf state=latest
+  apt:
+    name: telegraf
+    state: latest
   when: telegraf_state == 'present'
+  notify: restart telegraf
 
 - name: uninstall telegraf
-  apt: name=telegraf state=absent
+  apt:
+    name: telegraf
+    state: absent
   when: telegraf_state == 'absent'
 
 - include_tasks: present.yml

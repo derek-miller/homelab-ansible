@@ -1,0 +1,5 @@
+- name: restart ddclient
+  service:
+    name: ddclient
+    state: restarted
+    enabled: yes

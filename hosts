@@ -1,5 +1,6 @@
 [hs110-stats]
-miner1 hs110_stats_ip_address=192.168.1.5 hs110_stats_state=absent
+raspi1 hs110_stats_ip_address=192.168.1.5 hs110_stats_device='Basement Bedroom Lamps'
+#miner1 hs110_stats_ip_address=192.168.1.5 hs110_stats_device='miner1' hs110_stats_state=absent
 
 [nvidia-miner]
 miner1
@@ -18,10 +19,15 @@ miner1 ethereum_pool=nicehash ethereum_gpu_type=nvidia-gtx1070 ethereum_cuda_dev
 
 [x11vnc]
 miner1
+nicks-pi
 raspi1
 
+[ddclient]
+miner1
+
 [docker]
-raspi1 docker_apt_arch=arm64
+raspi1 docker_apt_arch=arm64 docker_distribution_release=bionic docker_compose_state=absent
+nicks-pi docker_apt_arch=armhf docker_distribution_release=bionic docker_users='["ubuntu"]' docker_compose_state=absent
 
 [network-ups-tools]
 raspi1

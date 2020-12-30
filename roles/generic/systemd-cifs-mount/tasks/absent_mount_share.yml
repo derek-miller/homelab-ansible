@@ -1,5 +1,7 @@
-- set_fact: cifs_mount_service_name={{ cifs_mount_dir | mandatory | regex_replace('^\\/+|\\/+$', '')  | replace('/', "-") }}-{{ cifs_share_name | mandatory }}
-- set_fact: cifs_mount_path={{ cifs_mount_dir | regex_replace('\\/+$', '') }}/{{ cifs_share_name }}
+- set_fact:
+    cifs_mount_service_name: "{{ cifs_mount_dir | mandatory | regex_replace('^\\/+|\\/+$', '')  | replace('/', '-') }}-{{ cifs_share_name | mandatory }}"
+- set_fact:
+    cifs_mount_path: "{{ cifs_mount_dir | regex_replace('\\/+$', '') }}/{{ cifs_share_name }}"
 
 # Automount cleanup
 

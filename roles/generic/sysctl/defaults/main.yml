@@ -1,5 +1,2 @@
 sysctl_file: /etc/sysctl.d/60-ansible.conf
-sysctl_fs_nr_open: 1048576
-sysctl_vm_dirty_background_ratio: 5
-sysctl_vm_dirty_ratio: 10
-sysctl_vm_swappiness: 0
+sysctl_params: []

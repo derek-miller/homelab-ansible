@@ -1,0 +1,6 @@
+ansible_host: "{{ vault_ansible_host }}"
+ansible_port: "{{ vault_ansible_port }}"
+
+ddclient_login: "{{ vault_ddclient_login }}"
+ddclient_password: "{{ vault_ddclient_password }}"
+ddclient_subdomain: "{{ vault_ddclient_subdomain }}"

@@ -10,7 +10,8 @@
 # the link with a new file (absolute insanity). See https://github.com/ansible/ansible/issues/14469
 
 - name: check if virtualenv pip.conf is a symlink
-  stat: path={{ virtualenv_pip_conf }}
+  stat:
+    path: "{{ virtualenv_pip_conf }}"
   register: virtualenv_pip_conf_stat
 
 - name: delete virtualenv pip.conf if it's a symlink

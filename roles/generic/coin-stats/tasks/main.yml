@@ -12,19 +12,21 @@
         extra_args: --upgrade-strategy only-if-needed
         state: latest
 
-    - name: copy coin-stats script
-      template:
-        src: coin-stats.jinja2
-        dest: "{{ coin_stats_script_install_dir }}/coin-stats"
+    - name: create coin-stats script dir
+      file:
+        path: "{{ coin_stats_script_path|dirname }}"
         owner: root
         group: root
         mode: 0755
+        state: directory
 
-- name: delete coin-stats script
-  file:
-    path: "{{ coin_stats_script_install_dir }}/coin-stats"
-    state: absent
-  when: coin_stats_state == 'absent'
+    - name: copy coin-stats script
+      template:
+        src: coin-stats.jinja2
+        dest: "{{ coin_stats_script_path }}"
+        owner: root
+        group: root
+        mode: 0755
 
 - include_role:
     name: generic/telegraf/plugin
@@ -32,3 +34,9 @@
       telegraf_plugin_conf_src: coin-stats.conf.jinja2
       telegraf_plugin_conf: coin-stats.conf
       telegraf_plugin_state: "{{ coin_stats_state }}"
+
+- name: delete coin-stats dir
+  file:
+    path: "{{ coin_stats_dir }}"
+    state: absent
+  when: coin_stats_state == 'absent'

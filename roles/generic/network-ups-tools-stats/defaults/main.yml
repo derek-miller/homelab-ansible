@@ -1,6 +1,7 @@
 nut_stats_state: present
 nut_stats_metric_name: ups
-nut_stats_script_install_dir: /usr/local/bin
+nut_stats_dir: /opt/nut-stats
+nut_stats_script_path: "{{ nut_stats_dir }}/bin/nut-stats"
 nut_stats_timeout_s: 5
 
 # must set:

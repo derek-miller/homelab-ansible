@@ -1,1 +1,5 @@
-requests[security]
+--index-url https://pypi.python.org/simple
+
+docker[tls]
+docker-compose
+pyyaml

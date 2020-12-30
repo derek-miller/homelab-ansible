@@ -1,6 +1,7 @@
 - name: install nut
   apt:
     name: nut
+    state: latest
   notify: restart nut
 
 - name: create nut configuration dir

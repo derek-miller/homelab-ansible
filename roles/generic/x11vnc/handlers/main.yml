@@ -1,2 +1,5 @@
 - name: restart x11vnc
-  service: name=x11vnc state=restarted enabled=yes
+  service:
+    name: x11vnc
+    state: restarted
+    enabled: yes

@@ -11,23 +11,31 @@
         extra_args: --upgrade-strategy only-if-needed
         state: latest
 
+    - name: create ethminer-stats script dir
+      file:
+        path: "{{ ethminer_stats_script_path|dirname }}"
+        owner: root
+        group: root
+        mode: 0755
+        state: directory
+
     - name: copy ethminer-stats script
       template:
         src: ethminer-stats.jinja2
-        dest: "{{ ethminer_stats_script_install_dir }}/ethminer-stats"
+        dest: "{{ ethminer_stats_script_path }}"
         owner: root
         group: root
         mode: 0755
 
-- name: delete ethminer-stats script
-  file:
-    path: "{{ ethminer_stats_script_install_dir }}/ethminer-stats"
-    state: absent
-  when: ethminer_stats_state == 'absent'
-
 - include_role:
     name: generic/telegraf/plugin
   vars:
-      telegraf_plugin_conf_src: ethminer-stats.conf.jinja2
-      telegraf_plugin_conf: ethminer-stats-{{ ethminer_coin_name }}.conf
-      telegraf_plugin_state: "{{ ethminer_stats_state }}"
+    telegraf_plugin_conf_src: ethminer-stats.conf.jinja2
+    telegraf_plugin_conf: ethminer-stats-{{ ethminer_coin_name }}.conf
+    telegraf_plugin_state: "{{ ethminer_stats_state }}"
+
+- name: delete ethminer-stats dir
+  file:
+    path: "{{ ethminer_stats_dir }}"
+    state: absent
+  when: ethminer_stats_state == 'absent'

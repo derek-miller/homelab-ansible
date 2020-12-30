@@ -4,7 +4,10 @@
     that: ansible_service_mgr == 'systemd'
 
 - name: install x11vnc
-  apt: pkg=x11vnc state=present
+  apt:
+    pkg: x11vnc
+    state: latest
+  notify: restart x11vnc
 
 - name: configure x11vnc password
   shell: x11vnc -storepasswd "{{ vnc_password }}" "{{ x11vnc_rfb_pass_file }}"
