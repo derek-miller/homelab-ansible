@@ -1,6 +1,5 @@
 ---
-roles:
-  - src: oefenweb.postfix
-    name: galaxy/postfix
-  - src: geerlingguy.docker
-    name: galaxy/docker
+- src: oefenweb.postfix
+  name: galaxy/postfix
+- src: geerlingguy.docker
+  name: galaxy/docker
