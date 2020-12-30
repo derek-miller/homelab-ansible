@@ -2,4 +2,3 @@ dependencies:
   - role: generic/virtualenv
     virtualenv_state: "{{ nicehash_stats_state }}"
     virtualenv_path: "{{ nicehash_stats_virtualenv_path }}"
-    virtualenv_site_packages: yes

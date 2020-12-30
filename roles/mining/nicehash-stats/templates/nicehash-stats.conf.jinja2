@@ -1,7 +1,7 @@
 [[inputs.exec]]
   commands = [
-    "{{ nicehash_stats_script_install_dir }}/nicehash-stats --api-key='{{ nicehash_api_key }}' --api-secret='{{ nicehash_api_secret }}' --org-id='{{ nicehash_organization_id }}' rig",
-    "{{ nicehash_stats_script_install_dir }}/nicehash-stats --api-key='{{ nicehash_api_key }}' --api-secret='{{ nicehash_api_secret }}' --org-id='{{ nicehash_organization_id }}' wallet"
+    "{{ nicehash_stats_script_path }} --api-key='{{ nicehash_api_key }}' --api-secret='{{ nicehash_api_secret }}' --org-id='{{ nicehash_organization_id }}' rig",
+    "{{ nicehash_stats_script_path }} --api-key='{{ nicehash_api_key }}' --api-secret='{{ nicehash_api_secret }}' --org-id='{{ nicehash_organization_id }}' wallet"
   ]
   timeout = "{{ nicehash_stats_timeout_s|int }}s"
   data_format = "influx"

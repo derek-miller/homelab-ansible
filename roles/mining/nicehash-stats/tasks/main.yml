@@ -12,19 +12,21 @@
         extra_args: --upgrade-strategy only-if-needed
         state: latest
 
-    - name: copy nicehash-stats script
-      template:
-        src: nicehash-stats.jinja2
-        dest: "{{ nicehash_stats_script_install_dir }}/nicehash-stats"
+    - name: create nicehash-stats script dir
+      file:
+        path: "{{ nicehash_stats_script_path|dirname }}"
         owner: root
         group: root
         mode: 0755
+        state: directory
 
-- name: delete nicehash-stats script
-  file:
-    path: "{{ nicehash_stats_script_install_dir }}/nicehash-stats"
-    state: absent
-  when: nicehash_stats_state == 'absent'
+    - name: copy nicehash-stats script
+      template:
+        src: nicehash-stats.jinja2
+        dest: "{{ nicehash_stats_script_path }}"
+        owner: root
+        group: root
+        mode: 0755
 
 - include_role:
     name: generic/telegraf/plugin
@@ -32,3 +34,9 @@
     telegraf_plugin_conf_src: nicehash-stats.conf.jinja2
     telegraf_plugin_conf: nicehash-stats.conf
     telegraf_plugin_state: "{{ nicehash_stats_state }}"
+
+- name: delete nicehash-stats dir
+  file:
+    path: "{{ nicehash_stats_dir }}"
+    state: absent
+  when: nicehash_stats_state == 'absent'

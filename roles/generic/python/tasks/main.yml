@@ -4,6 +4,7 @@
 - name: install pip3
   apt:
     name: python3-pip
+    state: latest
 
 - name: check if pip3 needs upgrade before using disable-pip-version-check flag
   command: pip3 --version

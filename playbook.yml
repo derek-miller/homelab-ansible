@@ -40,25 +40,24 @@
 - name: common
   hosts: all
   roles:
-    - common/essential
+    - common
   tags:
     - always
     - base
     - common
-    - common-essential
 
-- hosts: all
+- hosts: ddclient
   roles:
-    - role: common/nonessential
+    - role: generic/ddclient
       tags:
-        - common
-        - common-nonessential
+        - ddclient
 
 - hosts: docker
   roles:
     - role: galaxy/docker
       docker_users:
-        - telegraf # Necessary so telegraf can read from the socket
+        - telegraf  # Necessary so telegraf can read from the socket
+      docker_apt_repository: "deb [arch={{ docker_apt_arch }}] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ docker_distribution_release|default(ansible_distribution_release) }} {{ docker_apt_release_channel }}"
       tags:
         - docker
         - docker-daemon
@@ -67,6 +66,22 @@
       tags:
         - docker
         - docker-stats
+
+- hosts: docker
+  tasks:
+    - name: create docker containers
+      when: docker_compose_definition is defined
+      community.general.docker_compose:
+        state: "{{ docker_compose_state|default('present') }}"
+        remove_images: all
+        remove_volumes: yes
+        remove_orphans: yes
+        project_name: "{{ inventory_hostname }}"
+        definition: "{{ docker_compose_definition }}"
+        pull: yes
+      tags:
+        - docker
+        - docker-compose
 
 - hosts: x11vnc
   roles:

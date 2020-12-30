@@ -1,0 +1,18 @@
+ansible_host: "{{ vault_ansible_host }}"
+ansible_port: "{{ vault_ansible_port }}"
+
+ddclient_login: "{{ vault_ddclient_login }}"
+ddclient_password: "{{ vault_ddclient_password }}"
+ddclient_subdomain: "{{ vault_ddclient_subdomain }}"
+
+docker_compose_definition: "{{ vault_docker_compose_definition }}"
+
+nut_ups_devices:
+  - |
+    [wan-ups]
+        driver = usbhid-ups
+        port = auto
+        desc = "WAN UPS"
+nut_ups_monitors:
+  - "MONITOR wan-ups@localhost 1 {{ nut_user_master_name }} {{ nut_user_master_password | mandatory }} master"
+nut_stats_target: wan-ups

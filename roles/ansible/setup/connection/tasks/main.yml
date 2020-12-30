@@ -21,12 +21,14 @@
   run_once: yes
 
 - name: use ansible surrogate user
-  set_fact: ansible_ssh_user={{ ansible_surrogate_user }}
+  set_fact:
+    ansible_ssh_user: "{{ ansible_surrogate_user }}"
   when: ansible_ssh_user is not defined
   check_mode: no
 
 - name: set ansible ssh private key file
-  set_fact: ansible_ssh_private_key_file={{ local_ssh_key_dir }}/{{ ansible_surrogate_private_key_file|basename }}
+  set_fact:
+    ansible_ssh_private_key_file: "{{ local_ssh_key_dir }}/{{ ansible_surrogate_private_key_file|basename }}"
   when: ansible_ssh_user == ansible_surrogate_user
   check_mode: no
 
@@ -39,4 +41,5 @@
     name: "{{ inventory_hostname }}"
 
 - name: set ansible hostname
-  set_fact: ansible_hostname={{ inventory_hostname }}
+  set_fact:
+    ansible_hostname: "{{ inventory_hostname }}"

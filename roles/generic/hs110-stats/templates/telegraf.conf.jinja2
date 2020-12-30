@@ -1,8 +1,44 @@
 [[inputs.exec]]
-  name_override = "{{ hs110_stats_metric_name }}"
+  name_override = "{{ hs110_stats_metric_name }}_status"
   commands = [
-    "{{ hs110_stats_script_install_dir }}/hs110-stats {{ hs110_stats_ip_address }} {{ hs110_stats_port|int }} status 2>/dev/null | jq '.system .get_sysinfo'",
-    "{{ hs110_stats_script_install_dir }}/hs110-stats {{ hs110_stats_ip_address }} {{ hs110_stats_port|int }} emeter 2>/dev/null | jq '.emeter .get_realtime'",
+    "{{ hs110_stats_script_path }} {{ hs110_stats_ip_address }} {{ hs110_stats_port|int }} status 2>/dev/null",
   ]
+  json_query = "system.get_sysinfo"
   timeout = "{{ hs110_stats_timeout_s|int }}s"
   data_format = "json"
+  tag_keys = ["alias"]
+  json_string_fields = [
+    "sw_ver",
+    "hw_ver",
+    "type",
+    "model",
+    "mac",
+    "deviceId",
+    "hwId",
+    "fwId",
+    "oemId",
+    "dev_name",
+    "icon_hash",
+    "active_mode",
+    "feature"
+  ]
+  [inputs.exec.tags]
+    device = "{{ hs110_stats_device | mandatory }}"
+{% for key, value in hs110_stats_metric_tags.items() %}
+    {{ key|trim }} = "{{ value|trim }}"
+{% endfor %}
+
+
+[[inputs.exec]]
+  name_override = "{{ hs110_stats_metric_name }}_emeter"
+  commands = [
+    "{{ hs110_stats_script_path }} {{ hs110_stats_ip_address }} {{ hs110_stats_port|int }} emeter 2>/dev/null",
+  ]
+  json_query = "emeter.get_realtime"
+  timeout = "{{ hs110_stats_timeout_s|int }}s"
+  data_format = "json"
+  [inputs.exec.tags]
+    device = "{{ hs110_stats_device | mandatory }}"
+{% for key, value in hs110_stats_metric_tags.items() %}
+    {{ key|trim }} = "{{ value|trim }}"
+{% endfor %}

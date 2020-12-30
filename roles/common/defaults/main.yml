@@ -1,3 +1,4 @@
+timezone: Etc/UTC
 common_pkgs:
   apt:
     - build-essential

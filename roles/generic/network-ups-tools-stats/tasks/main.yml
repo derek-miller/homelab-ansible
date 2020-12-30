@@ -1,24 +1,33 @@
 - assert:
     that: nut_stats_state in ('present', 'absent')
 
-- name: copy ups-stats script
-  copy:
-    src: ups-stats
-    dest: "{{ nut_stats_script_install_dir }}/ups-stats"
-    owner: root
-    group: root
-    mode: 0755
-  when: nut_stats_state == 'present'
+- when: nut_stats_state == 'present'
+  block:
+    - name: create nut-stats script dir
+      file:
+        path: "{{ nut_stats_script_path|dirname }}"
+        owner: root
+        group: root
+        mode: 0755
+        state: directory
 
-- name: delete ups-stats script
-  file:
-    path: "{{ nut_stats_script_install_dir }}/ups-stats"
-    state: absent
-  when: nut_stats_state == 'absent'
+    - name: copy nut-stats script
+      copy:
+        src: nut-stats
+        dest: "{{ nut_stats_script_path }}"
+        owner: root
+        group: root
+        mode: 0755
 
 - include_role:
     name: generic/telegraf/plugin
   vars:
     telegraf_plugin_conf_src: telegraf.conf.jinja2
-    telegraf_plugin_conf: nut-stats-{{ nut_stats_target }}.conf
+    telegraf_plugin_conf: nut-stats-{{ nut_stats_target | mandatory }}.conf
     telegraf_plugin_state: "{{ nut_stats_state }}"
+
+- name: delete nut-stats script
+  file:
+    path: "{{ nut_stats_dir }}"
+    state: absent
+  when: nut_stats_state == 'absent'
