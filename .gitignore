@@ -7,4 +7,5 @@
 /.vault_pass
 *.retry
 /roles/galaxy/
+/collections/ansible_collections/
 /.venv/
