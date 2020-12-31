@@ -1,6 +1,6 @@
 --index-url https://pypi.python.org/simple
 
-ansible==2.10.3
+ansible
 black
 chardet  # implicitly required by python-debian
 click
