@@ -147,7 +147,6 @@
       ethminer_coin_cuda_grid_size: "{{ ethereum_cuda_grid_size|default(8192)|int }}"
       ethminer_coin_cuda_streams: "{{ ethereum_cuda_streams|default(2)|int }}"
       ethminer_coin_cuda_schedule: "{{ ethereum_cuda_schedule|default('auto') }}"
-      ethminer_coin_cuda_parallel_hash: "{{ ethereum_cuda_parallel_hash|default(4)|int }}"
       ethminer_coin_overclock_at_start: "{{ ethereum_overclock_at_start|default('no')|bool }}"
       tags:
         - ethereum

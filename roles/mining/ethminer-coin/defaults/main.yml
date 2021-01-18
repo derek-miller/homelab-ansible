@@ -7,7 +7,6 @@ ethminer_coin_cuda_block_size: 128
 ethminer_coin_cuda_grid_size: 8192
 ethminer_coin_cuda_streams: 2
 ethminer_coin_cuda_schedule: auto
-ethminer_coin_cuda_parallel_hash: 4
 
 ethminer_coin_overclock_at_start: no
 ethminer_coin_overclock_command: "{{ gpu_overclock_vars[ethminer_coin_gpu_type].exe.multi_gpus }} {{ ethminer_coin_cuda_devices|join(',') }} {{ gpu_overclock_vars[ethminer_coin_gpu_type].algorithms[ethminer_coin_supported_coins[ethminer_coin_name].algorithm] }}"

@@ -14,7 +14,6 @@ ExecStart={{ ethminer_exe_binary }} \
     --cuda-grid-size {{  ethminer_coin_cuda_grid_size|int }} \
     --cuda-streams {{  ethminer_coin_cuda_streams|int }} \
     --cuda-schedule {{ ethminer_coin_cuda_schedule }} \
-    --cuda-parallel-hash {{  ethminer_coin_cuda_parallel_hash|int }} \
     --api-port {{ ethminer_coin_api_port|int }} \
     -P "{{ ethminer_coin_supported_coins[ethminer_coin_name].pools[ethminer_coin_pool].url }}" \
     --cuda-devices {{ ethminer_coin_cuda_devices|join(' ') }}
