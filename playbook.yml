@@ -89,6 +89,12 @@
       tags:
         - x11vnc
 
+- hosts: openvpn-client
+  roles:
+    - role: generic/openvpn-client
+      tags:
+        - openvpn-client
+
 - hosts: network-ups-tools
   roles:
     - role: generic/network-ups-tools

@@ -1,0 +1,7 @@
+openvpn_client_state: present
+openvpn_client_name: "{{ openvpn_client_ovpn_file | mandatory | basename | splitext | first }}"
+openvpn_client_service: openvpn-client@{{ openvpn_client_name }}
+openvpn_client_conf: /etc/openvpn/client/{{ openvpn_client_name }}.conf
+
+# must set:
+# openvpn_client_ovpn_file
