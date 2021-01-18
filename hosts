@@ -22,6 +22,9 @@ miner1
 nicks-pi
 raspi1
 
+[openvpn-client]
+miner1 openvpn_client_ovpn_file=vault/miner-dmiller.ovpn
+
 [ddclient]
 miner1
 

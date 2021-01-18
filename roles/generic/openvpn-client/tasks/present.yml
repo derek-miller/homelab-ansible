@@ -1,0 +1,25 @@
+- name: install openvpn
+  apt:
+    pkg: openvpn
+    state: latest
+  notify: restart openvpn-client
+
+- name: copy {{ openvpn_client_service }} conf
+  copy:
+    src: "{{ openvpn_client_ovpn_file | mandatory }}"
+    dest: "{{ openvpn_client_conf }}"
+    owner: root
+    group: root
+    mode: 0600
+  register: openvpn_client_conf_result
+
+- when: openvpn_client_conf_result.changed
+  name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: start {{ openvpn_client_service }}
+  systemd:
+    name: "{{ openvpn_client_service }}"
+    state: "{{ 'restarted' if openvpn_client_conf_result.changed else 'started' }}"
+    enabled: yes
