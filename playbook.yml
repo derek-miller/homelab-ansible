@@ -83,6 +83,12 @@
         - docker
         - docker-compose
 
+- hosts: msi-rgb
+  roles:
+    - role: generic/msi-rgb
+      tags:
+        - msi-rgb
+
 - hosts: x11vnc
   roles:
     - role: generic/x11vnc

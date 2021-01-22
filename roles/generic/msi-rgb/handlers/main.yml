@@ -1,0 +1,4 @@
+- name: restart msi-rgb
+  systemd:
+    name: "{{ msi_rgb_service }}"
+    state: restarted

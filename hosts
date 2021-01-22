@@ -17,6 +17,9 @@ miner1
 [ethereum]
 miner1 ethereum_pool=nicehash ethereum_gpu_type=nvidia-gtx1070 ethereum_cuda_devices=0 ethereum_api_port=5005 ethereum_overclock_at_start=yes ethereum_state=present
 
+[msi-rgb]
+miner1
+
 [x11vnc]
 miner1
 nicks-pi
