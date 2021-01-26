@@ -8,6 +8,7 @@ PM=""
 CLOCK=""
 MEM=""
 FAN=""
+TARGET_TEMP=""
 
 function usage(){
    echo "Overclock Nvidia GPUs with the given settings."
@@ -20,12 +21,13 @@ function usage(){
    echo "      -c GPU clock offset"
    echo "      -m Memory clock offset"
    echo "      -f Fan speed as percent"
+   echo "      -t GPU target temperature in degree celsius"
    echo ""
    exit
 }
 
 function getOptions(){
-   while getopts "i:l:p:c:m:f:h" opt ; do
+   while getopts "i:l:p:c:m:f:t:h" opt ; do
      case $opt in
         i)
            export DEVICES=$OPTARG
@@ -47,6 +49,9 @@ function getOptions(){
            ;;
         f)
            export FAN=$OPTARG
+           ;;
+        t)
+           export TARGET_TEMP=$OPTARG
            ;;
         h)
            usage
@@ -71,9 +76,12 @@ function printValues(){
    echo "CLOCK: ${CLOCK}"
    echo "MEM: ${MEM}"
    echo "FAN: ${FAN}"
+   echo "TARGET_TEMP: ${TARGET_TEMP}"
    echo "Leftovers: $@"
    echo "NVIDIA_SETTINGS: ${NVIDIA_SETTINGS}"
    echo "NVIDIA_SMI: ${NVIDIA_SMI}"
+   echo "DISPLAY: ${DISPLAY}"
+   echo "XAUTHORITY: ${XAUTHORITY}"
 }
 
 getOptions $@
@@ -90,28 +98,31 @@ fi
 export DISPLAY=:0
 export XAUTHORITY=/var/run/lightdm/root/${DISPLAY}
 
+SETTINGS_CMD="${NVIDIA_SETTINGS}"
 if [ "$DEVICES" != "" ]; then
     IFS=","
     for device in ${DEVICES}
     do
-        ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUPowerMizerMode=1
+        SETTINGS_CMD="${SETTINGS_CMD} -a [gpu:${device}]/GPUPowerMizerMode=1"
         [ "$PM" != "" ] && ${NVIDIA_SMI} -i ${device} -pm ${PM}
         [ "$POWER" != "" ] && ${NVIDIA_SMI} -i ${device} -pl ${POWER}
-        [ "$FAN" == "auto" ] && ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUFanControlState=0
-        [ "$FAN" != "" -a "$FAN" != "auto" ] && ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUFanControlState=1
-        [ "$FAN" != "" -a "$FAN" != "auto" ] && ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUTargetFanSpeed=${FAN}
-        [ "$CLOCK" != "" ] && ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUGraphicsClockOffset[3]=${CLOCK}
-        [ "$MEM" != "" ] && ${NVIDIA_SETTINGS} -a [gpu:${device}]/GPUMemoryTransferRateOffset[3]=${MEM}
+        [ "$TARGET_TEMP" != "" ] && ${NVIDIA_SMI} -i ${device} -gtt ${TARGET_TEMP}
+        [ "$FAN" == "auto" ] && SETTINGS_CMD="${SETTINGS_CMD} -a [gpu:${device}]/GPUFanControlState=0"
+        [ "$FAN" != "" -a "$FAN" != "auto" ] && SETTINGS_CMD="${SETTINGS_CMD} -a [gpu:${device}]/GPUFanControlState=1 -a [fan:${device}]/GPUTargetFanSpeed=${FAN}"
+        [ "$CLOCK" != "" ] && SETTINGS_CMD="${SETTINGS_CMD} -a [gpu:${device}]/GPUGraphicsClockOffset[3]=${CLOCK}"
+        [ "$MEM" != "" ] && SETTINGS_CMD="${SETTINGS_CMD} -a [gpu:${device}]/GPUMemoryTransferRateOffset[3]=${MEM}"
     done
 else
-    ${NVIDIA_SETTINGS} -a GPUPowerMizerMode=1
+    SETTINGS_CMD="${SETTINGS_CMD} -a GPUPowerMizerMode=1"
     [ "$PM" != "" ] && ${NVIDIA_SMI} -pm ${PM}
     [ "$POWER" != "" ] && ${NVIDIA_SMI} -pl ${POWER}
-    [ "$FAN" == "auto" ] && ${NVIDIA_SETTINGS} -a GPUFanControlState=0
-    [ "$FAN" != "" -a "$FAN" != "auto" ] && ${NVIDIA_SETTINGS} -a GPUFanControlState=1
-    [ "$FAN" != "" -a "$FAN" != "auto" ] && ${NVIDIA_SETTINGS} -a GPUTargetFanSpeed=${FAN}
-    [ "$CLOCK" != "" ] && ${NVIDIA_SETTINGS} -a GPUGraphicsClockOffset[3]=${CLOCK}
-    [ "$MEM" != "" ] && ${NVIDIA_SETTINGS} -a GPUMemoryTransferRateOffset[3]=${MEM}
+    [ "$TARGET_TEMP" != "" ] && ${NVIDIA_SMI} -gtt ${TARGET_TEMP}
+    [ "$FAN" == "auto" ] && SETTINGS_CMD="${SETTINGS_CMD} -a GPUFanControlState=0"
+    [ "$FAN" != "" -a "$FAN" != "auto" ] && SETTINGS_CMD="${SETTINGS_CMD} -a GPUFanControlState=1 -a GPUTargetFanSpeed=${FAN}"
+    [ "$CLOCK" != "" ] && SETTINGS_CMD="${SETTINGS_CMD} -a GPUGraphicsClockOffset[3]=${CLOCK}"
+    [ "$MEM" != "" ] && SETTINGS_CMD="${SETTINGS_CMD} -a GPUMemoryTransferRateOffset[3]=${MEM}"
 fi
+
+eval "${SETTINGS_CMD}"
 
 exit 0

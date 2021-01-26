@@ -1,4 +1,5 @@
----
+lightdm_state: present
+
 # Directory where GLib schemas are located
 lightdm_glib_schemas_directory: /usr/share/glib-2.0/schemas
 
