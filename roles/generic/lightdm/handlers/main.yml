@@ -1,2 +1,5 @@
----
-# handlers file for lightdm
+- name: restart lightdm
+  service:
+    name: lightdm
+    state: restarted
+    enabled: yes

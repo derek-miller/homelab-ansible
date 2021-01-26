@@ -1,3 +1,10 @@
+- name: additional authorized ssh keys
+  authorized_key:
+    user: "{{ item.user }}"
+    key: "{{ item.key }}"
+    state: "{{ item.state|default('present') }}"
+  with_items: "{{ authorized_keys }}"
+
 - name: update time zone database
   apt:
     name: tzdata

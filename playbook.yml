@@ -140,7 +140,7 @@
   roles:
     - role: galaxy/nvidia-drivers
       nvidia_driver_ubuntu_cuda_package: cuda
-      nvidia_driver_package_version: "11.2"
+      nvidia_driver_package_version: "11.2.0-1"
       nvidia_driver_ubuntu_install_from_cuda_repo: yes
       tags:
         - cuda

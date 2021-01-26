@@ -28,14 +28,12 @@ vnc_password: "{{ vault_vnc_password }}"
 
 alert_email_address: "{{ vault_alert_email_address }}"
 
+authorized_keys: []
+
 gpu_overclock_vars:
   nvidia-gtx1070:
     exe:
       all_gpus: "{{ nvidia_overclock_exe }}"
       multi_gpus: "{{ nvidia_overclock_exe }} -i"
     algorithms:
-      daggerhashimoto: "-l 125 -p 1 -c 150 -m 650 -f auto"
-      equihash: "-l 100 -p 1 -c 0 -m 700 -f auto"
-      lyra2v2: "-l 100 -p 1 -c 0 -m 700 -f auto"
-      neoscrypt: "-l 100 -p 1 -c 0 -m 700 -f auto"
-      x16r: "-l 117 -p 1 -c 100 -m 400 -f auto"
+      daggerhashimoto: "-l 135 -p 1 -c 100 -m 300 -f auto -t 65"

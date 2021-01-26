@@ -2,6 +2,7 @@
 Description={{ ethminer_coin_service }}
 After=network.target
 OnFailure=status-mail@{{ ethminer_coin_service }}.service
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -22,6 +23,7 @@ KillMode=mixed
 KillSignal=SIGINT
 SyslogIdentifier={{ ethminer_coin_service }}
 Restart=on-failure
+RestartSec=30
 
 [Install]
 WantedBy=multi-user.target
