@@ -4,3 +4,5 @@ roles:
     name: galaxy/postfix
   - src: geerlingguy.docker
     name: galaxy/docker
+  - src: nvidia.nvidia_driver
+    name: galaxy/nvidia-drivers
