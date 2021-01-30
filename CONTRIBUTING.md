@@ -51,20 +51,3 @@ To get ssh hostname completion and known host keys for hosts in an inventory:
 
     make known-hosts
     make known-hosts hosts='miner1'
-
-Creating a virtualenv with pyenv
-================================
-
-To create a virtualenv for this project:
-
-    pyenv virtualenv $(pyenv global) ansible-mining
-
-To automatically activate the virtualenv when you navigate to this directory:
-
-    pyenv local ansible-mining
-
-To install pyenv in the first place:
-
-### OS X
-
-    brew install pyenv pyenv-virtualenv

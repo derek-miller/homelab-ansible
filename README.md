@@ -1,7 +1,7 @@
-ansible-mining
-==============
+homelab-ansible
+===============
 
-[**Ansible**](http://docs.ansible.com/) automates system configuration, software deployment, etc.
+My homelab [**Ansible**](http://docs.ansible.com/) configuration for automating system configuration, software deployment, etc.
 
 Contributing
 ------------
