@@ -29,11 +29,4 @@ vnc_password: "{{ vault_vnc_password }}"
 alert_email_address: "{{ vault_alert_email_address }}"
 
 authorized_keys: []
-
-gpu_overclock_vars:
-  nvidia-gtx1070:
-    exe:
-      all_gpus: "{{ nvidia_overclock_exe }}"
-      multi_gpus: "{{ nvidia_overclock_exe }} -i"
-    algorithms:
-      daggerhashimoto: "-l 135 -p 1 -c 100 -m 300 -f auto -t 65"
+sudoers: []

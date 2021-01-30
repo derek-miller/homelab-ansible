@@ -1,3 +1,4 @@
 dependencies:
+  - role: mining/nvidia-overclock/include
   - role: generic/systemd-status-mail
   - role: generic/lightdm

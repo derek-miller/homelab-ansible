@@ -75,10 +75,12 @@ def stats(ctx):
         eth_invalid_shares, eth_pool_switches, dcr_invalid_shares, dcr_pool_switches = raw_data[
             "result"
         ][8].split(";")
-        data = {
+        tags = {
             "algo": "daggerhashimoto",
             "version": raw_data["result"][0],
             "pool": raw_data["result"][7],
+        }
+        fields = {
             "uptime": float(raw_data["result"][1]) * 60,
             "khs": float(khs),
             "submitted_shares": float(submitted_shares),
@@ -91,23 +93,25 @@ def stats(ctx):
         click.echo(
             to_line_protocol(
                 measurement_name="ethminer.stats",
-                tags={k: data[k] for k in ["algo", "version", "pool"]},
-                fields={
-                    k: data[k]
-                    for k in [
-                        "uptime",
-                        "khs",
-                        "submitted_shares",
-                        "rejected_shares",
-                        "eth_invalid_shares",
-                        "eth_pool_switches",
-                        "dcr_invalid_shares",
-                        "dcr_pool_switches",
-                    ]
-                },
+                tags=tags,
+                fields=fields,
             ),
             file=sys.stdout,
         )
+        for i, gpu_khs in enumerate(raw_data["result"][3].split(";")):
+            click.echo(
+                to_line_protocol(
+                    measurement_name="ethminer.stats_per_gpu",
+                    tags={
+                        "gpu": i,
+                        **tags,
+                    },
+                    fields={
+                        "khs": float(gpu_khs)
+                    },
+                ),
+                file=sys.stdout,
+            )
     except Exception as e:
         click.echo(str(e), err=True)
         ctx.exit(1)
