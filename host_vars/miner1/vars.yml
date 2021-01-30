@@ -11,3 +11,6 @@ authorized_keys:
   - key: "{{ lookup('file', 'miner-id_rsa.pub') }}"
     user: miner
     state: present
+sudoers:
+  - user: miner
+    passwordless: yes

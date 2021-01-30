@@ -1,0 +1,5 @@
+{{ ansible_managed | comment }}
+
+{% for sudoer in sudoers %}
+{{ sudoer.user }} ALL=(ALL:ALL) {% if sudoer.passwordless %}NOPASSWD:{% endif %}ALL
+{% endfor %}

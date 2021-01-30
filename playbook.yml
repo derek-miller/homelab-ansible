@@ -57,7 +57,6 @@
     - role: galaxy/docker
       docker_users:
         - telegraf  # Necessary so telegraf can read from the socket
-      docker_apt_repository: "deb [arch={{ docker_apt_arch }}] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ docker_distribution_release|default(ansible_distribution_release) }} {{ docker_apt_release_channel }}"
       tags:
         - docker-daemon
     - role: generic/docker-stats
@@ -161,8 +160,6 @@
       ethminer_coin_state: "{{ ethereum_state|default('present') }}"
       ethminer_coin_name: ethereum
       ethminer_coin_pool: "{{ ethereum_pool }}"
-      ethminer_coin_gpu_type: "{{ ethereum_gpu_type }}"
-      ethminer_coin_cuda_devices: "{{ ethereum_cuda_devices|default([]) }}"
       ethminer_coin_api_port: "{{ ethereum_api_port|default('0') }}"
       ethminer_coin_cuda_block_size: "{{ ethereum_cuda_block_size|default(128)|int }}"
       ethminer_coin_cuda_grid_size: "{{ ethereum_cuda_grid_size|default(8192)|int }}"

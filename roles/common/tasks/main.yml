@@ -5,6 +5,22 @@
     state: "{{ item.state|default('present') }}"
   with_items: "{{ authorized_keys }}"
 
+- name: additional sudoers
+  template:
+    src: sudoers.d/ansible-managed.jinja2
+    dest: /etc/sudoers.d/ansible-managed
+    owner: root
+    group: root
+    mode: 0440
+    validate: 'visudo -cf %s'
+  when: sudoers|default([])|length > 0
+
+- name: delete additional sudoers file
+  file:
+    path: /etc/sudoers.d/ansible-managed
+    state: absent
+  when: sudoers|default([])|length == 0
+
 - name: update time zone database
   apt:
     name: tzdata

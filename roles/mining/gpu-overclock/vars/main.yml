@@ -1,0 +1,3 @@
+gpu_overclock_command:
+  nvidia-gtx1070:
+    daggerhashimoto: "{{ nvidia_overclock_exe }} -i {{ gpu_devices|mandatory|join(',') }} -l 125 -p 1 -c 150 -m 500 -f auto -t 65"

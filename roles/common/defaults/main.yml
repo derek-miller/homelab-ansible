@@ -3,6 +3,7 @@ common_pkgs:
   apt:
     - build-essential
     - cmake
+    - curl
     - git-core
     - htop
     - ifstat

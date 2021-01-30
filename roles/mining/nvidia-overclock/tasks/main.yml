@@ -4,7 +4,7 @@
 - name: check if coolbits are enabled
   command: grep -q Coolbits /etc/X11/xorg.conf
   changed_when: false
-  failed_when: true
+  failed_when: false
   register: xorg_coolbits
 
 - when: xorg_coolbits.rc != 0

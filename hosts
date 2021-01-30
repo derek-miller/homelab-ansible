@@ -5,9 +5,6 @@ raspi1 hs110_stats_ip_address=192.168.1.5 hs110_stats_device='Basement Bedroom L
 [nvidia-miner]
 miner1
 
-[nvidia-miner:vars]
-nvidia_overclock_exe=/usr/local/bin/nvidia-overclock
-
 [coin-stats]
 miner1 coingecko_ids=bitcoin,ethereum
 
@@ -15,7 +12,7 @@ miner1 coingecko_ids=bitcoin,ethereum
 miner1
 
 [ethereum]
-miner1 ethereum_pool=nicehash ethereum_gpu_type=nvidia-gtx1070 ethereum_cuda_devices=0,1,2,3,4,5 ethereum_api_port=5005 ethereum_overclock_at_start=yes ethereum_state=present
+miner1 gpu_type=nvidia-gtx1070 gpu_devices=0,1,2,3,4,5 ethereum_pool=nicehash ethereum_cuda_schedule=sync ethereum_api_port=5005 ethereum_overclock_at_start=yes ethereum_state=present
 
 [msi-rgb]
 miner1
@@ -32,8 +29,8 @@ miner1 openvpn_client_ovpn_file=vault/miner-dmiller.ovpn
 miner1
 
 [docker]
-raspi1 docker_apt_arch=arm64 docker_distribution_release=bionic docker_compose_state=absent
-nicks-pi docker_apt_arch=armhf docker_distribution_release=bionic docker_users='["ubuntu"]' docker_compose_state=absent
+raspi1 docker_apt_arch=arm64 docker_compose_state=absent
+nicks-pi docker_apt_arch=armhf docker_compose_state=absent
 
 [network-ups-tools]
 raspi1

@@ -10,6 +10,9 @@ Type=simple
 ExecStartPre={{ ethminer_coin_overclock_command|trim }}
 {% endif %}
 ExecStart={{ ethminer_exe_binary }} \
+    --syslog \
+    --nocolor \
+    --exit \
     --cuda \
     --cuda-block-size {{  ethminer_coin_cuda_block_size|int }} \
     --cuda-grid-size {{  ethminer_coin_cuda_grid_size|int }} \
@@ -17,12 +20,13 @@ ExecStart={{ ethminer_exe_binary }} \
     --cuda-schedule {{ ethminer_coin_cuda_schedule }} \
     --api-port {{ ethminer_coin_api_port|int }} \
     -P "{{ ethminer_coin_supported_coins[ethminer_coin_name].pools[ethminer_coin_pool].url }}" \
-    --cuda-devices {{ ethminer_coin_cuda_devices|join(' ') }}
+    --cuda-devices {{ gpu_devices|mandatory|join(' ') }}
+Environment="CUDA_DEVICE_ORDER=PCI_BUS_ID"
 WorkingDirectory=/tmp
 KillMode=mixed
 KillSignal=SIGINT
 SyslogIdentifier={{ ethminer_coin_service }}
-Restart=on-failure
+Restart=always
 RestartSec=30
 
 [Install]

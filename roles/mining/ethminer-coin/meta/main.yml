@@ -1,5 +1,6 @@
 dependencies:
   - role: generic/systemd-status-mail
+  - role: mining/gpu-overclock
   - role: mining/ethminer-exe
   - role: mining/ethminer-stats
     ethminer_api_host: localhost
