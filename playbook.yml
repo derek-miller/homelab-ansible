@@ -113,11 +113,11 @@
   tags:
     - network-ups-tools
 
-- hosts: hs110-stats
+- hosts: tplink-plug-stats
   roles:
-    - role: generic/hs110-stats
+    - role: generic/tplink-plug-stats
   tags:
-    - hs110-stats
+    - tplink-plug-stats
 
 - hosts: coin-stats
   roles:

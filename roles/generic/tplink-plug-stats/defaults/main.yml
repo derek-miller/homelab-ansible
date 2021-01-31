@@ -1,0 +1,11 @@
+tplink_plug_stats_state: present
+tplink_plug_stats_metric_name: tplink
+tplink_plug_stats_metric_tags: {}
+tplink_plug_stats_dir: /opt/tplink-plug-stats
+tplink_plug_stats_script_path: "{{ tplink_plug_stats_dir }}/bin/tplink-plug-stats"
+tplink_plug_stats_timeout_s: 5
+tplink_plug_stats_port: 9999
+
+# must set:
+# tplink_plug_stats_ip_address
+# tplink_plug_stats_device
