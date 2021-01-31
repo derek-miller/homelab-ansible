@@ -37,8 +37,8 @@ check_dependencies() {
 }
 
 show_usage() {
-  echo Usage: $0 IP PORT COMMAND
-  echo where COMMAND is one of on/off/check/status/emeter/toggle
+  echo "Usage: $0 IP PORT COMMAND"
+  echo "where COMMAND is one of on/off/check/status/emeter/toggle"
   exit 1
 }
 
@@ -52,48 +52,49 @@ check_arguments() {
        show_usage
     fi
    }
-   check_arg "ip" $ip
-   check_arg "port" $port
-   check_arg "command" $cmd
+   check_arg "ip" "$ip"
+   check_arg "port" "$port"
+   check_arg "command" "$cmd"
 }
 
 send_to_plug() {
    ip="$1"
    port="$2"
    payload="$3"
-   echo -n "$payload" | base64 --decode | nc -v $ip $port || echo couldn''t connect to $ip:$port, nc failed with exit code $?
+   echo -n "$payload" | base64 --decode | nc -v "$ip" "$port" || echo "couldn't connect to $ip:$port, nc failed with exit code $?"
 }
 
 decode(){
    code=171
    offset=4
-   input_num=`od -j $offset -An -t u1 -v | tr "\n" " "`
+   input_num=$(od -j $offset -An -t u1 -v | tr "\n" " ")
    IFS=' ' read -r -a array <<< "$input_num"
    args_for_printf=""
    for element in "${array[@]}"
    do
      output=$(( $element ^ $code ))
-     args_for_printf="$args_for_printf\x$(printf %x $output)"
+     args_for_printf="$args_for_printf\x$(printf %x "$output")"
      code=$element
    done
+     # shellcheck disable=SC2059
      printf "$args_for_printf"
 }
 
 query_plug(){
    payload=$1
-   send_to_plug $ip $port "$payload" | decode
+   send_to_plug "$ip" "$port" "$payload" | decode
 }
 
 # plug commands
 
 cmd_print_plug_relay_state(){
-   output=`send_to_plug $ip $port "$payload_query" | decode | egrep -o 'relay_state":[0,1]' | egrep -o '[0,1]'`
+   output=$(send_to_plug "$ip" "$port" "$payload_query" | decode | grep -E -o 'relay_state":[0,1]' | grep -E -o '[0,1]')
    if [[ $output -eq 0 ]]; then
      echo OFF
    elif [[ $output -eq 1 ]]; then
      echo ON
    else
-     echo Couldn''t understand plug response $output
+     echo "Couldn't understand plug response $output"
    fi
 }
 
@@ -106,21 +107,21 @@ cmd_print_plug_consumption(){
 }
 
 cmd_switch_on(){
-     send_to_plug $ip $port $payload_on > /dev/null
+     send_to_plug "$ip" "$port" "$payload_on" > /dev/null
 }
 
 cmd_switch_off(){
-     send_to_plug $ip $port $payload_off > /dev/null
+     send_to_plug "$ip" "$port" "$payload_off" > /dev/null
 }
 
 cmd_switch_toggle() {
-   output=`cmd_print_plug_relay_state`
+   output=$(cmd_print_plug_relay_state)
    if [[ $output == OFF ]]; then
      cmd_switch_on
    elif [[ $output == ON ]]; then
      cmd_switch_off
    else
-     echo $output
+     echo "$output"
    fi
 }
 

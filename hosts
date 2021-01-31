@@ -1,6 +1,6 @@
-[hs110-stats]
-raspi1 hs110_stats_ip_address=192.168.1.5 hs110_stats_device='Basement Bedroom Lamps'
-#miner1 hs110_stats_ip_address=192.168.1.5 hs110_stats_device='miner1' hs110_stats_state=absent
+[tplink-plug-stats]
+raspi1 tplink_plug_stats_ip_address=192.168.1.5 tplink_plug_stats_device='Basement Bedroom Lamps'
+
 
 [nvidia-miner]
 miner1

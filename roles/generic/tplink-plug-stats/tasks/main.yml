@@ -1,0 +1,33 @@
+- assert:
+    that: tplink_plug_stats_state in ('present', 'absent')
+
+- when: tplink_plug_stats_state == 'present'
+  block:
+    - name: create tplink-plug-stats script dir
+      file:
+        path: "{{ tplink_plug_stats_script_path|dirname }}"
+        owner: root
+        group: root
+        mode: 0755
+        state: directory
+
+    - name: copy tplink-plug-stats script
+      copy:
+        src: tplink-plug-stats
+        dest: "{{ tplink_plug_stats_script_path }}"
+        owner: root
+        group: root
+        mode: 0755
+
+- include_role:
+    name: generic/telegraf/plugin
+  vars:
+    telegraf_plugin_conf_src: telegraf.conf.jinja2
+    telegraf_plugin_conf: tplink-plug-stats.conf
+    telegraf_plugin_state: "{{ tplink_plug_stats_state }}"
+
+- name: delete tplink-plug-stats script
+  file:
+    path: "{{ tplink_plug_stats_dir }}"
+    state: absent
+  when: tplink_plug_stats_state == 'absent'
