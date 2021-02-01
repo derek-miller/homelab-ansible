@@ -115,8 +115,9 @@ def cli(ctx, api_key, api_secret, org_id):
 
 
 @cli.command()
+@click.option("--rig-id", help="nicehash miner rig id.", required=True)
 @click.pass_context
-def rig(ctx):
+def rig(ctx, rig_id):
     try:
         response = nicehash_request(
             ctx.obj["api_key"],
@@ -137,9 +138,10 @@ def rig(ctx):
         )
         bitcoin_mining_address = data["btcAddress"]
         for mining_rig in data.get("miningRigs", []):
+            if rig_id != mining_rig.get("rigId"):
+                continue
             rig_status = mining_rig.get("minerStatus", "OFFLINE")
             rig_type = mining_rig.get("type", "UNMANAGED")
-            rig_id = mining_rig.get("rigId", "__DEFAULT__")
             rig_name = mining_rig.get("name", "")
             click.echo(
                 to_line_protocol(
@@ -229,6 +231,23 @@ def wallet(ctx):
         exchange_rates = get_nicehash_exchange_rates(
             ctx.obj["api_key"], ctx.obj["api_secret"], ctx.obj["org_id"]
         )
+        total = data.get("total") or {}
+        if total:
+            click.echo(
+                to_line_protocol(
+                    measurement_name="nicehash.wallet_total",
+                    tags={
+                        "currency": total["currency"]
+                    },
+                    fields={
+                        "exchange_rate": exchange_rates[(total["currency"], "USD")],
+                        "balance": float(total["totalBalance"]),
+                        "available": float(total["available"]),
+                        "pending": float(total["pending"]),
+                    },
+                ),
+                file=sys.stdout,
+            )
 
         for account in data.get("currencies") or []:
             click.echo(
@@ -266,7 +285,7 @@ def market(ctx):
         price_stat = stats["csjs"][-1]
         click.echo(
             to_line_protocol(
-                measurement_name="coin_market_stats",
+                measurement_name="nicehash.market",
                 tags={"symbol": symbol},
                 fields={
                     "price": float(price_stat["v"]),

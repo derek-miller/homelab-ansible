@@ -1,0 +1,50 @@
+- name: create grafana dashboards
+  uri:
+    url: "{{ grafana_url }}/api/dashboards/db"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ grafana_api_key }}"
+    body: |
+      {
+        "dashboard": {{ lookup('file', grafana_dashboards_dir + '/' + item.filename)|from_json|combine({'id': None, 'version': None, 'uid': None, 'title': item.name, 'description': item.description|default('')})|to_json }}
+      }
+    body_format: json
+    status_code: 200
+  with_items: "{{ grafana_dashboards }}"
+  no_log: yes
+  when:
+    - item.state|default('present') == 'present'
+    - item.name not in dashboard_name_slug_map|default({})
+
+- name: update grafana dashboards
+  uri:
+    url: "{{ grafana_url }}/api/dashboards/db"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ grafana_api_key }}"
+    body: |
+      {
+        "dashboard": {{ lookup('file', grafana_dashboards_dir + '/' + item.filename)|from_json|combine({'id': dashboard_name_id_map[item.name]|int, 'title': item.name, 'description': item.description|default('')})|to_json }},
+        "overwrite": true
+      }
+    body_format: json
+    status_code: 200
+  with_items: "{{ grafana_dashboards }}"
+  no_log: yes
+  when:
+    - item.state|default('present') == 'present'
+    - item.name in dashboard_name_id_map|default({})
+    - item.overwrite|default(false)|bool
+
+- name: delete grafana dashboards
+  uri:
+    url: "{{ grafana_url }}/api/dashboards/db/{{ dashboard_name_slug_map[item.name] }}"
+    method: DELETE
+    headers:
+      Authorization: "Bearer {{ grafana_api_key }}"
+    status_code: 200
+  with_items: "{{ grafana_dashboards }}"
+  no_log: yes
+  when:
+    - item.state|default('present') == 'absent'
+    - item.name in dashboard_name_slug_map|default({})

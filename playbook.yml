@@ -135,6 +135,12 @@
   tags:
     - nicehash-stats
 
+- hosts: grafana-dashboards
+  roles:
+    - role: generic/grafana-dashboards
+  tags:
+    - grafana-dashboards
+
 - hosts: nvidia-miner
   roles:
     - role: galaxy/nvidia-drivers

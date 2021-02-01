@@ -7,6 +7,31 @@ ddclient_subdomain: "{{ vault_ddclient_subdomain }}"
 
 docker_compose_definition: "{{ vault_docker_compose_definition }}"
 
+grafana_url: "{{ vault_grafana_url }}"
+grafana_api_key: "{{ vault_grafana_api_key }}"
+grafana_dashboards:
+  - name: Docker Metrics
+    filename: vault/docker-metrics.json
+    overwrite: yes
+  - name: Host Metrics
+    filename: vault/host-metrics.json
+    overwrite: yes
+  - name: Mining Metrics
+    filename: vault/mining-metrics.json
+    overwrite: yes
+  - name: Plex Metrics
+    filename: vault/plex-metrics.json
+    overwrite: yes
+  - name: TP-Link Plug Metrics
+    filename: vault/tp-link-plug-metrics.json
+    overwrite: yes
+  - name: UniFi AP Metrics
+    filename: vault/unifi-ap-metrics.json
+    overwrite: yes
+  - name: UPS Metrics
+    filename: vault/ups-metrics.json
+    overwrite: yes
+
 nut_ups_devices:
   - |
     [wan-ups]

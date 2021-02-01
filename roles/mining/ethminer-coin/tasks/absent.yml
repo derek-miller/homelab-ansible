@@ -2,14 +2,14 @@
   systemd:
     name: "{{ ethminer_coin_service }}"
     state: stopped
-  failed_when: False
+  failed_when: false
 
 - name: disable {{ ethminer_coin_service }} service
   systemd:
     name: "{{ ethminer_coin_service }}"
     enabled: no
     daemon_reload: yes
-  failed_when: False
+  failed_when: false
 
 - name: delete {{ ethminer_coin_service }} service
   file:

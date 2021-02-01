@@ -51,3 +51,4 @@
   systemd:
     name: "{{ msi_rgb_service }}"
     state: started
+  changed_when: false # The rgb service is momentary and will always be "changed"
