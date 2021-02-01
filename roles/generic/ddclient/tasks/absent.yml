@@ -2,14 +2,14 @@
   systemd:
     name: ddclient
     state: stopped
-  failed_when: False
+  failed_when: false
 
 - name: disable ddclient service
   systemd:
     name: ddclient
     enabled: no
     daemon_reload: yes
-  failed_when: False
+  failed_when: false
 
 - name: uninstall the ddclient packages
   apt:

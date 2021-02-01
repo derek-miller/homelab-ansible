@@ -2,14 +2,14 @@
   systemd:
     name: "{{ openvpn_client_service }}"
     state: stopped
-  failed_when: False
+  failed_when: false
 
 - name: disable {{ openvpn_client_service }} service
   systemd:
     name: "{{ openvpn_client_service }}"
     enabled: no
     daemon_reload: yes
-  failed_when: False
+  failed_when: false
 
 - name: delete {{ openvpn_client_service }} conf
   file:

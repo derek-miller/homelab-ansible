@@ -2,14 +2,14 @@
   systemd:
     name: "{{ msi_rgb_service }}"
     state: stopped
-  failed_when: False
+  failed_when: false
 
 - name: disable {{ msi_rgb_service }} service
   systemd:
     name: "{{ msi_rgb_service }}"
     enabled: no
     daemon_reload: yes
-  failed_when: False
+  failed_when: false
 
 - name: delete {{ msi_rgb_service }} service
   file:

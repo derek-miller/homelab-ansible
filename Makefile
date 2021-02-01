@@ -12,7 +12,7 @@ inventory_file = hosts
 playbook_file = $(playbook).yml
 vault_password_file = .vault_pass
 
-vault_files = $(shell find files host_vars group_vars -type f -path '*vault*')
+vault_files = $(shell find files host_vars group_vars roles -type f -path '*vault*')
 
 ansible_default_flags = --inventory=$(inventory_file) \
 						$(if $(vault_password_file),--vault-password-file=$(vault_password_file))
@@ -82,6 +82,14 @@ known-hosts: override playbook = include-setup
 known-hosts: hosts = acc
 known-hosts:
 	$(ansible_playbook_cmd) --extra-vars=setup_hosts=all
+
+.PHONY: export-dashboards
+export-dashboards:
+	$(ansible_playbook_cmd) --extra-vars=grafana_dashboards_export=yes --tags=grafana-dashboards --skip-tags=common,base,base-setup --limit=grafana-dashboards
+
+.PHONY: update-dashboards
+update-dashboards:
+	$(ansible_playbook_cmd) --tags=grafana-dashboards --skip-tags=common,base,base-setup --limit=grafana-dashboards
 
 .PHONY: run
 run:

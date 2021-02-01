@@ -1,0 +1,25 @@
+- name: get grafana dashboard ids
+  uri:
+    url: "{{ grafana_url|mandatory }}/api/search"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ grafana_api_key|mandatory }}"
+    status_code: 200
+  no_log: yes
+  register: dashboard_results
+
+- name: map dashboard names to slugs
+  set_fact:
+    dashboard_name_slug_map: "{{ dashboard_name_slug_map|default({}) | combine( {item.title: item.uri | regex_replace('^db/(.*)$', '\\1')} ) }}"
+  with_items: "{{ dashboard_results.json }}"
+
+- name: map dashboard names to ids
+  set_fact:
+    dashboard_name_id_map: "{{ dashboard_name_id_map|default({}) | combine( {item.title: item.id} ) }}"
+  with_items: "{{ dashboard_results.json }}"
+
+- import_tasks: export.yml
+  when: grafana_dashboards_export|bool
+
+- import_tasks: crud.yml
+  when: not grafana_dashboards_export|bool

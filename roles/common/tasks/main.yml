@@ -38,11 +38,11 @@
     update_cache: yes
   register: result
   until: result is succeeded
-  changed_when: False
+  changed_when: false
 
 - name: install common packages
   apt:
     name: "{{ common_pkgs.apt }}"
-    state: latest
+    state: present
 
 - meta: flush_handlers

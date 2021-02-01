@@ -28,5 +28,8 @@ vnc_password: "{{ vault_vnc_password }}"
 
 alert_email_address: "{{ vault_alert_email_address }}"
 
+nicehash_rig_id: "{{ ansible_hostname }}"
+nicehash_mining_address: "{{ vault_nicehash_mining_address }}"
+
 authorized_keys: []
 sudoers: []

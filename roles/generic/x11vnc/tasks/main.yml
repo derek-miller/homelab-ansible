@@ -11,7 +11,7 @@
 
 - name: configure x11vnc password
   shell: x11vnc -storepasswd "{{ vnc_password }}" "{{ x11vnc_rfb_pass_file }}"
-  changed_when: False
+  changed_when: false
 
 - name: configure x11vnc service
   template:

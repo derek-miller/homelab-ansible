@@ -1,18 +1,17 @@
 [tplink-plug-stats]
 raspi1 tplink_plug_stats_ip_address=192.168.1.5 tplink_plug_stats_device='Basement Bedroom Lamps'
 
+[grafana-dashboards]
+raspi1
 
 [nvidia-miner]
 miner1
 
-[coin-stats]
-miner1 coingecko_ids=bitcoin,ethereum
-
 [nicehash-stats]
-miner1
+miner1 nicehash_stats_include_wallet_stats=yes
 
 [ethereum]
-miner1 gpu_type=nvidia-gtx1070 gpu_devices=0,1,2,3,4,5 ethereum_pool=nicehash ethereum_cuda_schedule=sync ethereum_api_port=5005 ethereum_overclock_at_start=yes ethereum_state=present
+miner1 gpu_type=nvidia-gtx1070 gpu_devices=0,1,2,3,4,5 ethereum_pool=nicehash ethereum_api_port=5005 ethereum_overclock_at_start=yes ethereum_state=present
 
 [msi-rgb]
 miner1

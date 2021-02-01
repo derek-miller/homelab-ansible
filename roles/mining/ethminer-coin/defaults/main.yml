@@ -15,7 +15,7 @@ ethminer_coin_supported_coins:
     algorithm: daggerhashimoto
     pools:
       nicehash:
-        url: stratum2+tcp://34v4vG57U9YiK5Nur8te8PzMDUKmtr6zLo.{{ ansible_hostname }}:x@daggerhashimoto.usa.nicehash.com:3353
+        url: stratum2+tcp://{{ nicehash_mining_address|mandatory }}.{{ nicehash_rig_id|mandatory }}:x@daggerhashimoto.usa.nicehash.com:3353
 
 
 # must set:
