@@ -3,6 +3,15 @@
 
 - when: tplink_plug_stats_state == 'present'
   block:
+    - name: install python dependencies
+      pip:
+        virtualenv: "{{ tplink_plug_stats_virtualenv_path }}"
+        name:
+          - click
+          - python-kasa
+        extra_args: --pre --upgrade-strategy only-if-needed
+        state: latest
+
     - name: create tplink-plug-stats script dir
       file:
         path: "{{ tplink_plug_stats_script_path|dirname }}"
@@ -12,8 +21,8 @@
         state: directory
 
     - name: copy tplink-plug-stats script
-      copy:
-        src: tplink-plug-stats
+      template:
+        src: tplink-plug-stats.jinja2
         dest: "{{ tplink_plug_stats_script_path }}"
         owner: root
         group: root
@@ -24,7 +33,7 @@
   vars:
     telegraf_plugin_conf_src: telegraf.conf.jinja2
     telegraf_plugin_conf: tplink-plug-stats.conf
-    telegraf_plugin_state: "{{ tplink_plug_stats_state }}"
+    telegraf_plugin_state: "{{ 'present' if tplink_plug_stats_state == 'present' and tplink_plug_stats_ip_addresses|length > 0 else 'absent' }}"
 
 - name: delete tplink-plug-stats script
   file:

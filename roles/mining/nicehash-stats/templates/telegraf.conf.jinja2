@@ -10,3 +10,6 @@
   ]
   timeout = "{{ nicehash_stats_timeout_s|int }}s"
   data_format = "influx"
+  [inputs.exec.tags]
+    address = "{{ nicehash_mining_address|mandatory }}"
+    org_id = "{{ nicehash_organization_id }}"

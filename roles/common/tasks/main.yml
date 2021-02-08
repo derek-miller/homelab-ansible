@@ -1,3 +1,7 @@
+- name: configure hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+
 - name: additional authorized ssh keys
   authorized_key:
     user: "{{ item.user }}"

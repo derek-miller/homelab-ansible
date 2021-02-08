@@ -1,6 +1,5 @@
-from __future__ import print_function
-
 import json
+import re
 import socket
 import sys
 import time
@@ -14,7 +13,9 @@ def get_api_data(ethminer_api_host, ethminer_api_port, method, chunk_size=4096):
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
         s.connect((ethminer_api_host, ethminer_api_port))
         s.sendall(
-            "{}\n".format(json.dumps({"id": 0, "jsonrpc": "2.0", "method": method})).encode("utf-8")
+            "{}\n".format(
+                json.dumps({"id": 0, "jsonrpc": "2.0", "method": method})
+            ).encode("utf-8")
         )
         while True:
             chunk = s.recv(chunk_size)
@@ -28,7 +29,14 @@ def get_api_data(ethminer_api_host, ethminer_api_port, method, chunk_size=4096):
 
 def to_line_protocol(measurement_name, tags, fields, ts=None):
     tags = ",".join(
-        "{}={}".format(tag, tag_value) for tag, tag_value in tags.items() if tag_value is not None
+        "{}={}".format(
+            tag,
+            re.sub(r"\s+", r"\ ", tag_value.strip())
+            if isinstance(tag_value, str)
+            else tag_value,
+        )
+        for tag, tag_value in tags.items()
+        if tag_value is not None
     )
     fields = ",".join(
         "{}={}".format(field, field_value)
@@ -72,9 +80,12 @@ def stats(ctx):
             ctx.obj["ethminer_api_host"], ctx.obj["ethminer_api_port"], "miner_getstat1"
         )
         khs, submitted_shares, rejected_shares = raw_data["result"][2].split(";")
-        eth_invalid_shares, eth_pool_switches, dcr_invalid_shares, dcr_pool_switches = raw_data[
-            "result"
-        ][8].split(";")
+        (
+            eth_invalid_shares,
+            eth_pool_switches,
+            dcr_invalid_shares,
+            dcr_pool_switches,
+        ) = raw_data["result"][8].split(";")
         tags = {
             "algo": "daggerhashimoto",
             "version": raw_data["result"][0],
@@ -106,9 +117,7 @@ def stats(ctx):
                         "gpu": i,
                         **tags,
                     },
-                    fields={
-                        "khs": float(gpu_khs)
-                    },
+                    fields={"khs": float(gpu_khs)},
                 ),
                 file=sys.stdout,
             )

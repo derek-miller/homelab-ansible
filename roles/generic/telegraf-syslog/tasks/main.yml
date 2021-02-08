@@ -1,0 +1,30 @@
+- assert:
+    that: telegraf_syslog_state in ('present',)
+- assert:
+    that: ansible_distribution == 'Ubuntu'
+- assert:
+    that: ansible_service_mgr == 'systemd'
+
+- name: check rsyslog status
+  systemd:
+    name: rsyslog
+    state: started
+  check_mode: yes
+  failed_when: systemd_rsyslog.state != 'started'
+  register: systemd_rsyslog
+
+- include_role:
+    name: generic/telegraf/plugin
+  vars:
+    telegraf_plugin_conf_src: telegraf.conf.jinja2
+    telegraf_plugin_conf: syslog.conf
+    telegraf_plugin_state: "{{ telegraf_syslog_state }}"
+
+- name: create rsyslog remote configuration
+  template:
+    src: rsyslog.conf.jinja2
+    dest: /etc/rsyslog.d/50-telegraf.conf
+    owner: root
+    group: root
+    mode: 0644
+  notify: restart rsyslog

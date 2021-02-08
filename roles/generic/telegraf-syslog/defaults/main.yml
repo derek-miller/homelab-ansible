@@ -1,0 +1,2 @@
+telegraf_syslog_state: present
+telegraf_syslog_port: 6514
