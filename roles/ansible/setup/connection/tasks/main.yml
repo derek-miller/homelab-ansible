@@ -36,10 +36,6 @@
   set_fact:
     ansible_become: yes
 
-- name: configure hostname
-  hostname:
-    name: "{{ inventory_hostname }}"
-
 - name: set ansible hostname
   set_fact:
     ansible_hostname: "{{ inventory_hostname }}"

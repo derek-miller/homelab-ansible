@@ -1,44 +1,11 @@
 [[inputs.exec]]
-  name_override = "{{ tplink_plug_stats_metric_name }}_status"
+{% if tplink_plug_stats_metric_name|bool %}
+  name_override = "{{ tplink_plug_stats_metric_name }}"
+{% endif %}
   commands = [
-    "{{ tplink_plug_stats_script_path }} {{ tplink_plug_stats_ip_address }} {{ tplink_plug_stats_port|int }} status 2>/dev/null",
-  ]
-  json_query = "system.get_sysinfo"
-  timeout = "{{ tplink_plug_stats_timeout_s|int }}s"
-  data_format = "json"
-  tag_keys = ["alias"]
-  json_string_fields = [
-    "sw_ver",
-    "hw_ver",
-    "type",
-    "model",
-    "mac",
-    "deviceId",
-    "hwId",
-    "fwId",
-    "oemId",
-    "dev_name",
-    "icon_hash",
-    "active_mode",
-    "feature"
-  ]
-  [inputs.exec.tags]
-    device = "{{ tplink_plug_stats_device | mandatory }}"
-{% for key, value in tplink_plug_stats_metric_tags.items() %}
-    {{ key|trim }} = "{{ value|trim }}"
+{% for ip_address in tplink_plug_stats_ip_addresses %}
+    "{{ tplink_plug_stats_script_path }} --host {{ ip_address }}",
 {% endfor %}
-
-
-[[inputs.exec]]
-  name_override = "{{ tplink_plug_stats_metric_name }}_emeter"
-  commands = [
-    "{{ tplink_plug_stats_script_path }} {{ tplink_plug_stats_ip_address }} {{ tplink_plug_stats_port|int }} emeter 2>/dev/null",
   ]
-  json_query = "emeter.get_realtime"
   timeout = "{{ tplink_plug_stats_timeout_s|int }}s"
-  data_format = "json"
-  [inputs.exec.tags]
-    device = "{{ tplink_plug_stats_device | mandatory }}"
-{% for key, value in tplink_plug_stats_metric_tags.items() %}
-    {{ key|trim }} = "{{ value|trim }}"
-{% endfor %}
+  data_format = "influx"

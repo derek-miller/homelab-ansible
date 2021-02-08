@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+import re
 import sys
 import time
 import traceback
@@ -9,7 +9,14 @@ import requests
 
 def to_line_protocol(measurement_name, tags, fields, ts=None):
     tags = ",".join(
-        "{}={}".format(tag, tag_value) for tag, tag_value in tags.items() if tag_value is not None
+        "{}={}".format(
+            tag,
+            re.sub(r"\s+", r"\ ", tag_value.strip())
+            if isinstance(tag_value, str)
+            else tag_value,
+        )
+        for tag, tag_value in tags.items()
+        if tag_value is not None
     )
     fields = ",".join(
         "{}={}".format(field, field_value)
@@ -46,8 +53,12 @@ def cli(ctx, coingecko_ids):
                     },
                     fields={
                         "block_time_minutes": stats["block_time_in_minutes"],
-                        "sentiment_votes_up_percentage": stats["sentiment_votes_up_percentage"],
-                        "sentiment_votes_down_percentage": stats["sentiment_votes_down_percentage"],
+                        "sentiment_votes_up_percentage": stats[
+                            "sentiment_votes_up_percentage"
+                        ],
+                        "sentiment_votes_down_percentage": stats[
+                            "sentiment_votes_down_percentage"
+                        ],
                         "market_cap_rank": stats["market_cap_rank"],
                         "coingecko_rank": stats["coingecko_rank"],
                         "coingecko_score": stats["coingecko_score"],
@@ -91,7 +102,9 @@ def cli(ctx, coingecko_ids):
                         "price_change_percentage_1y": stats["market_data"][
                             "price_change_percentage_1y"
                         ],
-                        "market_cap_change_24h": stats["market_data"]["market_cap_change_24h"],
+                        "market_cap_change_24h": stats["market_data"][
+                            "market_cap_change_24h"
+                        ],
                         "market_cap_change_percentage_24h": stats["market_data"][
                             "market_cap_change_percentage_24h"
                         ],
@@ -130,17 +143,23 @@ def cli(ctx, coingecko_ids):
                         ]["usd"],
                         "total_supply": stats["market_data"]["total_supply"],
                         "max_supply": stats["market_data"]["max_supply"],
-                        "circulating_supply": stats["market_data"]["circulating_supply"],
+                        "circulating_supply": stats["market_data"][
+                            "circulating_supply"
+                        ],
                         # Community Data
                         "facebook_likes": stats["community_data"]["facebook_likes"],
-                        "twitter_followers": stats["community_data"]["twitter_followers"],
+                        "twitter_followers": stats["community_data"][
+                            "twitter_followers"
+                        ],
                         "reddit_average_posts_48h": stats["community_data"][
                             "reddit_average_posts_48h"
                         ],
                         "reddit_average_comments_48h": stats["community_data"][
                             "reddit_average_comments_48h"
                         ],
-                        "reddit_subscribers": stats["community_data"]["reddit_subscribers"],
+                        "reddit_subscribers": stats["community_data"][
+                            "reddit_subscribers"
+                        ],
                         "reddit_accounts_active_48h": stats["community_data"][
                             "reddit_accounts_active_48h"
                         ],
@@ -148,8 +167,12 @@ def cli(ctx, coingecko_ids):
                         "developer_forks": stats["developer_data"]["forks"],
                         "developer_stars": stats["developer_data"]["stars"],
                         "developer_subscribers": stats["developer_data"]["subscribers"],
-                        "developer_total_issues": stats["developer_data"]["total_issues"],
-                        "developer_closed_issues": stats["developer_data"]["closed_issues"],
+                        "developer_total_issues": stats["developer_data"][
+                            "total_issues"
+                        ],
+                        "developer_closed_issues": stats["developer_data"][
+                            "closed_issues"
+                        ],
                         "developer_open_issues": stats["developer_data"]["total_issues"]
                         - stats["developer_data"]["closed_issues"]
                         if stats["developer_data"]["total_issues"] is not None

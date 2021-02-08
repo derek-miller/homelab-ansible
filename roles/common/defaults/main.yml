@@ -11,6 +11,7 @@ common_pkgs:
     - iotop
     - iptraf
     - jq
+    - net-tools
     - ntp
     - pigz
     - tmux

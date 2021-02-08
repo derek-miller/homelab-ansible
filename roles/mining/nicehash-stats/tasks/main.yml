@@ -9,6 +9,7 @@
         name:
           - requests
           - click
+          - tabulate
         extra_args: --upgrade-strategy only-if-needed
         state: latest
 
@@ -31,7 +32,7 @@
 - include_role:
     name: generic/telegraf/plugin
   vars:
-    telegraf_plugin_conf_src: nicehash-stats.conf.jinja2
+    telegraf_plugin_conf_src: telegraf.conf.jinja2
     telegraf_plugin_conf: nicehash-stats.conf
     telegraf_plugin_state: "{{ nicehash_stats_state }}"
 
