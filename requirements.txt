@@ -8,7 +8,7 @@
 
 ansible-base==2.10.5
     # via ansible
-ansible==2.10.5
+ansible==2.10.7
     # via -r requirements.in
 appdirs==1.4.4
     # via black
@@ -39,10 +39,15 @@ cryptography==3.3.1
     #   paramiko
     #   pyopenssl
     #   requests
+    #   secretstorage
 dnspython==2.1.0
     # via -r requirements.in
 idna==2.10
     # via requests
+jeepney==0.6.0
+    # via
+    #   keyring
+    #   secretstorage
 jinja2==2.11.2
     # via
     #   -r requirements.in
@@ -79,6 +84,8 @@ regex==2020.11.13
     # via black
 requests[security]==2.25.1
     # via -r requirements.in
+secretstorage==3.3.1
+    # via keyring
 semantic-version==2.8.5
     # via -r requirements.in
 six==1.15.0
