@@ -1,0 +1,8 @@
+[Unit]
+Description=Delay {{ ethminer_coin_service }} on boot.
+
+[Timer]
+OnBootSec={{ ethminer_coin_service_timer_on_boot }}
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,5 @@
+mining_rig_id: "{{ ansible_hostname }}"
+
+supported_ethash_mining_pools:
+  nicehash:
+    url: stratum2+tcp://{{ nicehash_mining_address }}.{{ mining_rig_id }}:x@daggerhashimoto.usa-east.nicehash.com:3353

@@ -1,0 +1,12 @@
+- assert:
+    that: ethminer_coin_state in ('present', 'absent')
+- assert:
+    that: ansible_distribution == 'Ubuntu'
+- assert:
+    that: ansible_service_mgr == 'systemd'
+
+- include_tasks: absent.yml
+  when: ethminer_coin_state == 'absent'
+
+- include_tasks: present.yml
+  when: ethminer_coin_state == 'present'

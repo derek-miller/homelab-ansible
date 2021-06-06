@@ -1,0 +1,55 @@
+- name: install openvpn
+  apt:
+    pkg: openvpn
+    state: latest
+  notify: restart openvpn-client
+
+- name: create {{ openvpn_client_name }} credentials
+  when: openvpn_client_credentials_filename
+  copy:
+    src: "{{ openvpn_client_credentials_file }}"
+    dest: "{{ openvpn_client_credentials_path }}"
+    owner: root
+    group: root
+    mode: 0600
+  notify: restart openvpn-client
+
+- name: create {{ openvpn_client_name }} route-up script
+  when: openvpn_client_route_up_script_filename
+  copy:
+    src: "{{ openvpn_client_route_up_script_file }}"
+    dest: "{{ openvpn_client_route_up_script_path }}"
+    owner: root
+    group: root
+    mode: 0700
+  notify: restart openvpn-client
+
+- name: create {{ openvpn_client_name }} route-down script
+  when: openvpn_client_route_down_script_filename
+  copy:
+    src: "{{ openvpn_client_route_down_script_file }}"
+    dest: "{{ openvpn_client_route_down_script_path }}"
+    owner: root
+    group: root
+    mode: 0700
+  notify: restart openvpn-client
+
+- name: create {{ openvpn_client_name }} conf
+  template:
+    src: "{{ openvpn_client_ovpn_template }}"
+    dest: "{{ openvpn_client_conf }}"
+    owner: root
+    group: root
+    mode: 0600
+  register: openvpn_client_conf_result
+
+- when: openvpn_client_conf_result.changed
+  name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: start {{ openvpn_client_service }}
+  systemd:
+    name: "{{ openvpn_client_service }}"
+    state: "{{ 'restarted' if openvpn_client_conf_result.changed else 'started' }}"
+    enabled: yes

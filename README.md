@@ -1,7 +1,7 @@
 homelab-ansible
 ===============
 
-My homelab [**Ansible**](http://docs.ansible.com/) configuration for automating system configuration, software deployment, etc.
+[**Ansible**](http://docs.ansible.com/) automates system configuration, software deployment, etc.
 
 Contributing
 ------------

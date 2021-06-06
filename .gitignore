@@ -1,11 +1,11 @@
 *.pyc
+*.retry
 *.swp
 /.ansible/
 /.idea/
 /.python-version
 /.ssh/
 /.vault_pass
-*.retry
-/roles/galaxy/
-/collections/ansible_collections/
 /.venv/
+/playbooks/collections/ansible_collections/
+/playbooks/roles/galaxy/

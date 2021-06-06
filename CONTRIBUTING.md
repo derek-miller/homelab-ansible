@@ -1,8 +1,9 @@
 Installing requirements into active virtualenv
 ==============================================
 
-    make init       # installs/upgrades setuptools, pip, pip-tools, etc.
-    make install    # installs/upgrades project requirements
+To install requirements after cloning/pulling the repo:
+
+    make after-git-pull
 
 Compiling requirements
 ======================
@@ -19,15 +20,18 @@ Running locally
 ===============
 
     make bootstrap
-    make run
+    make run env=<env>
+    make run env=<env> host=<host>
 
 Setting up Ansible Vault
 ------------------------
 
 From the project directory:
-2. `touch .vault_pass`
-3. `chmod 0600 .vault_pass`
-4. Copy the vault password into your clipboard and paste it into the `.vault_pass` file with e.g. `pbpaste > .vault_pass`
+1. `mkdir -p .vault_pass && cd .vault_pass`
+2. `touch <env>`
+3. `chmod 0600 *`
+4. Copy the vault passwords into those files with e.g.
+   `pbpaste > <env>`
 
 Passing Ansible flags
 ---------------------
@@ -42,7 +46,7 @@ Bootstrapping
 
 You'll need to bootstrap any new hosts:
 
-    make bootstrap
+    make bootstrap env=<env> hosts=<new-host> user=<your-local-user>
 
 Adding local SSH known hosts entries for inventory hosts
 --------------------------------------------------------
@@ -50,4 +54,19 @@ Adding local SSH known hosts entries for inventory hosts
 To get ssh hostname completion and known host keys for hosts in an inventory:
 
     make known-hosts
-    make known-hosts hosts='miner1'
+    make known-hosts env=<env> hosts=<host>
+
+
+Exporting Grafana Dashboards
+----------------------------
+
+To export grafana dashboards:
+
+    make export-dashboards env=<env>
+
+(Re)installing Ansible Galaxy roles
+-----------------------------------
+
+To (re-)install Ansible Galaxy roles:
+
+    make galaxy-install

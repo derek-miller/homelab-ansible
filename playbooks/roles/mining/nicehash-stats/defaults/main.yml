@@ -1,0 +1,12 @@
+nicehash_stats_state: present
+nicehash_stats_dir: /opt/nicehash-stats
+nicehash_stats_virtualenv_path: "{{ nicehash_stats_dir }}/virtualenv"
+nicehash_stats_script_path: "{{ nicehash_stats_dir }}/bin/nicehash-stats"
+nicehash_stats_timeout_s: 8
+nicehash_stats_include_market_stats: no
+nicehash_stats_include_wallet_stats: no
+
+# must set:
+# nicehash_api_key
+# nicehash_api_secret
+# nicehash_organization_id

@@ -1,0 +1,20 @@
+timezone: Etc/UTC
+common_pkgs:
+  apt:
+    - build-essential
+    - cmake
+    - curl
+    - git-core
+    - htop
+    - ifstat
+    - iftop
+    - iotop
+    - iptraf
+    - jq
+    - mosh
+    - net-tools
+    - ntp
+    - pigz
+    - tmux
+    - unzip
+    - vim

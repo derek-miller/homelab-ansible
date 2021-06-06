@@ -1,8 +1,0 @@
-[[inputs.exec]]
-  name_override = "{{ nvidia_smi_stats_metric_name }}"
-  commands = [
-    "{{ nvidia_smi_stats_script_install_dir }}/nvidia-smi-stats",
-  ]
-  timeout = "{{ nvidia_smi_stats_timeout_s|int }}s"
-  data_format = "json"
-  tag_keys = ["index"]
