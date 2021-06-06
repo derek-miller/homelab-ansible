@@ -1,0 +1,32 @@
+- name: stop {{ openvpn_client_service }} service
+  systemd:
+    name: "{{ openvpn_client_service }}"
+    state: stopped
+  failed_when: false
+
+- name: disable {{ openvpn_client_service }} service
+  systemd:
+    name: "{{ openvpn_client_service }}"
+    enabled: no
+    daemon_reload: yes
+  failed_when: false
+
+- name: delete {{ openvpn_client_service }} conf
+  file:
+    path: "{{ openvpn_client_conf }}"
+    state: absent
+
+- name: delete {{ openvpn_client_name }} credentials
+  file:
+    path: "{{ openvpn_client_credentials_path }}"
+    state: absent
+
+- name: delete {{ openvpn_client_name }} route-up script
+  file:
+    path: "{{ openvpn_client_route_up_script_path }}"
+    state: absent
+
+- name: delete {{ openvpn_client_name }} route-down script
+  file:
+    path: "{{ openvpn_client_route_down_script_path }}"
+    state: absent

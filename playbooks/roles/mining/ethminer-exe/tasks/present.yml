@@ -1,0 +1,50 @@
+- name: create ethminer install directory
+  file:
+    dest: "{{ ethminer_exe_install_dir }}"
+    state: 'directory'
+    mode: 0755
+
+- name: install ethminer dependencies
+  apt:
+    name: "{{ ethminer_exe_apt_dependencies }}"
+    state: present
+
+- name: download ethminer src
+  git:
+    repo: "{{ ethminer_exe_git_clone_url }}"
+    dest: "{{ ethminer_exe_install_dir }}"
+    version: "{{ ethminer_exe_git_commit_hash }}"
+    force: yes
+  changed_when: ethminer_git_clone.before != ethminer_git_clone.after
+  register: ethminer_git_clone
+
+- name: delete ethminer if necessary for rebuild
+  file:
+    path: "{{ ethminer_exe_build_dir }}"
+    state: absent
+  when: ethminer_git_clone.changed
+
+- name: create ethminer build directory
+  file:
+    dest: "{{ ethminer_exe_build_dir }}"
+    state: 'directory'
+    mode: 0755
+
+- name: configure ethminer
+  command: cmake .. -DETHASHCUDA=ON -DETHASHCL=OFF
+  args:
+    chdir: "{{ ethminer_exe_build_dir }}"
+    creates: "{{ ethminer_exe_build_dir }}/CMakeCache.txt"
+
+- name: fix cuda compute targets when using v0.17.1
+  when: ethminer_git_clone.changed and ethminer_exe_git_commit_hash == 'v0.17.1'
+  command: sed -i 's/arch=compute_30,code=sm_30;-gencode arch=compute_35,code=sm_35;-gencode arch=compute_50,code=sm_50;-gencode arch=compute_52,code=sm_52;-gencode arch=compute_53,code=sm_53;-gencode arch=compute_60,code=sm_60;-gencode arch=compute_61,code=sm_61;-gencode arch=compute_62,code=sm_62;-gencode arch=compute_70,code=sm_70;-gencode arch=compute_75,code=sm_75/arch=compute_35,code=sm_35;-gencode arch=compute_50,code=sm_50;-gencode arch=compute_52,code=sm_52;-gencode arch=compute_53,code=sm_53;-gencode arch=compute_60,code=sm_60;-gencode arch=compute_61,code=sm_61;-gencode arch=compute_62,code=sm_62;-gencode arch=compute_70,code=sm_70;-gencode arch=compute_75,code=sm_75;-gencode arch=compute_80,code=sm_80;-gencode arch=compute_86,code=sm_86/g' libethash-cuda/CMakeFiles/ethash-cuda.dir/ethash-cuda_generated_ethash_cuda_miner_kernel.cu.o.Release.cmake
+  args:
+    chdir: "{{ ethminer_exe_build_dir }}"
+  changed_when: false
+
+- name: build ethminer cmake
+  command: cmake --build .
+  args:
+    chdir: "{{ ethminer_exe_build_dir }}"
+    creates: "{{ ethminer_exe_binary }}"

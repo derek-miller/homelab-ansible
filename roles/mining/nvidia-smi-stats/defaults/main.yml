@@ -1,4 +1,0 @@
-nvidia_smi_stats_state: present
-nvidia_smi_stats_metric_name: nvidia_smi
-nvidia_smi_stats_script_install_dir: /usr/local/bin
-nvidia_smi_stats_timeout_s: 5

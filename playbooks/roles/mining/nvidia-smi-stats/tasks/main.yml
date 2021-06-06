@@ -1,0 +1,41 @@
+- assert:
+    that: nvidia_smi_stats_state in ('present', 'absent')
+
+- when: nvidia_smi_stats_state == 'present'
+  block:
+    - name: install python dependencies
+      pip:
+        virtualenv: "{{ nvidia_smi_stats_virtualenv_path }}"
+        name:
+          - click
+        extra_args: --upgrade-strategy only-if-needed
+        state: latest
+
+    - name: create nvidia-smi-stats script dir
+      file:
+        path: "{{ nvidia_smi_stats_script_path|dirname }}"
+        owner: root
+        group: root
+        mode: 0755
+        state: directory
+
+    - name: copy nvidia-smi-stats script
+      template:
+        src: nvidia-smi-stats.jinja2
+        dest: "{{ nvidia_smi_stats_script_path }}"
+        owner: root
+        group: root
+        mode: 0755
+
+- include_role:
+    name: generic/telegraf/plugin
+  vars:
+    telegraf_plugin_conf_src: telegraf.conf.jinja2
+    telegraf_plugin_conf: nvidia-smi-stats.conf
+    telegraf_plugin_state: "{{ nvidia_smi_stats_state }}"
+
+- name: delete nvidia-smi-stats dir
+  file:
+    path: "{{ nvidia_smi_stats_dir }}"
+    state: absent
+  when: nvidia_smi_stats_state == 'absent'
