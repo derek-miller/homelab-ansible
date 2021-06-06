@@ -1,0 +1,36 @@
+[Unit]
+Description={{ ethminer_coin_service }}
+After=network.target
+OnFailure=status-mail@{{ ethminer_coin_service }}.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+{% if ethminer_coin_overclock_at_start|default()|bool and ethminer_coin_overclock_command|trim %}
+ExecStartPre={{ ethminer_coin_overclock_command|trim }}
+{% endif %}
+ExecStart={{ ethminer_exe_binary }} \
+    --syslog \
+    --nocolor \
+    --exit \
+    --cuda \
+    --cuda-block-size {{  ethminer_coin_cuda_block_size|int }} \
+    --cuda-grid-size {{  ethminer_coin_cuda_grid_size|int }} \
+    --cuda-streams {{  ethminer_coin_cuda_streams|int }} \
+    --cuda-schedule {{ ethminer_coin_cuda_schedule }} \
+{% if gpu_devices|default([])|length > 0 %}
+    --cuda-devices {{ gpu_devices|join(' ') }} \
+{% endif %}
+    --api-port {{ ethminer_coin_api_port|int }} \
+    --report-hashrate \
+    -P "{{ ethminer_coin_supported_coins[ethminer_coin_name].pools[ethminer_coin_pool].url }}"
+Environment="CUDA_DEVICE_ORDER=PCI_BUS_ID"
+WorkingDirectory=/tmp
+KillMode=mixed
+KillSignal=SIGINT
+SyslogIdentifier={{ ethminer_coin_service }}
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

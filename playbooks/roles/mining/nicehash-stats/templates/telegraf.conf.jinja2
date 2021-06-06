@@ -1,0 +1,15 @@
+[[inputs.exec]]
+  commands = [
+{% if nicehash_stats_include_market_stats|bool %}
+    "{{ nicehash_stats_script_path }} --api-key='{{ nicehash_api_key|mandatory }}' --api-secret='{{ nicehash_api_secret|mandatory }}' --org-id='{{ nicehash_organization_id|mandatory }}' market",
+{% endif %}
+{% if nicehash_stats_include_wallet_stats|bool %}
+    "{{ nicehash_stats_script_path }} --api-key='{{ nicehash_api_key|mandatory }}' --api-secret='{{ nicehash_api_secret|mandatory }}' --org-id='{{ nicehash_organization_id|mandatory }}' wallet",
+{% endif %}
+    "{{ nicehash_stats_script_path }} --api-key='{{ nicehash_api_key|mandatory }}' --api-secret='{{ nicehash_api_secret|mandatory }}' --org-id='{{ nicehash_organization_id|mandatory }}' rig --rig-id '{{ mining_rig_id|mandatory }}'"
+  ]
+  timeout = "{{ nicehash_stats_timeout_s|int }}s"
+  data_format = "influx"
+  [inputs.exec.tags]
+    address = "{{ nicehash_mining_address|mandatory }}"
+    org_id = "{{ nicehash_organization_id|mandatory }}"

@@ -1,0 +1,42 @@
+- assert:
+    that: chia_stats_state in ('present', 'absent')
+
+- when: chia_stats_state == 'present'
+  block:
+    - name: install python dependencies
+      pip:
+        virtualenv: "{{ chia_stats_virtualenv_path }}"
+        name:
+          - click
+          - humanfriendly
+        extra_args: --upgrade-strategy only-if-needed
+        state: latest
+
+    - name: create chia-stats script dir
+      file:
+        path: "{{ chia_stats_script_path|dirname }}"
+        owner: root
+        group: root
+        mode: 0755
+        state: directory
+
+    - name: copy chia-stats script
+      template:
+        src: chia-stats.jinja2
+        dest: "{{ chia_stats_script_path }}"
+        owner: root
+        group: root
+        mode: 0755
+
+- include_role:
+    name: generic/telegraf/plugin
+  vars:
+    telegraf_plugin_conf_src: telegraf.conf.jinja2
+    telegraf_plugin_conf: chia-stats.conf
+    telegraf_plugin_state: "{{ chia_stats_state }}"
+
+- name: delete chia-stats dir
+  file:
+    path: "{{ chia_stats_dir }}"
+    state: absent
+  when: chia_stats_state == 'absent'

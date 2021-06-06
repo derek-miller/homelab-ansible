@@ -1,0 +1,8 @@
+openvpn_client_state: present
+openvpn_client_name: "{{ (openvpn_client_ovpn_template | mandatory | basename).split('.')[0] }}"
+openvpn_client_credentials_filename:
+openvpn_client_route_up_script_filename:
+openvpn_client_route_down_script_filename:
+
+# must set:
+# openvpn_client_ovpn_template_filename

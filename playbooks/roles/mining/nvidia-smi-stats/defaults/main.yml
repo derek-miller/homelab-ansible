@@ -1,0 +1,5 @@
+nvidia_smi_stats_state: present
+nvidia_smi_stats_dir: /opt/nvidia-smi-stats
+nvidia_smi_stats_virtualenv_path: "{{ nvidia_smi_stats_dir }}/virtualenv"
+nvidia_smi_stats_script_path: "{{ nvidia_smi_stats_dir }}/bin/nvidia-smi-stats"
+nvidia_smi_stats_timeout_s: 5

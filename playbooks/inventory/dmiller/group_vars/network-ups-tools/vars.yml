@@ -1,0 +1,2 @@
+nut_user_master_password: "{{ vault_nut_user_master_password }}"
+nut_user_slave_password: "{{ vault_nut_user_slave_password }}"
