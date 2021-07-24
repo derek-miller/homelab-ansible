@@ -1,4 +1,4 @@
-- name: get grafana dashboard ids
+- name: get grafana dashboard uids
   uri:
     url: "{{ grafana_url|mandatory }}/api/search"
     method: GET
@@ -8,14 +8,9 @@
   no_log: yes
   register: dashboard_results
 
-- name: map dashboard names to slugs
+- name: map dashboard names to uids
   set_fact:
-    dashboard_name_slug_map: "{{ dashboard_name_slug_map|default({}) | combine( {item.title: item.uri | regex_replace('^db/(.*)$', '\\1')} ) }}"
-  with_items: "{{ dashboard_results.json }}"
-
-- name: map dashboard names to ids
-  set_fact:
-    dashboard_name_id_map: "{{ dashboard_name_id_map|default({}) | combine( {item.title: item.id} ) }}"
+    dashboard_name_uid_map: "{{ dashboard_name_uid_map|default({}) | combine( {item.title: item.uid} ) }}"
   with_items: "{{ dashboard_results.json }}"
 
 - import_tasks: export.yml
