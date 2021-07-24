@@ -18,14 +18,14 @@ miner1 gpu_type=nvidia-gtx1070 ethereum_pool=nicehash  ethereum_api_port=5005 et
 miner1
 
 [chia-miner]
-miner1 chia_cifs_share_uid=1000 chia_cifs_share_gid=1000
+#miner1 chia_cifs_share_uid=1000 chia_cifs_share_gid=1000 chia_miner_state=absent
 
 [x11vnc]
 miner1
 raspi1
 
 [openvpn-client]
-miner1 openvpn_client_ovpn_template_filename=openvpnas.ovpn.jinja2 openvpn_client_route_up_script_filename=openvpn-up.sh openvpn_client_state=present
+#miner1 openvpn_client_ovpn_template_filename=openvpnas.ovpn.jinja2 openvpn_client_route_up_script_filename=openvpn-up.sh openvpn_client_state=absent
 
 [docker]
 miner1 docker_compose_state=absent

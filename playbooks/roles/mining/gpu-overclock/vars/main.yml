@@ -1,5 +1,5 @@
 gpu_overclock_command:
   nvidia-gtx1070:
-    ethash: "{{ nvidia_overclock_exe }}{{ ' -i ' + (gpu_devices|join(',')) if gpu_devices|default([])|length > 0 else '' }} -l 130 -p 1 -c 150 -m 600 -f 70 -t 85"
+    ethash: "{{ nvidia_overclock_exe }}{{ ' -i ' + (gpu_devices|join(',')) if gpu_devices|default([])|length > 0 else '' }} -l 130 -p 1 -c 150 -m 600 -f auto -t 85"
   nvidia-rtx3090:
     ethash: "{{ nvidia_overclock_exe }}{{ ' -i ' + (gpu_devices|join(',')) if gpu_devices|default([])|length > 0 else '' }} -l 322 -p 1 -c -350 -m 1100 -f 100 -t 85"

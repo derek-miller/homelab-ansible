@@ -1,6 +1,6 @@
 - name: fetch grafana dashboards
   uri:
-    url: "{{ grafana_url }}/api/dashboards/db/{{ dashboard_name_slug_map[item.name] }}"
+    url: "{{ grafana_url }}/api/dashboards/uid/{{ dashboard_name_uid_map[item.name] }}"
     method: GET
     headers:
       Authorization: "Bearer {{ grafana_api_key }}"
@@ -9,7 +9,7 @@
   no_log: yes
   when:
     - item.state|default('present') == 'present'
-    - item.name in dashboard_name_slug_map|default({})
+    - item.name in dashboard_name_uid_map|default({})
   register: fetched_dashboards
 
 - name: create dashboards dir

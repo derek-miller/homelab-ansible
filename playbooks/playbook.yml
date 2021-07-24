@@ -176,7 +176,7 @@
 - hosts: chia-miner
   roles:
     - role: generic/systemd-cifs-mount
-      cifs_mount_state: "{{ chia_cifs_mount_state|default('present') }}"
+      cifs_mount_state: "{{ chia_miner_state|default('present') }}"
       cifs_share_username: "{{ chia_cifs_share_username }}"
       cifs_share_password: "{{ chia_cifs_share_password }}"
       cifs_credentials_path: /etc/.chia-share-creds
@@ -189,6 +189,7 @@
         - systemd-cifs-mount
         - chia-share
     - role: mining/chia-stats
+      chia_stats_state: "{{ chia_miner_state|default('present') }}"
       tags:
         - chia-stats
   tags:
