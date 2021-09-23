@@ -6,10 +6,10 @@
 #
 --index-url https://pypi.python.org/simple
 
-ansible-core==2.11.1
-    # via ansible
-ansible==4.0.0
+ansible==4.2.0
     # via -r requirements.in
+ansible-core==2.11.5
+    # via ansible
 appdirs==1.4.4
     # via black
 bcrypt==3.2.0
@@ -39,12 +39,17 @@ cryptography==3.4.7
     #   paramiko
     #   pyopenssl
     #   requests
+    #   secretstorage
 dnspython==2.1.0
     # via -r requirements.in
 idna==2.10
     # via requests
 importlib-metadata==4.5.0
     # via keyring
+jeepney==0.7.1
+    # via
+    #   keyring
+    #   secretstorage
 jinja2==3.0.1
     # via
     #   -r requirements.in
@@ -83,6 +88,8 @@ requests[security]==2.25.1
     # via -r requirements.in
 resolvelib==0.5.4
     # via ansible-core
+secretstorage==3.3.1
+    # via keyring
 semantic-version==2.8.5
     # via -r requirements.in
 six==1.16.0
