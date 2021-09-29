@@ -1,9 +1,6 @@
 ansible_host: "{{ vault_ansible_host }}"
 ansible_port: "{{ vault_ansible_port }}"
 
-tplink_plug_stats_ip_addresses:
-  - 192.168.1.5
-
 authorized_keys:
   - key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNxxAEcT71BAXlVhmi76gjI26BkXwjAgcLaPLIMI+i8 dmiller
     user: ubuntu
@@ -45,3 +42,7 @@ nut_ups_devices:
 nut_ups_monitors:
   - "MONITOR wan-ups@localhost 1 {{ nut_user_master_name }} {{ nut_user_master_password | mandatory }} master"
 nut_stats_target: wan-ups
+
+project_files:
+  - src: "{{ inventory_files_dir }}/{{ vault_dir_name }}/docker/{{inventory_hostname}}/"
+    dest: /var/docker/

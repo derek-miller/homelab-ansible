@@ -1,0 +1,12 @@
+- name: Copy project files
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner | default(owner_default) }}"
+    group: "{{ item.group | default(group_default) }}"
+    mode: "{{ item.mode | default(file_mode_default) }}"
+    directory_mode: "{{ item.directory_mode | default(directory_mode_default) }}"
+  when:
+   - project_files | length > 0
+   - (item.state | default('present')) == "present"
+  loop: "{{ project_files }}"

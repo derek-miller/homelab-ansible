@@ -4,8 +4,8 @@ ansible_port: "{{ vault_ansible_port }}"
 lightdm_autologin_user: miner
 
 tplink_plug_stats_ip_addresses:
-  - 192.168.1.176
-  - 192.168.1.177
+  - 192.168.2.5
+  - 192.168.2.6
 
 authorized_keys:
   - key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNxxAEcT71BAXlVhmi76gjI26BkXwjAgcLaPLIMI+i8 dmiller
