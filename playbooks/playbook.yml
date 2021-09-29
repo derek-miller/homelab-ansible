@@ -46,6 +46,12 @@
     - base
     - common
 
+- hosts: project-files
+  roles:
+    - role: generic/project-files
+  tags:
+    - project-files
+
 - hosts: ddclient
   roles:
     - role: generic/ddclient

@@ -1,0 +1,13 @@
+owner_default: root
+group_default: root
+file_mode_default: "0644"
+directory_mode_default: "0755"
+
+project_files: []
+  # src
+  # dest
+  # mode
+  # directory_mode
+  # owner
+  # group
+  # state

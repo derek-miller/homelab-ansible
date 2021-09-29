@@ -1,9 +1,8 @@
 [tplink-plug-stats]
 miner1
-raspi1
 
-[grafana-dashboards]
-raspi1
+#[grafana-dashboards]
+#raspi1
 
 [nvidia-miner]
 miner1
@@ -12,7 +11,7 @@ miner1
 miner1 nicehash_stats_include_wallet_stats=yes
 
 [ethereum]
-miner1 gpu_type=nvidia-gtx1070 ethereum_pool=nicehash  ethereum_api_port=5005 ethereum_overclock_at_start=yes ethereum_state=present ethereum_cuda_schedule=sync
+miner1 gpu_type=nvidia-gtx1070 ethereum_pool=nicehash ethereum_api_port=5005 ethereum_overclock_at_start=yes ethereum_state=present ethereum_cuda_schedule=sync
 
 [msi-rgb]
 miner1
@@ -28,8 +27,12 @@ raspi1
 #miner1 openvpn_client_ovpn_template_filename=openvpnas.ovpn.jinja2 openvpn_client_route_up_script_filename=openvpn-up.sh openvpn_client_state=absent
 
 [docker]
-miner1 docker_compose_state=absent
-raspi1 docker_apt_arch=arm64 docker_compose_state=absent
+miner1
+raspi1 docker_apt_arch=arm64
+
+[project-files]
+miner1
+raspi1
 
 [network-ups-tools]
 raspi1

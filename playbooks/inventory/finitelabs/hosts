@@ -11,7 +11,7 @@ finitelabs-miner1
 finitelabs-miner1 nicehash_stats_include_wallet_stats=yes
 
 [ethereum]
-finitelabs-miner1 gpu_type=nvidia-rtx3090 ethereum_pool=sparkpool ethereum_api_port=5005 ethereum_overclock_at_start=yes ethereum_state=present
+finitelabs-miner1 gpu_type=nvidia-rtx3090 ethereum_pool=nicehash ethereum_api_port=5005 ethereum_overclock_at_start=yes ethereum_state=present ethereum_cuda_schedule=sync
 
 [x11vnc]
 finitelabs-miner1

@@ -9,10 +9,8 @@ chia_stats_chia_exe: /usr/lib/chia-blockchain/resources/app.asar.unpacked/daemon
 chia_stats_chia_root_path: /home/miner/.chia/mainnet
 
 tplink_plug_stats_ip_addresses:
-  - 192.168.1.195
-  - 192.168.1.196
-#  - 192.168.0.124
-#  - 192.168.0.135
+  - 192.168.2.7
+  - 192.168.2.8
 
 authorized_keys:
   - key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNxxAEcT71BAXlVhmi76gjI26BkXwjAgcLaPLIMI+i8 dmiller
@@ -28,3 +26,7 @@ authorized_keys:
 sudoers:
   - user: miner
     passwordless: yes
+
+project_files:
+  - src: "{{ inventory_files_dir }}/{{ vault_dir_name }}/docker/{{inventory_hostname}}/"
+    dest: /var/docker/
