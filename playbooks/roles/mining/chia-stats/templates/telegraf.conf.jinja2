@@ -1,6 +1,0 @@
-[[inputs.exec]]
-  commands = [
-    "bash -c 'export CHIA_ROOT=\"{{ chia_stats_chia_root_path }}\"; {{ chia_stats_script_path }} --chia-exe \"{{ chia_stats_chia_exe }}\"'"
-  ]
-  timeout = "{{ chia_stats_timeout_s|int }}s"
-  data_format = "influx"

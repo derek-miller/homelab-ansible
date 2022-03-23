@@ -1,3 +1,0 @@
-chia_cifs_share_host: "{{ vault_chia_cifs_share_host }}"
-chia_cifs_share_username: "{{ vault_chia_cifs_share_username }}"
-chia_cifs_share_password: "{{ vault_chia_cifs_share_password }}"

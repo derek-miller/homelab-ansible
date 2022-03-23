@@ -14,6 +14,8 @@ authorized_keys:
 
 docker_compose_definition: "{{ vault_docker_compose_definition }}"
 
+lightdm_autologin_user: ubuntu
+
 grafana_url: "{{ vault_grafana_url }}"
 grafana_api_key: "{{ vault_grafana_api_key }}"
 grafana_dashboards:
