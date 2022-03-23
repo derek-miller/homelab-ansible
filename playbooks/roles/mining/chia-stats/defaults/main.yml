@@ -1,9 +1,0 @@
-chia_stats_state: present
-chia_stats_dir: /opt/chia-stats
-chia_stats_virtualenv_path: "{{ chia_stats_dir }}/virtualenv"
-chia_stats_script_path: "{{ chia_stats_dir }}/bin/chia-stats"
-chia_stats_timeout_s: 5
-
-# must set:
-# chia_stats_chia_exe
-# chia_stats_chia_root_path

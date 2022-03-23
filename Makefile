@@ -31,12 +31,14 @@ ansible_default_flags = --inventory-file=$(inventory_file) \
 
 ansible_flags ?= $(or $(ANSIBLE_FLAGS),$(ANSIBLE_OPTS))
 override ansible_flags += $(if $(hosts),--limit='$(hosts)')
+comma:= ,
+override ansible_flags += $(if $(tags),--skip-tags=base$(comma)common --tags='$(tags)')
 
 ansible_playbook_cmd_fn = ansible-playbook $(1) $(ansible_default_flags) $(ansible_flags)
 ansible_playbook_cmd = $(call ansible_playbook_cmd_fn,$(playbook_file))
 ansible_setup = ansible -m setup $(ansible_default_flags) $(if $(filter dev,$(env)),--user=vagrant --private-key=.vagrant/machines/ansible-dev/virtualbox/private_key) $(ansible_flags)
 
-ansible_bootstrap_flags = -c paramiko
+ansible_bootstrap_flags = -c paramiko --user=$(user)
 
 python_version_full := $(wordlist 2,4,$(subst ., ,$(shell python --version 2>&1)))
 python_version_major := $(word 1,${python_version_full})
