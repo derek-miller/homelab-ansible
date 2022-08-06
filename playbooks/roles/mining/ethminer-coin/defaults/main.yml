@@ -9,6 +9,7 @@ ethminer_coin_cuda_schedule: auto
 
 ethminer_coin_overclock_at_start: no
 ethminer_coin_overclock_command: "{{ gpu_overclock_command[gpu_type][ethminer_coin_supported_coins[ethminer_coin_name].algorithm] }}"
+ethminer_coin_overclock_restore_command: "{{ gpu_overclock_command[gpu_type].restore|default('') }}"
 
 # https://wiki.archlinux.org/index.php/Systemd/Timers
 ethminer_coin_service_timer_on_boot: 15s

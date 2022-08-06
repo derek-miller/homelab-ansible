@@ -24,6 +24,9 @@ ExecStart={{ ethminer_exe_binary }} \
     --api-port {{ ethminer_coin_api_port|int }} \
     --report-hashrate \
     -P "{{ ethminer_coin_supported_coins[ethminer_coin_name].pools[ethminer_coin_pool].url }}"
+{% if ethminer_coin_overclock_at_start|default()|bool and ethminer_coin_overclock_restore_command|trim %}
+ExecStopPost={{ ethminer_coin_overclock_restore_command|trim }}
+{% endif %}
 Environment="CUDA_DEVICE_ORDER=PCI_BUS_ID"
 WorkingDirectory=/tmp
 KillMode=mixed

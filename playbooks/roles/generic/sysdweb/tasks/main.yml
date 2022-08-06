@@ -1,0 +1,86 @@
+- assert:
+    that: sysdweb_state in ('present', 'absent')
+
+- when: sysdweb_state == 'present'
+  block:
+    - name: install apt dependencies
+      apt:
+       name:
+        - build-essential
+        - libdbus-1-dev
+        - libglib2.0-dev
+        - libpython3-dev
+        - libsystemd-dev
+       state: latest
+
+    - name: install python dependencies
+      pip:
+        virtualenv: "{{ sysdweb_virtualenv_path }}"
+        name:
+          - six
+          - sysdweb
+        extra_args: --pre --upgrade-strategy only-if-needed
+        state: latest
+      environment:
+        SETUPTOOLS_USE_DISTUTILS: stdlib
+
+    - name: get systemd service info
+      ansible.builtin.service_facts:
+      register: service_facts
+
+    - name: create {{ sysdweb_service }} conf
+      template:
+        src: sysdweb.conf.jinja2
+        dest: "{{ sysdweb_dir }}/{{ sysdweb_service }}.conf"
+        owner: root
+        group: root
+        mode: 0644
+      notify: restart syswebd
+
+    - name: create {{ sysdweb_service }} service
+      template:
+        src: sysdweb.service.jinja2
+        dest: /etc/systemd/system/{{ sysdweb_service }}.service
+        owner: root
+        group: root
+        mode: 0644
+      notify: restart syswebd
+
+    - name: enable {{ sysdweb_service }} service
+      systemd:
+        name: "{{ sysdweb_service }}.service"
+        enabled: yes
+        daemon_reload: yes
+
+
+    - name: start {{ sysdweb_service }} service
+      systemd:
+        name: "{{ sysdweb_service }}.service"
+        state: started
+
+- when: sysdweb_state == 'absent'
+  block:
+    - name: stop {{ sysdweb_service }} service
+      systemd:
+        name: "{{ sysdweb_service }}.service"
+        state: stopped
+      failed_when: false
+
+    - name: disable {{ sysdweb_service }} service
+      systemd:
+        name: "{{ sysdweb_service }}.service"
+        enabled: no
+        daemon_reload: yes
+      failed_when: false
+
+    - name: delete {{ sysdweb_service }} service
+      file:
+        path: /etc/systemd/system/{{ sysdweb_service }}.service
+        state: absent
+
+    - name: delete sysdweb
+      file:
+        path: "{{ sysdweb_dir }}"
+        state: absent
+
+- meta: flush_handlers

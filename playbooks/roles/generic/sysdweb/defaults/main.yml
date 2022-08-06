@@ -1,0 +1,7 @@
+sysdweb_state: present
+sysdweb_dir: /opt/sysdweb
+sysdweb_virtualenv_path: "{{ sysdweb_dir }}/virtualenv"
+sysdweb_script_path: "{{ sysdweb_virtualenv_path }}/bin/sysdweb"
+sysdweb_host: 0.0.0.0
+sysdweb_port: 9080
+sysdweb_service: sysdweb

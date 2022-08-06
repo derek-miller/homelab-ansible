@@ -11,6 +11,8 @@
           - requests
         extra_args: --upgrade-strategy only-if-needed
         state: latest
+      environment:
+        SETUPTOOLS_USE_DISTUTILS: stdlib
 
     - name: create coin-stats script dir
       file:

@@ -1,0 +1,4 @@
+dependencies:
+  - role: generic/virtualenv
+    virtualenv_state: "{{ sysdweb_state }}"
+    virtualenv_path: "{{ sysdweb_virtualenv_path }}"

@@ -1,0 +1,4 @@
+- name: restart syswebd
+  systemd:
+    name: "{{ sysdweb_service }}"
+    state: restarted

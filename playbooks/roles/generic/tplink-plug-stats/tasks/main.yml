@@ -11,6 +11,8 @@
           - python-kasa
         extra_args: --pre --upgrade-strategy only-if-needed
         state: latest
+      environment:
+        SETUPTOOLS_USE_DISTUTILS: stdlib
 
     - name: create tplink-plug-stats script dir
       file:

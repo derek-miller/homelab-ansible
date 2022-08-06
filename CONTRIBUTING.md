@@ -38,8 +38,9 @@ Passing Ansible flags
 
 To provision and pass ansible flags:
 
-    make run ansible_flags='--skip-tags=common,base --tags=ethereum'
-    make run hosts=miner1  # shorthand for passing the --limit flag
+    make run ansible_flags='--skip-tags=common,base --tags=x11vnc'
+    make run tags=x11vnc  # shorthand for the above command
+    make run hosts=raspi1  # shorthand for passing the --limit flag
 
 Bootstrapping
 -------------

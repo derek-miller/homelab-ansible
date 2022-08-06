@@ -5,6 +5,12 @@
 - assert:
     that: ansible_service_mgr == 'systemd'
 
+- name: install rsyslog
+  apt:
+    pkg: rsyslog
+    state: latest
+  notify: restart rsyslog
+
 - name: check rsyslog status
   systemd:
     name: rsyslog
