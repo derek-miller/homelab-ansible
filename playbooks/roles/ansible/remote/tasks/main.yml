@@ -28,6 +28,8 @@
     requirements: "{{ ansible_python_dir }}/requirements.txt"
     virtualenv_site_packages: yes
     state: present
+  environment:
+    SETUPTOOLS_USE_DISTUTILS: stdlib
 
 - name: set ansible python interpreter
   set_fact:

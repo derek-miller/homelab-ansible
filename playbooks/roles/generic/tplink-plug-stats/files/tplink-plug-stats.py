@@ -18,7 +18,7 @@ def to_line_protocol(measurement_name, tags, fields, ts=None):
         if tag_value is not None
     )
     fields = ",".join(
-        "{}={}".format(field, field_value)
+        "{}={:f}".format(field, field_value) if isinstance(field_value, float) else "{}={}".format(field, field_value)
         for field, field_value in fields.items()
         if field_value is not None
     )

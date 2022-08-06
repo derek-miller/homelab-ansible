@@ -10,6 +10,8 @@
           - click
         extra_args: --upgrade-strategy only-if-needed
         state: latest
+      environment:
+        SETUPTOOLS_USE_DISTUTILS: stdlib
 
     - name: create nvidia-smi-stats script dir
       file:

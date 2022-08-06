@@ -1,23 +1,7 @@
-[tplink-plug-stats]
-miner1
-
-#[grafana-dashboards]
-#raspi1
-
-[nvidia-miner]
-miner1
-
-[nicehash]
-miner1 nicehash_stats_include_wallet_stats=yes
-
-[ethereum]
-miner1 gpu_type=nvidia-gtx1070 ethereum_pool=nicehash ethereum_api_port=5005 ethereum_overclock_at_start=yes ethereum_state=present ethereum_cuda_schedule=sync
-
-[msi-rgb]
-miner1
-
 [x11vnc]
-miner1
+raspi1
+
+[tailscale]
 raspi1
 
 [docker]

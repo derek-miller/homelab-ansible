@@ -30,6 +30,13 @@
     state: 'directory'
     mode: 0755
 
+- name: fix boost download url when using v0.17.1
+  when: ethminer_git_clone.changed and ethminer_exe_git_commit_hash == 'v0.17.1'
+  command: sed -i 's$hunter_config(Boost VERSION 1.66.0)$hunter_config(Boost VERSION 1.66.0_new_url SHA1 f0b20d2d9f64041e8e7450600de0267244649766 URL https://boostorg.jfrog.io/artifactory/main/release/1.66.0/source/boost_1_66_0.tar.gz)$g' ../cmake/Hunter/config.cmake
+  args:
+    chdir: "{{ ethminer_exe_build_dir }}"
+  changed_when: false
+
 - name: configure ethminer
   command: cmake .. -DETHASHCUDA=ON -DETHASHCL=OFF
   args:

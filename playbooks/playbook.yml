@@ -28,6 +28,15 @@
   tags:
     - bootstrap
 
+- name: bootstrap tailscale
+  hosts: tailscale
+  roles:
+    - role: galaxy/tailscale
+      tailscale_authkey: "{{ vault_tailscale_authkey }}"
+      when: bootstrap|default(false)|bool
+  tags:
+    - bootstrap
+
 - name: set up ansible environment on remote
   hosts: all
   roles:
@@ -45,6 +54,13 @@
     - always
     - base
     - common
+
+- hosts: tailscale
+  roles:
+    - role: galaxy/tailscale
+      tailscale_up_skip: yes # Only authenticate tailscale during bootstrapping
+  tags:
+    - tailscale
 
 - hosts: project-files
   roles:
@@ -147,7 +163,7 @@
   roles:
     - role: galaxy/nvidia-drivers
       nvidia_driver_ubuntu_cuda_package: cuda
-      nvidia_driver_package_version: "11.5.1-1"
+      nvidia_driver_package_version: 11.7.0-1
       nvidia_driver_ubuntu_install_from_cuda_repo: yes
       tags:
         - cuda
@@ -178,3 +194,9 @@
         - ethminer
   tags:
     - ethereum
+
+- hosts: sysdweb
+  roles:
+    - role: generic/sysdweb
+  tags:
+    - sysdweb

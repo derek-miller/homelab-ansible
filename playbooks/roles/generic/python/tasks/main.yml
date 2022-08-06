@@ -19,6 +19,8 @@
     executable: pip3
     extra_args: "{{ '' if pip_no_disable_pip_version_check is changed else '--disable-pip-version-check' }}"
     state: latest
+  environment:
+    SETUPTOOLS_USE_DISTUTILS: stdlib
 
 - name: install/upgrade virtualenv
   pip:
@@ -26,3 +28,5 @@
     executable: pip3
     extra_args: --disable-pip-version-check
     state: latest
+  environment:
+    SETUPTOOLS_USE_DISTUTILS: stdlib

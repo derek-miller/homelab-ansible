@@ -9,6 +9,7 @@ CLOCK=""
 MEM=""
 FAN=""
 TARGET_TEMP=""
+POWER_MIZER_MODE=1
 
 function usage(){
    echo "Overclock Nvidia GPUs with the given settings."
@@ -21,13 +22,14 @@ function usage(){
    echo "      -c GPU clock offset"
    echo "      -m Memory clock offset"
    echo "      -f Fan speed as percent"
+   echo "      -g GPU Power Mizer mode: 0/DISABLED, 1/ENABLED (Default)"
    echo "      -t GPU target temperature in degree celsius"
    echo ""
    exit
 }
 
 function getOptions(){
-   while getopts "i:l:p:c:m:f:t:h" opt ; do
+   while getopts "i:l:p:c:m:f:t:g:h" opt ; do
      case $opt in
         i)
            export DEVICES=$OPTARG
@@ -53,6 +55,9 @@ function getOptions(){
         t)
            export TARGET_TEMP=$OPTARG
            ;;
+        g)
+           export POWER_MIZER_MODE=$OPTARG
+           ;;
         h)
            usage
            exit
@@ -77,6 +82,7 @@ function printValues(){
    echo "MEM: ${MEM}"
    echo "FAN: ${FAN}"
    echo "TARGET_TEMP: ${TARGET_TEMP}"
+   echo "POWER_MIZER_MODE: ${POWER_MIZER_MODE}"
    echo "Leftovers: $@"
    echo "NVIDIA_SETTINGS: ${NVIDIA_SETTINGS}"
    echo "NVIDIA_SMI: ${NVIDIA_SMI}"
@@ -103,7 +109,7 @@ if [ "$DEVICES" != "" ]; then
     IFS=","
     for device in ${DEVICES}
     do
-        SETTINGS_CMD="${SETTINGS_CMD} -a [gpu:${device}]/GPUPowerMizerMode=1"
+        SETTINGS_CMD="${SETTINGS_CMD} -a [gpu:${device}]/GPUPowerMizerMode=${POWER_MIZER_MODE}"
         [ "$PM" != "" ] && ${NVIDIA_SMI} -i ${device} -pm ${PM}
         [ "$POWER" != "" ] && ${NVIDIA_SMI} -i ${device} -pl ${POWER}
         [ "$TARGET_TEMP" != "" ] && ${NVIDIA_SMI} -i ${device} -gtt ${TARGET_TEMP}
@@ -113,7 +119,7 @@ if [ "$DEVICES" != "" ]; then
         [ "$MEM" != "" ] && SETTINGS_CMD="${SETTINGS_CMD} -a [gpu:${device}]/GPUMemoryTransferRateOffsetAllPerformanceLevels=${MEM}"
     done
 else
-    SETTINGS_CMD="${SETTINGS_CMD} -a GPUPowerMizerMode=1"
+    SETTINGS_CMD="${SETTINGS_CMD} -a GPUPowerMizerMode=${POWER_MIZER_MODE}"
     [ "$PM" != "" ] && ${NVIDIA_SMI} -pm ${PM}
     [ "$POWER" != "" ] && ${NVIDIA_SMI} -pl ${POWER}
     [ "$TARGET_TEMP" != "" ] && ${NVIDIA_SMI} -gtt ${TARGET_TEMP}

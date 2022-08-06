@@ -6,3 +6,5 @@ roles:
     name: galaxy/docker
   - src: nvidia.nvidia_driver
     name: galaxy/nvidia-drivers
+  - src: artis3n.tailscale
+    name: galaxy/tailscale
