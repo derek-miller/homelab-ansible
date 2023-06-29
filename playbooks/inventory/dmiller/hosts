@@ -1,14 +1,18 @@
 [x11vnc]
 raspi1
+raspi2
 
 [tailscale]
 raspi1
+raspi2
 
 [docker]
 raspi1 docker_apt_arch=arm64
+raspi2 docker_apt_arch=arm64
 
 [project-files]
 raspi1
+raspi2
 
 [network-ups-tools]
 raspi1

@@ -14,12 +14,12 @@
 
 - name: add/remove influxdb gpg signing key
   apt_key:
-    url: https://repos.influxdata.com/influxdb.key
+    url: https://repos.influxdata.com/influxdata-archive_compat.key
     state: "{{ telegraf_state }}"
 
 - name: add/remove influxdb repository
   apt_repository:
-    repo: 'deb https://repos.influxdata.com/ubuntu {{ ansible_distribution_release }} stable'
+    repo: 'deb https://repos.influxdata.com/debian stable main'
     state: "{{ telegraf_state }}"
 
 - name: install telegraf dependencies
