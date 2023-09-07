@@ -1,0 +1,29 @@
+---
+- assert:
+    that: resolved_dnsstublistener_state in ('enable', 'disable')
+- assert:
+    that: ansible_service_mgr == 'systemd'
+
+- name: check if resolved.conf exists
+  stat:
+    path: /etc/systemd/resolved.conf
+  register: resolved_conf_stat
+
+- name: Get info about running services
+  service_facts:
+  when: resolved_conf_stat.stat.exists
+
+- name: enable/disable DNSStubListener
+  when: >-
+    resolved_conf_stat.stat.exists and 
+    ansible_facts.services
+      .get("systemd-resolved.service", {})
+      .get("state") == "running"
+  ini_file:
+    path: /etc/systemd/resolved.conf
+    section: Resolve
+    option: DNSStubListener
+    value: "{{ 'yes' if resolved_dnsstublistener_state == 'enable' else 'no' }}"
+  notify: restart systemd-resolved
+
+- meta: flush_handlers

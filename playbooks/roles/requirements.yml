@@ -8,3 +8,5 @@ roles:
     name: galaxy/nvidia-drivers
   - src: artis3n.tailscale
     name: galaxy/tailscale
+  - src: onkeldom.adguard_home
+    name: galaxy/adguard-home

@@ -1,0 +1,61 @@
+---
+- include_role:
+    name: generic/raspberry-pi
+  vars:
+    raspberry_pi_i2c: true
+
+- name: install uctronics dependencies
+  apt:
+    name: "{{ uctronics_lcd_apt_dependencies }}"
+    state: present
+  when: uctronics_lcd_apt_dependencies|length > 0
+
+- name: create uctronics install directory
+  file:
+    dest: "{{ uctronics_lcd_install_dir }}"
+    state: directory
+    mode: 0755
+
+- name: download uctronics src
+  git:
+    repo: "{{ uctronics_lcd_git_clone_url }}"
+    dest: "{{ uctronics_lcd_install_dir }}"
+    version: "{{ uctronics_lcd_git_commit_hash }}"
+    force: yes
+  changed_when: uctronics_git_clone.before != uctronics_git_clone.after
+  register: uctronics_git_clone
+
+- name: delete uctronics build artifacts if necessary for rebuild
+  command: make clean
+  args:
+    chdir: "{{ uctronics_lcd_build_dir }}"
+    removes: "{{ uctronics_lcd_binary }}"
+  when: uctronics_git_clone.changed
+
+- name: build uctronics lcd binary
+  command: make
+  args:
+    chdir: "{{ uctronics_lcd_build_dir }}"
+    creates: "{{ uctronics_lcd_binary }}"
+
+- name: create {{ uctronics_lcd_service }} service
+  template:
+    src: uctronics-lcd.service.jinja2
+    dest: /etc/systemd/system/{{ uctronics_lcd_service }}.service
+    owner: root
+    group: root
+    mode: 0644
+  notify: restart uctronics-lcd
+
+- name: enable {{ uctronics_lcd_service }} service
+  systemd:
+    name: "{{ uctronics_lcd_service }}"
+    enabled: yes
+    daemon_reload: yes
+
+- meta: flush_handlers
+
+- name: start {{ uctronics_lcd_service }} service
+  systemd:
+    name: "{{ uctronics_lcd_service }}"
+    state: started

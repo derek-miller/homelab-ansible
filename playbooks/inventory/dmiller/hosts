@@ -1,18 +1,67 @@
-[x11vnc]
+[raspberry-pi]
 raspi1
 raspi2
+rackpi1
+rackpi2
+rackpi3
+rackpi4
+rackpi5
+
+[uctronics-lcd]
+rackpi1
+rackpi2
+rackpi3
+rackpi4
+rackpi5
+
+[x11vnc]
+raspi2
+rackpi1
+rackpi2
+rackpi3
+rackpi4
+rackpi5
 
 [tailscale]
 raspi1
 raspi2
+rackpi1
+rackpi2
+rackpi3
+rackpi4
+rackpi5
+
+[tailscale:vars]
+create_cloudflare_dns_record=yes
 
 [docker]
-raspi1 docker_apt_arch=arm64
-raspi2 docker_apt_arch=arm64
+raspi2
+rackpi1
+rackpi2
+rackpi3
+rackpi4
+rackpi5
+
+[docker:vars]
+docker_apt_arch=arm64
 
 [project-files]
-raspi1
 raspi2
+rackpi1
+rackpi2
+rackpi3
+rackpi4
+rackpi5
 
 [network-ups-tools]
 raspi1
+
+[sysdweb]
+rackpi1
+rackpi2
+rackpi3
+rackpi4
+rackpi5
+
+[adguard-home]
+rackpi1

@@ -1,0 +1,20 @@
+---
+raspberry_pi_boot_config_path: /boot/firmware/config.txt
+#raspberry_pi_boot_config_options:
+#  - option: ""
+#    value: ""
+#raspberry_pi_rc_local_options:
+#  - option: ""
+#    value: ""
+#raspberry_pi_wifi_ssid: ""
+#raspberry_pi_wifi_password: ""
+#raspberry_pi_wifi_security: ""
+#raspberry_pi_bluetooth: false
+#raspberry_pi_serial: false
+#raspberry_pi_i2c: false
+#raspberry_pi_spi: false
+#raspberry_pi_camera: false
+#raspberry_pi_vnc: false
+#raspberry_pi_onewire: false
+#raspberry_pi_rgpio: false
+#raspberry_pi_poe_hat: false

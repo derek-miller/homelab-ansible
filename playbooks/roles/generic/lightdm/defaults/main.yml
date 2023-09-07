@@ -7,7 +7,7 @@ lightdm_glib_schemas_directory: /usr/share/glib-2.0/schemas
 lightdm_conf_directory: /usr/share/lightdm/lightdm.conf.d
 
 # Name of override file for LightDM config
-lightdm_overide_filename: 70-ansible.conf
+lightdm_override_filename: 70-ansible.conf
 
 # Username of user to auto-login on startup
 lightdm_autologin_user:
@@ -18,3 +18,8 @@ lightdm_autologin_user_timeout: 0
 
 # Whether to allow users to login using the guest account
 lightdm_greeter_allow_guest: no
+
+# Whether to create a dummy xorg session
+lightdm_xorg_create_video_dummy: no
+lightdm_xorg_conf_directory: /usr/share/X11/xorg.conf.d
+lightdm_xorg_override_filename: 70-ansible.conf

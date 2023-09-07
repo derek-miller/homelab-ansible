@@ -1,7 +1,7 @@
 - assert:
     that: telegraf_syslog_state in ('present',)
 - assert:
-    that: ansible_distribution == 'Ubuntu'
+    that: ansible_os_family == 'Debian'
 - assert:
     that: ansible_service_mgr == 'systemd'
 

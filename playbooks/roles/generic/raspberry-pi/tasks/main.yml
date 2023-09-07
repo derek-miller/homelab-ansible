@@ -1,0 +1,104 @@
+---
+- assert:
+    that: ansible_os_family == 'Debian'
+
+- name: install raspi-config dependency
+  apt:
+    name:
+      - raspi-config
+      - libraspberrypi-bin
+
+- name: configure options in {{ raspberry_pi_boot_config_path }}
+  lineinfile:
+    dest: "{{ raspberry_pi_boot_config_path|default('/boot/config.txt') }}"
+    regexp: "^{{ item.option }}="
+    line: "{{ item.option }}={{ item.value }}"
+    insertafter: EOF
+    create: true
+    state: present
+  with_items: "{{ raspberry_pi_boot_config_options }}"
+  when: raspberry_pi_boot_config_options is defined
+
+- name: configure options in /etc/rc.local.
+  lineinfile:
+    dest: /etc/rc.local
+    regexp: "^{{ item.option }}="
+    line: "{{ item.option }}={{ item.value }}"
+    insertbefore: "^exit"
+    create: true
+    state: present
+  with_items: "{{ raspberry_pi_rc_local_options }}"
+  when: raspberry_pi_rc_local_options is defined
+
+- name: configure poe hat fan speeds
+  lineinfile:
+    dest: "{{ raspberry_pi_boot_config_path|default('/boot/config.txt') }}"
+    regexp: "^{{ item.option }}="
+    line: "{{ item.option }}={{ item.value }}"
+    insertafter: EOF
+    create: true
+    state: "{{ 'present' if raspberry_pi_poe_hat else 'absent' }}"
+  with_items:
+    - option: "dtparam=poe_fan_temp0"
+      value: "50000"
+    - option: "dtparam=poe_fan_temp1"
+      value: "60000"
+    - option: "dtparam=poe_fan_temp2"
+      value: "70000"
+    - option: "dtparam=poe_fan_temp3"
+      value: "80000"
+  when: raspberry_pi_poe_hat is defined and raspberry_pi_poe_hat in (true, false)
+
+- name: configure wifi
+  template:
+    src: wpa_supplicant.conf.j2
+    dest: /etc/wpa_supplicant/wpa_supplicant.conf
+  when: raspberry_pi_wifi_ssid is defined and raspberry_pi_wifi_password is defined
+
+- name: delete wifi configuration
+  file:
+    path: wpa_supplicant.conf.j2
+    state: absent
+  when: raspberry_pi_wifi_ssid is not defined or raspberry_pi_wifi_password is not defined
+
+- name: enable/disable bluetooth
+  systemd:
+    name: bluetooth
+    enabled: "{{ raspberry_pi_bluetooth|bool }}"
+    state: "{{ 'started' if raspberry_pi_bluetooth else 'stopped' }}"
+  when: raspberry_pi_bluetooth is defined and raspberry_pi_bluetooth in (true, false)
+
+- name: enable/disable serial
+  shell: "raspi-config nonint do_serial {{ 0 if raspberry_pi_serial else 1 }}"
+  changed_when: false
+  when: raspberry_pi_serial is defined and raspberry_pi_serial in (true, false)
+
+- name: enable/disable I2C
+  shell: "raspi-config nonint do_i2c {{ 0 if raspberry_pi_i2c else 1 }}"
+  changed_when: false
+  when: raspberry_pi_i2c is defined and raspberry_pi_i2c in (true, false)
+
+- name: enable/disable SPI
+  shell: "raspi-config nonint do_spi {{ 0 if raspberry_pi_spi else 1 }}"
+  changed_when: false
+  when: raspberry_pi_spi is defined and raspberry_pi_spi in (true, false)
+
+- name: enable/disable Camera
+  shell: "raspi-config nonint do_camera {{ 0 if raspberry_pi_camera else 1 }}"
+  changed_when: false
+  when: raspberry_pi_camera is defined and raspberry_pi_camera in (true, false)
+
+- name: enable/disable VNC
+  shell: "raspi-config nonint do_vnc {{ 0 if raspberry_pi_vnc else 1 }}"
+  changed_when: false
+  when: raspberry_pi_vnc is defined and raspberry_pi_vnc in (true, false)
+
+- name: enable/disable OneWire
+  shell: "raspi-config nonint do_onewire {{ 0 if raspberry_pi_onewire else 1 }}"
+  changed_when: false
+  when: raspberry_pi_onewire is defined and raspberry_pi_onewire in (true, false)
+
+- name: enable/disable Remote GPIO
+  shell: "raspi-config nonint do_rgpio {{ 0 if raspberry_pi_rgpio else 1 }}"
+  changed_when: false
+  when: raspberry_pi_rgpio is defined and raspberry_pi_rgpio in (true, false)

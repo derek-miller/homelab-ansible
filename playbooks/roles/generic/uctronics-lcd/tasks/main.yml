@@ -1,0 +1,8 @@
+- assert:
+    that: uctronics_lcd_state in ('present', 'absent')
+- assert:
+    that: ansible_os_family == 'Debian'
+- assert:
+    that: ansible_service_mgr == 'systemd'
+
+- include_tasks: "{{ uctronics_lcd_state }}.yml"

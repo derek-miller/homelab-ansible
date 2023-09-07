@@ -38,7 +38,7 @@ ansible_playbook_cmd_fn = ansible-playbook $(1) $(ansible_default_flags) $(ansib
 ansible_playbook_cmd = $(call ansible_playbook_cmd_fn,$(playbook_file))
 ansible_setup = ansible -m setup $(ansible_default_flags) $(if $(filter dev,$(env)),--user=vagrant --private-key=.vagrant/machines/ansible-dev/virtualbox/private_key) $(ansible_flags)
 
-ansible_bootstrap_flags = --user=$(user) --ask-become-pass
+ansible_bootstrap_flags = --user=$(user) --ask-become-pass --ask-pass
 
 python_version_full := $(wordlist 2,4,$(subst ., ,$(shell python --version 2>&1)))
 python_version_major := $(word 1,${python_version_full})
