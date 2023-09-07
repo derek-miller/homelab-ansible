@@ -1,0 +1,8 @@
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
+
+network={
+        ssid="{{ raspberry_pi_wifi_ssid|mandatory }}"
+        psk="{{ raspberry_pi_wifi_password|mandatory }}"
+        key_mgmt={{ raspberry_pi_wifi_security|default('WPA-PSK') }}
+}

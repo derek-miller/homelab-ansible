@@ -1,0 +1,8 @@
+uctronics_lcd_state: present
+uctronics_lcd_service: uctronics-lcd
+uctronics_lcd_install_dir: /opt/uctronics
+uctronics_lcd_build_dir: "{{ uctronics_lcd_install_dir }}/C"
+uctronics_lcd_binary: "{{ uctronics_lcd_build_dir }}/display"
+uctronics_lcd_git_clone_url: https://github.com/darkgrue/U6143_ssd1306.git #https://github.com/UCTRONICS/U6143_ssd1306.git
+uctronics_lcd_git_commit_hash: master
+uctronics_lcd_apt_dependencies: []

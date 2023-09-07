@@ -1,0 +1,13 @@
+[Unit]
+Description={{ uctronics_lcd_service }}
+OnFailure=status-mail@{{ uctronics_lcd_service }}.service
+
+[Service]
+Type=simple
+ExecStart={{ uctronics_lcd_binary }}
+WorkingDirectory={{ uctronics_lcd_build_dir }}
+SyslogIdentifier={{ uctronics_lcd_service }}
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

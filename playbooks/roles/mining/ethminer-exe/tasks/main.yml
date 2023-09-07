@@ -1,7 +1,7 @@
 - assert:
     that: ethminer_exe_state in ('present', 'absent')
 - assert:
-    that: ansible_distribution == 'Ubuntu'
+    that: ansible_os_family == 'Debian'
 - assert:
     that: ansible_service_mgr == 'systemd'
 

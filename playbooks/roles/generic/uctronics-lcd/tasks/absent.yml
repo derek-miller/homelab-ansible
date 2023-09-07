@@ -1,0 +1,22 @@
+- name: stop {{ uctronics_lcd_service }} service
+  systemd:
+    name: "{{ uctronics_lcd_service }}"
+    state: stopped
+  failed_when: false
+
+- name: disable {{ uctronics_lcd_service }} service
+  systemd:
+    name: "{{ uctronics_lcd_service }}"
+    enabled: no
+    daemon_reload: yes
+  failed_when: false
+
+- name: delete {{ uctronics_lcd_service }} service
+  file:
+    path: /etc/systemd/system/{{ uctronics_lcd_service }}.service
+    state: absent
+
+- name: delete uctronics install directory
+  file:
+    dest: "{{ uctronics_lcd_install_dir }}"
+    state: absent

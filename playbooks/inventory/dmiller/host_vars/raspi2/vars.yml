@@ -15,7 +15,10 @@ authorized_keys:
 docker_compose_definition: "{{ vault_docker_compose_definition }}"
 
 lightdm_autologin_user: ubuntu
+lightdm_xorg_create_video_dummy: yes
 
-project_files:
-  - src: "{{ inventory_files_dir }}/{{ vault_dir_name }}/docker/{{inventory_hostname}}/"
-    dest: /var/docker/
+raspberry_pi_poe_hat: true
+
+sudoers:
+  - user: ubuntu
+    passwordless: true

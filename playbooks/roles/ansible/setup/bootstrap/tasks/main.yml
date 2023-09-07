@@ -1,5 +1,10 @@
 # Allow ansible to run without the user entering a password
 
+- name: ensure group "ssh" exists
+  group:
+    name: ssh
+    state: present
+
 - name: create ansible surrogate user
   user:
     name: "{{ ansible_surrogate_user }}"

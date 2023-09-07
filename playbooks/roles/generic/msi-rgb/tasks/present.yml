@@ -1,7 +1,9 @@
+---
 - name: install msi-rgb dependencies
   apt:
     name: "{{ msi_rgb_apt_dependencies }}"
     state: present
+  when: msi_rgb_apt_dependencies|length > 0
 
 - name: create msi-rgb install directory
   file:

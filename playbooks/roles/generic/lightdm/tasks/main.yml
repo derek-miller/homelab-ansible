@@ -16,7 +16,7 @@
 - name: write lightdm configuration
   template:
     src: lightdm.conf.j2
-    dest: '{{ lightdm_conf_directory }}/{{ lightdm_overide_filename }}'
+    dest: '{{ lightdm_conf_directory }}/{{ lightdm_override_filename }}'
     owner: root
     group: root
     mode: 0644
@@ -26,3 +26,27 @@
   command: '/usr/bin/glib-compile-schemas {{ lightdm_glib_schemas_directory }}'
   when: lightdm_config.changed
   notify: restart lightdm
+
+- name: install xserver-xorg-video-dummy
+  apt:
+    name:
+      - xserver-xorg-video-dummy
+    state: latest
+  when: lightdm_xorg_create_video_dummy
+  notify: restart lightdm
+
+- name: write xorg dummy configuration
+  template:
+    src: xorg.conf.j2
+    dest: '{{ lightdm_xorg_conf_directory }}/{{ lightdm_xorg_override_filename }}'
+    owner: root
+    group: root
+    mode: 0644
+  when: lightdm_xorg_create_video_dummy
+  notify: restart lightdm
+
+- name: delete xorg dummy configuration
+  file:
+    path: '{{ lightdm_xorg_conf_directory }}/{{ lightdm_xorg_override_filename }}'
+    state: absent
+  when: not lightdm_xorg_create_video_dummy

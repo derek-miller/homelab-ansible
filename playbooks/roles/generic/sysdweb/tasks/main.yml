@@ -1,5 +1,7 @@
 - assert:
     that: sysdweb_state in ('present', 'absent')
+- assert:
+    that: ansible_service_mgr == 'systemd'
 
 - when: sysdweb_state == 'present'
   block:
