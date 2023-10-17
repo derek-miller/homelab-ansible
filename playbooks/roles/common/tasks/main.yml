@@ -12,16 +12,16 @@
 - name: additional sudoers
   template:
     src: sudoers.d/ansible-managed.jinja2
-    dest: /etc/sudoers.d/ansible-managed
-    owner: root
-    group: root
+    dest: "{{ sudoers_d_dir|default('/etc/sudoers.d') }}/ansible-managed"
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
     mode: 0440
-    validate: 'visudo -cf %s'
+    validate: "{{ 'visudo -cf %s' if 'qnap' not in group_names else omit }}"
   when: sudoers|default([])|length > 0
 
 - name: delete additional sudoers file
   file:
-    path: /etc/sudoers.d/ansible-managed
+    path: "{{ sudoers_d_dir|default('/etc/sudoers.d') }}/ansible-managed"
     state: absent
   when: sudoers|default([])|length == 0
 

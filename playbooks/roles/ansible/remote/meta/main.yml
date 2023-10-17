@@ -4,3 +4,5 @@ dependencies:
   - role: generic/virtualenv
     virtualenv_path: "{{ ansible_python_virtualenv }}"
     virtualenv_site_packages: yes
+    tags:
+      - base

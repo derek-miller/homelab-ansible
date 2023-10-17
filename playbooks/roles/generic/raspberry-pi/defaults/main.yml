@@ -1,5 +1,5 @@
 ---
-raspberry_pi_boot_config_path: /boot/firmware/config.txt
+raspberry_pi_boot_config_path: /boot/config.txt
 #raspberry_pi_boot_config_options:
 #  - option: ""
 #    value: ""

@@ -17,8 +17,8 @@
     - name: create coin-stats script dir
       file:
         path: "{{ coin_stats_script_path|dirname }}"
-        owner: root
-        group: root
+        owner: "{{ root_user|default('root') }}"
+        group: "{{ root_group|default('root') }}"
         mode: 0755
         state: directory
 
@@ -26,8 +26,8 @@
       template:
         src: coin-stats.jinja2
         dest: "{{ coin_stats_script_path }}"
-        owner: root
-        group: root
+        owner: "{{ root_user|default('root') }}"
+        group: "{{ root_group|default('root') }}"
         mode: 0755
 
 - include_role:

@@ -1,5 +1,6 @@
-ansible_surrogate_public_key_file: "{{ inventory_files_dir }}/{{ ansible_surrogate_user }}-id_ed25519.pub"
-ansible_surrogate_private_key_file: "{{ inventory_files_dir }}/{{ vault_dir_name }}/{{ ansible_surrogate_user }}-id_ed25519"
+ansible_surrogate_ssh_host_key_algorithm: ed25519
+ansible_surrogate_public_key_file: "{{ ansible_surrogate_user }}-id_{{ ansible_surrogate_ssh_host_key_algorithm }}.pub"
+ansible_surrogate_private_key_file: "vault/{{ ansible_surrogate_user }}-id_{{ ansible_surrogate_ssh_host_key_algorithm }}"
 local_ssh_key_dir: "{{ playbook_dir }}/../.ssh"
 
 # must set:

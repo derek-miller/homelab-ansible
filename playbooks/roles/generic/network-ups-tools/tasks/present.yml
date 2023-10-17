@@ -4,10 +4,16 @@
     state: latest
   notify: restart nut
 
+- name: install nut-snmp
+  apt:
+    name: nut-snmp
+    state: latest
+  notify: restart nut
+
 - name: create nut configuration dir
   file:
     path: /etc/nut/
-    owner: root
+    owner: "{{ root_user|default('root') }}"
     group: nut
     mode: 0750
     state: directory
@@ -16,7 +22,7 @@
   template:
     src: "{{ item }}.j2"
     dest: /etc/nut/{{ item }}
-    owner: root
+    owner: "{{ root_user|default('root') }}"
     group: nut
     mode: 0640
   with_items:

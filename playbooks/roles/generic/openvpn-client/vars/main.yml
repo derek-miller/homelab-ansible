@@ -1,9 +1,9 @@
 openvpn_client_service: openvpn-client@{{ openvpn_client_name }}
 openvpn_client_conf: /etc/openvpn/client/{{ openvpn_client_name }}.conf
-openvpn_client_ovpn_template: "{{ inventory_files_dir }}/{{ vault_dir_name }}/{{ openvpn_client_ovpn_template_filename }}"
-openvpn_client_credentials_file: "{{ inventory_files_dir }}/{{ vault_dir_name }}/{{ openvpn_client_credentials_filename }}"
+openvpn_client_ovpn_template: "vault/{{ openvpn_client_ovpn_template_filename }}"
+openvpn_client_credentials_file: "vault/{{ openvpn_client_credentials_filename }}"
 openvpn_client_credentials_path: /etc/openvpn/client/{{ openvpn_client_name }}_creds.txt
-openvpn_client_route_up_script_file: "{{ inventory_files_dir }}/{{ vault_dir_name }}/{{ openvpn_client_route_up_script_filename }}"
+openvpn_client_route_up_script_file: "vault/{{ openvpn_client_route_up_script_filename }}"
 openvpn_client_route_up_script_path: /etc/openvpn/client/{{ openvpn_client_name }}_up.sh
-openvpn_client_route_down_script_file: "{{ inventory_files_dir }}/{{ vault_dir_name }}/{{ openvpn_client_route_down_script_filename }}"
+openvpn_client_route_down_script_file: "vault/{{ openvpn_client_route_down_script_filename }}"
 openvpn_client_route_down_script_path: /etc/openvpn/client/{{ openvpn_client_name }}_down.sh

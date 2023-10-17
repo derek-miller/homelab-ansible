@@ -9,8 +9,8 @@
   copy:
     src: "{{ openvpn_client_credentials_file }}"
     dest: "{{ openvpn_client_credentials_path }}"
-    owner: root
-    group: root
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
     mode: 0600
   notify: restart openvpn-client
 
@@ -19,8 +19,8 @@
   copy:
     src: "{{ openvpn_client_route_up_script_file }}"
     dest: "{{ openvpn_client_route_up_script_path }}"
-    owner: root
-    group: root
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
     mode: 0700
   notify: restart openvpn-client
 
@@ -29,8 +29,8 @@
   copy:
     src: "{{ openvpn_client_route_down_script_file }}"
     dest: "{{ openvpn_client_route_down_script_path }}"
-    owner: root
-    group: root
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
     mode: 0700
   notify: restart openvpn-client
 
@@ -38,8 +38,8 @@
   template:
     src: "{{ openvpn_client_ovpn_template }}"
     dest: "{{ openvpn_client_conf }}"
-    owner: root
-    group: root
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
     mode: 0600
   register: openvpn_client_conf_result
 

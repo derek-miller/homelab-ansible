@@ -18,8 +18,8 @@
     - name: create nicehash-stats script dir
       file:
         path: "{{ nicehash_stats_script_path|dirname }}"
-        owner: root
-        group: root
+        owner: "{{ root_user|default('root') }}"
+        group: "{{ root_group|default('root') }}"
         mode: 0755
         state: directory
 
@@ -27,8 +27,8 @@
       template:
         src: nicehash-stats.jinja2
         dest: "{{ nicehash_stats_script_path }}"
-        owner: root
-        group: root
+        owner: "{{ root_user|default('root') }}"
+        group: "{{ root_group|default('root') }}"
         mode: 0755
 
 - include_role:

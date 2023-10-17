@@ -27,11 +27,10 @@ Setting up Ansible Vault
 ------------------------
 
 From the project directory:
-1. `mkdir -p .vault_pass && cd .vault_pass`
-2. `touch <env>`
-3. `chmod 0600 *`
-4. Copy the vault passwords into those files with e.g.
-   `pbpaste > <env>`
+1. `touch .vault_pass`
+2. `chmod 0600 .vault_pass`
+3. Copy the vault passwords into those files with e.g.
+   `pbpaste > .vault_pass`
 
 Passing Ansible flags
 ---------------------
@@ -57,13 +56,6 @@ To get ssh hostname completion and known host keys for hosts in an inventory:
     make known-hosts
     make known-hosts env=<env> hosts=<host>
 
-
-Exporting Grafana Dashboards
-----------------------------
-
-To export grafana dashboards:
-
-    make export-dashboards env=<env>
 
 (Re)installing Ansible Galaxy roles
 -----------------------------------

@@ -1,8 +1,4 @@
-vault_name: "{{ deployment_environment }}"
-
-ansible_surrogate_user: ansible-{{ vault_name }}
-vault_dir_name: vault-{{ vault_name }}
-inventory_files_dir: "{{ deployment_environment }}"
+ansible_surrogate_user: ansible
 
 pip_default_index_url: https://pypi.python.org/simple
 pip_version_spec:

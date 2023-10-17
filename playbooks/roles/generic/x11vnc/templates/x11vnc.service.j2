@@ -5,7 +5,7 @@ OnFailure=status-mail@x11vnc.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/x11vnc -xkb -noxrecord -noxfixes -noxdamage -nevershared -display {{ x11vnc_display }} -auth "/var/run/lightdm/root/{{ x11vnc_display }}" -forever -rfbauth "{{ x11vnc_rfb_pass_file }}" -rfbport {{ x11vnc_rfb_port|int }}
+ExecStart=/usr/bin/x11vnc -xkb -noxrecord -noxfixes -noxdamage -nevershared -display {{ x11vnc_display }} -auth "/var/run/lightdm/{{ root_user|default('root') }}/{{ x11vnc_display }}" -forever -rfbauth "{{ x11vnc_rfb_pass_file }}" -rfbport {{ x11vnc_rfb_port|int }}
 Restart=always
 RestartSec=5
 

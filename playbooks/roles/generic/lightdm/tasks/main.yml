@@ -17,8 +17,8 @@
   template:
     src: lightdm.conf.j2
     dest: '{{ lightdm_conf_directory }}/{{ lightdm_override_filename }}'
-    owner: root
-    group: root
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
     mode: 0644
   register: lightdm_config
 
@@ -39,8 +39,8 @@
   template:
     src: xorg.conf.j2
     dest: '{{ lightdm_xorg_conf_directory }}/{{ lightdm_xorg_override_filename }}'
-    owner: root
-    group: root
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
     mode: 0644
   when: lightdm_xorg_create_video_dummy
   notify: restart lightdm

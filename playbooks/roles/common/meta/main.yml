@@ -2,7 +2,7 @@ dependencies:
   - role: generic/sysctl
   - role: galaxy/postfix
     postfix_aliases:
-      - user: root
+      - user: "{{ root_user|default('root') }}"
         alias: "{{ alert_email_address }}"
     postfix_relaytls: yes
     postfix_smtp_tls_cafile: "{{ pki_tls_ca_bundle }}"

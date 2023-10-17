@@ -5,8 +5,8 @@
   template:
     src: "{{ telegraf_plugin_conf_src }}"
     dest: "{{ telegraf_conf_dir }}/{{ telegraf_plugin_conf }}"
-    owner: root
-    group: root
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
     mode: 0644
   notify: restart telegraf
   when:

@@ -1,3 +1,0 @@
-- include_tasks: run_once.yml
-  run_once: yes
-  when: grafana_dashboards|length > 0

@@ -1,9 +1,8 @@
-# Allow ansible to run without the user entering a password
-
 - name: ensure group "ssh" exists
   group:
     name: ssh
     state: present
+  when: "'qnap' not in group_names"
 
 - name: create ansible surrogate user
   user:
@@ -14,6 +13,7 @@
     password: !
     shell: /bin/bash
     createhome: yes
+  when: "'qnap' not in group_names"
 
 - name: authorize ansible surrogate ssh key
   authorized_key:
@@ -23,11 +23,19 @@
   with_file:
     - "{{ ansible_surrogate_public_key_file }}"
 
+- name: ensure sudoers.d directory exists
+  file:
+    path: "{{ sudoers_d_dir|default('/etc/sudoers.d') }}"
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
+    mode: 0755
+    state: directory
+
 - name: grant ansible surrogate user passwordless sudoer
   template:
     src: sudoers.d/ansible-surrogate.jinja2
-    dest: /etc/sudoers.d/ansible-surrogate
-    owner: root
-    group: root
+    dest: "{{ sudoers_d_dir|default('/etc/sudoers.d') }}/ansible-surrogate"
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
     mode: 0440
-    validate: 'visudo -cf %s'
+    validate: "{{ 'visudo -cf %s' if 'qnap' not in group_names else omit }}"

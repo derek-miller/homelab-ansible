@@ -1,7 +1,0 @@
-grafana_dashboards_export: no
-grafana_dashboards_dir: "{{ inventory_files_dir }}/{{ vault_dir_name }}/grafana-dashboards/{{ grafana_url|hash('md5') }}"
-grafana_dashboards: []
-
-# must set:
-# grafana_url
-# grafana_api_key

@@ -1,6 +1,6 @@
 virtualenv_state: present
-virtualenv_owner: root
-virtualenv_group: root
+virtualenv_owner: "{{ root_user|default('root') }}"
+virtualenv_group: "{{ root_group|default('root') }}"
 virtualenv_site_packages: no
 virtualenv_pip_conf: "{{ virtualenv_path }}/pip.conf"
 virtualenv_pip_index: "{{ pip_default_index_url }}"

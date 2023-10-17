@@ -42,8 +42,8 @@
   template:
     src: uctronics-lcd.service.jinja2
     dest: /etc/systemd/system/{{ uctronics_lcd_service }}.service
-    owner: root
-    group: root
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
     mode: 0644
   notify: restart uctronics-lcd
 
