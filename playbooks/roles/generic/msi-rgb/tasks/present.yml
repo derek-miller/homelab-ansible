@@ -36,8 +36,8 @@
   template:
     src: msi-rgb.service.jinja2
     dest: /etc/systemd/system/{{ msi_rgb_service }}.service
-    owner: root
-    group: root
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
     mode: 0644
   notify: restart msi-rgb
 

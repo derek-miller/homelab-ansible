@@ -17,8 +17,8 @@
     - name: create tplink-plug-stats script dir
       file:
         path: "{{ tplink_plug_stats_script_path|dirname }}"
-        owner: root
-        group: root
+        owner: "{{ root_user|default('root') }}"
+        group: "{{ root_group|default('root') }}"
         mode: 0755
         state: directory
 
@@ -26,8 +26,8 @@
       template:
         src: tplink-plug-stats.jinja2
         dest: "{{ tplink_plug_stats_script_path }}"
-        owner: root
-        group: root
+        owner: "{{ root_user|default('root') }}"
+        group: "{{ root_group|default('root') }}"
         mode: 0755
 
 - include_role:

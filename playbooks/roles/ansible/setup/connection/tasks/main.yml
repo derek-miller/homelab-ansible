@@ -1,6 +1,6 @@
 - name: set default ansible python interpreter
   set_fact:
-    ansible_python_interpreter: /usr/bin/python3
+    ansible_python_interpreter: "{{ override_ansible_python_interpreter|default('/usr/bin/python3') }}"
 
 - name: make local ssh key dir
   local_action:
@@ -32,9 +32,10 @@
   when: ansible_ssh_user == ansible_surrogate_user
   check_mode: no
 
-- name: become root
+- name: become {{ root_user|default('root') }}
   set_fact:
     ansible_become: yes
+    ansible_become_user: "{{ root_user|default('root') }}"
 
 - name: set ansible hostname
   set_fact:

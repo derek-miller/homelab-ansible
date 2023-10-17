@@ -34,8 +34,8 @@
       template:
         src: sysdweb.conf.jinja2
         dest: "{{ sysdweb_dir }}/{{ sysdweb_service }}.conf"
-        owner: root
-        group: root
+        owner: "{{ root_user|default('root') }}"
+        group: "{{ root_group|default('root') }}"
         mode: 0644
       notify: restart syswebd
 

@@ -8,28 +8,38 @@
       - python3-dev
       - python3-apt
     state: latest
+  tags:
+    - base
+  when: "'qnap' not in group_names"
 
 - name: create ansible remote dir
   file:
     path: "{{ ansible_python_dir }}"
     state: directory
+  tags:
+    - base
 
 - name: copy ansible remote requirements.txt
   copy:
     src: requirements.txt
     dest: "{{ ansible_python_dir }}/requirements.txt"
-    owner: root
-    group: root
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
     mode: 0644
+  tags:
+    - base
 
 - name: install ansible remote dependencies
   pip:
     virtualenv: "{{ ansible_python_virtualenv }}"
     requirements: "{{ ansible_python_dir }}/requirements.txt"
     virtualenv_site_packages: yes
+    extra_args: --no-build-isolation
     state: present
   environment:
     SETUPTOOLS_USE_DISTUTILS: stdlib
+  tags:
+    - base
 
 - name: set ansible python interpreter
   set_fact:

@@ -1,0 +1,8 @@
+- block:
+    - name: gather and combine environment paths
+      set_fact:
+        _path: "{{ ((additional_env_paths | join(':')) + ':' + (ansible_env | default({})).get('PATH', '')) | trim(':') }}"
+    - name: add additional paths to environment
+      set_fact:
+        ansible_env: "{{ ansible_env | default({}) | combine({'PATH': _path}) }}"
+  when: ansible_env is defined and additional_env_paths is defined and additional_env_paths

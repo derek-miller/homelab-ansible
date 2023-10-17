@@ -5,10 +5,16 @@
     state: absent
   register: uninstall_nut_result
 
+- name: uninstall nut-snmp
+  apt:
+    name: nut-snmp
+    state: absent
+  register: uninstall_nut_snmp_result
+
 - name: reload systemd
   systemd:
     daemon_reload: yes
-  when: uninstall_nut_result.changed
+  when: uninstall_nut_result.changed or uninstall_nut_snmp_result.changed
 
 - name: delete nut configuration
   file:

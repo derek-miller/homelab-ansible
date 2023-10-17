@@ -19,8 +19,8 @@
   copy:
     src: nvidia-overclock
     dest: "{{ nvidia_overclock_exe }}"
-    owner: root
-    group: root
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
     mode: 0755
   when: nvidia_overclock_state == 'present'
 

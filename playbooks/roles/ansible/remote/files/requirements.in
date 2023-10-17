@@ -1,5 +1,6 @@
 --index-url https://pypi.python.org/simple
 
-#docker[tls]
-#docker-compose
+docker[tls]
+docker-compose
 pyyaml
+jsondiff

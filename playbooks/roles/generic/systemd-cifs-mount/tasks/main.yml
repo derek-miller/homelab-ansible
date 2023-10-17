@@ -14,8 +14,8 @@
           username={{ cifs_share_username | mandatory }}
           password={{ cifs_share_password | mandatory }}
         dest: "{{ cifs_credentials_path | mandatory }}"
-        owner: root
-        group: root
+        owner: "{{ root_user|default('root') }}"
+        group: "{{ root_group|default('root') }}"
         mode: 0600
 
 - include_tasks: "{{ cifs_mount_state }}_mount_share.yml"

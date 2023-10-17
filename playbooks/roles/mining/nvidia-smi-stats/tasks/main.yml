@@ -16,8 +16,8 @@
     - name: create nvidia-smi-stats script dir
       file:
         path: "{{ nvidia_smi_stats_script_path|dirname }}"
-        owner: root
-        group: root
+        owner: "{{ root_user|default('root') }}"
+        group: "{{ root_group|default('root') }}"
         mode: 0755
         state: directory
 
@@ -25,8 +25,8 @@
       template:
         src: nvidia-smi-stats.jinja2
         dest: "{{ nvidia_smi_stats_script_path }}"
-        owner: root
-        group: root
+        owner: "{{ root_user|default('root') }}"
+        group: "{{ root_group|default('root') }}"
         mode: 0755
 
 - include_role:
