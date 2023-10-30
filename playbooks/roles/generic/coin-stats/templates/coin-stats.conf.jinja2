@@ -1,7 +1,0 @@
-[[inputs.exec]]
-  interval = "{{ coin_stats_interval_s|int }}s"
-  commands = [
-    "{{ coin_stats_script_path }} {{ ' '.join(coin_stats_coingecko_ids) }}"
-  ]
-  timeout = "{{ coin_stats_timeout_s|int }}s"
-  data_format = "influx"

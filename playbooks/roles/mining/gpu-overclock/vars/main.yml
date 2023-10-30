@@ -1,7 +1,0 @@
-gpu_overclock_command:
-  nvidia-gtx1070:
-    restore: "{{ nvidia_overclock_exe }}{{ ' -i ' + (gpu_devices|join(',')) if gpu_devices|default([])|length > 0 else '' }} -l 180 -p 0 -c 0 -m 0 -f auto -g 0"
-    ethash: "{{ nvidia_overclock_exe }}{{ ' -i ' + (gpu_devices|join(',')) if gpu_devices|default([])|length > 0 else '' }} -l 130 -p 1 -c 125 -m 600 -f auto -t 85"
-  nvidia-rtx3090:
-    restore: "{{ nvidia_overclock_exe }}{{ ' -i ' + (gpu_devices|join(',')) if gpu_devices|default([])|length > 0 else '' }} -l 370 -p 0 -c 0 -m 0 -f auto -g 0"
-    ethash: "{{ nvidia_overclock_exe }}{{ ' -i ' + (gpu_devices|join(',')) if gpu_devices|default([])|length > 0 else '' }} -l 322 -p 1 -c -350 -m 1100 -f 100 -t 85"

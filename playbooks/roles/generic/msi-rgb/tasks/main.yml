@@ -1,8 +1,0 @@
-- assert:
-    that: msi_rgb_state in ('present', 'absent')
-- assert:
-    that: ansible_os_family == 'Debian'
-- assert:
-    that: ansible_service_mgr == 'systemd'
-
-- include_tasks: "{{ msi_rgb_state }}.yml"

@@ -1,4 +1,0 @@
-- name: restart ethminer
-  systemd:
-    name: "{{ ethminer_coin_service }}"
-    state: restarted

@@ -1,9 +1,0 @@
-coin_stats_state: present
-coin_stats_dir: /opt/coin-stats
-coin_stats_virtualenv_path: "{{ coin_stats_dir }}/virtualenv"
-coin_stats_script_path: "{{ coin_stats_dir }}/bin/coin-stats"
-coin_stats_timeout_s: 5
-coin_stats_interval_s: 15
-
-# must set:
-# coin_stats_coingecko_ids
