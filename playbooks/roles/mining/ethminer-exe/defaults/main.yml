@@ -1,8 +1,0 @@
-ethminer_exe_state: present
-ethminer_exe_install_dir: /opt/ethminer
-ethminer_exe_build_dir: "{{ ethminer_exe_install_dir }}/build"
-ethminer_exe_binary: "{{ ethminer_exe_build_dir }}/ethminer/ethminer"
-ethminer_exe_git_clone_url: https://github.com/ethereum-mining/ethminer.git
-ethminer_exe_git_commit_hash: v0.17.1 # Pinned because of SIGSEV issue: https://github.com/ethereum-mining/ethminer/issues/1937
-ethminer_exe_apt_dependencies:
-  - libdbus-1-dev

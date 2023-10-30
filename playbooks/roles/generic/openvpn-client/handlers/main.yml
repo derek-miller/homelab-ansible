@@ -1,5 +1,0 @@
-- name: restart openvpn-client
-  systemd:
-    name: openvpn-client@{{ openvpn_client_name }}
-    state: restarted
-    enabled: yes

@@ -1,6 +1,0 @@
-[[inputs.exec]]
-  commands = [
-    "{{ nvidia_smi_stats_script_path }}"
-  ]
-  timeout = "{{ nvidia_smi_stats_timeout_s|int }}s"
-  data_format = "influx"

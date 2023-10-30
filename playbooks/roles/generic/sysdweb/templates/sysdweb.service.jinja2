@@ -1,7 +1,6 @@
 [Unit]
 Description=Start {{ sysdweb_service }} at startup.
 After=multi-user.target
-OnFailure=status-mail@{{ sysdweb_service }}.service
 
 [Service]
 Type=simple

@@ -1,4 +1,0 @@
-nicehash_api_key: "{{ vault_nicehash_api_key }}"
-nicehash_api_secret: "{{ vault_nicehash_api_secret }}"
-nicehash_organization_id: "{{ vault_nicehash_organization_id }}"
-nicehash_mining_address: "{{ vault_nicehash_mining_address }}"

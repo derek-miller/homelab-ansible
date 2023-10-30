@@ -6,14 +6,12 @@ else
 $(info running in virtualenv $(VIRTUAL_ENV))
 endif
 
-playbook ?= $(or $(PLAYBOOK),$(DEPLOY_PLAYBOOK),playbook)
+playbook ?= $(or $(ANSIBLE_PLAYBOOK),$(PLAYBOOK),default)
+inventory ?= $(or $(ANSIBLE_INVENTORY),$(INVENTORY),hosts)
 
-inventory_root = playbooks/inventory
-inventory_file_maybe = $(or $(ANSIBLE_INVENTORY),$(inventory_root))
+inventory_file_maybe = playbooks/$(inventory)
 override inventory_file = $(or $(wildcard $(inventory_file_maybe)),$(error could not find inventory file $(inventory_file_maybe)))
 
-include_only_playbooks = base setup cleanup
-valid_playbooks = $(filter-out $(include_only_playbooks),$(patsubst playbooks/%.yml,%,$(wildcard playbooks/*.yml)))
 playbook_file_maybe = playbooks/$(playbook).yml
 override playbook_file = $(or $(wildcard $(playbook_file_maybe)),$(error could not find playbook file $(playbook_file_maybe)))
 
@@ -80,12 +78,7 @@ fmt:
 
 .PHONY: check
 check:
-	set -e;\
-	echo checking inventory $(inventory_file);\
-	$(foreach playbook,$(valid_playbooks),\
-		echo checking playbook $(playbook_file) syntax against inventory $(inventory_file);\
-		$(ansible_playbook_cmd) --syntax-check;\
-	)
+	$(ansible_playbook_cmd) --syntax-check
 
 .PHONY: bootstrap
 bootstrap:

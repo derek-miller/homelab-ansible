@@ -1,0 +1,3 @@
+nas1_cifs_share_host: "{{ vault_nas1_cifs_share_host }}"
+nas1_cifs_share_username: "{{ vault_nas1_cifs_share_username }}"
+nas1_cifs_share_password: "{{ vault_nas1_cifs_share_password }}"

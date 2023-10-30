@@ -1,6 +1,0 @@
-[[inputs.exec]]
-  commands = [
-    "{{ ethminer_stats_script_path }} --host '{{ ethminer_api_host }}' --port {{ ethminer_api_port|int }} stats"
-  ]
-  timeout = "{{ ethminer_stats_timeout_s|int }}s"
-  data_format = "influx"

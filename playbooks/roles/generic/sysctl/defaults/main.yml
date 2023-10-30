@@ -1,2 +1,0 @@
-sysctl_file: /etc/sysctl.d/60-ansible.conf
-sysctl_params: []

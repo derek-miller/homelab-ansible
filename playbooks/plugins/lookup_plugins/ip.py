@@ -12,7 +12,6 @@ class LookupModule(LookupBase):
         self.basedir = basedir
 
     def run(self, terms, variables=None, **kwargs):
-
         hostname = terms[0]
 
         if not isinstance(hostname, string_types):

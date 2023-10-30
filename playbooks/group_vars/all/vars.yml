@@ -10,11 +10,29 @@ pki_tls_dir: /etc/ssl
 pki_tls_private_dir: /etc/ssl/private
 pki_tls_private_group: ssl-cert
 
-vnc_password: "{{ vault_vnc_password }}"
-
 alert_email_address: "{{ vault_alert_email_address }}"
 
+postfix_aliases:
+  - user: "{{ root_user|default('root') }}"
+    alias: "{{ alert_email_address }}"
 postfix_relayhost: "{{ vault_postfix_relayhost }}"
 postfix_relayhost_port: "{{ vault_postfix_relayhost_port|int }}"
+postfix_relaytls: true
 postfix_sasl_user: "{{ vault_postfix_sasl_user }}"
 postfix_sasl_password: "{{ vault_postfix_sasl_password }}"
+postfix_smtp_tls_cafile: "{{ pki_tls_ca_bundle }}"
+postfix_inet_protocols: ipv4
+
+influxdb2_outputs:
+  - url: "{{ vault_influxdb2_dmiller_url }}"
+    token: "{{ vault_influxdb2_dmiller_token }}"
+    organization: "{{ vault_influxdb2_dmiller_organization }}"
+    bucket: "{{ vault_influxdb2_dmiller_metrics_bucket }}"
+    namedrop:
+      - syslog
+  - url: "{{ vault_influxdb2_dmiller_url }}"
+    token: "{{ vault_influxdb2_dmiller_token }}"
+    organization: "{{ vault_influxdb2_dmiller_organization }}"
+    bucket: "{{ vault_influxdb2_dmiller_logs_bucket }}"
+    namepass:
+      - syslog

@@ -1,9 +1,0 @@
-dependencies:
-  - role: generic/systemd-status-mail
-  - role: mining/gpu-overclock
-  - role: mining/ethminer-exe
-  - role: mining/ethminer-stats
-    ethminer_api_host: localhost
-    ethminer_api_port: "{{ ethminer_coin_api_port }}"
-    ethminer_stats_state: "{{ ethminer_coin_state }}"
-    when: ethminer_coin_api_port|default('0') != '0'
