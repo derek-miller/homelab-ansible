@@ -6,15 +6,15 @@
 #
 --index-url https://pypi.python.org/simple
 
-ansible==8.5.0
+ansible==9.1.0
     # via -r requirements.in
-ansible-core==2.15.5
+ansible-core==2.16.2
     # via ansible
-bcrypt==4.0.1
+bcrypt==4.1.2
     # via paramiko
-black==23.9.1
+black==23.12.1
     # via -r requirements.in
-certifi==2023.7.22
+certifi==2023.11.17
     # via requests
 cffi==1.16.0
     # via
@@ -24,34 +24,34 @@ chardet==5.2.0
     # via
     #   -r requirements.in
     #   python-debian
-charset-normalizer==3.3.0
+charset-normalizer==3.3.2
     # via requests
 click==8.1.7
     # via
     #   -r requirements.in
     #   black
-cryptography==41.0.4
+cryptography==41.0.7
     # via
     #   -r requirements.in
     #   ansible-core
     #   paramiko
 dnspython==2.4.2
     # via -r requirements.in
-idna==3.4
+idna==3.6
     # via requests
-importlib-metadata==6.8.0
+importlib-metadata==7.0.1
     # via keyring
 jaraco-classes==3.3.0
     # via keyring
-jinja2==3.1.2
+jinja2==3.1.3
     # via
     #   -r requirements.in
     #   ansible-core
-keyring==24.2.0
+keyring==24.3.0
     # via -r requirements.in
 markupsafe==2.1.3
     # via jinja2
-more-itertools==10.1.0
+more-itertools==10.2.0
     # via jaraco-classes
 mypy-extensions==1.0.0
     # via black
@@ -59,13 +59,13 @@ packaging==23.2
     # via
     #   ansible-core
     #   black
-paramiko==3.3.1
+paramiko==3.4.0
     # via -r requirements.in
 passlib==1.7.4
     # via -r requirements.in
-pathspec==0.11.2
+pathspec==0.12.1
     # via black
-platformdirs==3.11.0
+platformdirs==4.1.0
     # via black
 pycparser==2.21
     # via cffi
@@ -83,9 +83,9 @@ resolvelib==1.0.1
     # via ansible-core
 semantic-version==2.10.0
     # via -r requirements.in
-urllib3==2.0.6
+urllib3==2.1.0
     # via requests
-websocket-client==1.6.4
+websocket-client==1.7.0
     # via -r requirements.in
 zipp==3.17.0
     # via importlib-metadata

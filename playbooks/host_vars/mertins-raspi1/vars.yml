@@ -23,6 +23,8 @@ sudoers:
   - user: pi
     passwordless: true
 
+tailscale_args: --advertise-routes=192.168.1.10/31 # Control4 controller & DS2
+
 project_files:
   - src: "vault/{{ inventory_hostname }}/var/docker/"
     dest: /var/docker/
