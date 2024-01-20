@@ -5,7 +5,6 @@ nas1
 raspi1
 mertins-raspi1
 rackpi[1:5]
-#nickpi1
 
 [uctronics-lcd]
 rackpi[1:5]
@@ -14,7 +13,6 @@ rackpi[1:5]
 raspi1
 mertins-raspi1
 rackpi[1:5]
-#nickpi1
 
 [tailscale]
 raspi1
@@ -31,7 +29,6 @@ rackpi3 nas1_cifs_share_names='["Public"]'
 [docker]
 raspi1
 mertins-raspi1
-#nickpi1
 
 [docker_compose]
 nas1
