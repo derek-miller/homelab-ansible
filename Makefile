@@ -15,7 +15,7 @@ override inventory_file = $(or $(wildcard $(inventory_file_maybe)),$(error could
 playbook_file_maybe = playbooks/$(playbook).yml
 override playbook_file = $(or $(wildcard $(playbook_file_maybe)),$(error could not find playbook file $(playbook_file_maybe)))
 
-vault_files = $(shell find playbooks -type f -path '*vault*' -not -path '*vault-plaintext*')
+vault_files = $(shell find playbooks -type f -path '*vault*' -not -path '*vault-plaintext*' -not -path 'playbooks/collections/*' -not -path 'playbooks/roles/galaxy/*')
 vault_flag = --vault-id=.vault_pass
 
 ansible_default_flags = --inventory-file=$(inventory_file) $(vault_flag)

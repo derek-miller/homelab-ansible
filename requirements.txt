@@ -6,15 +6,15 @@
 #
 --index-url https://pypi.python.org/simple
 
-ansible==9.1.0
+ansible==9.2.0
     # via -r requirements.in
-ansible-core==2.16.2
+ansible-core==2.16.3
     # via ansible
 bcrypt==4.1.2
     # via paramiko
-black==23.12.1
+black==24.1.1
     # via -r requirements.in
-certifi==2023.11.17
+certifi==2024.2.2
     # via requests
 cffi==1.16.0
     # via
@@ -30,12 +30,12 @@ click==8.1.7
     # via
     #   -r requirements.in
     #   black
-cryptography==41.0.7
+cryptography==42.0.2
     # via
     #   -r requirements.in
     #   ansible-core
     #   paramiko
-dnspython==2.4.2
+dnspython==2.5.0
     # via -r requirements.in
 idna==3.6
     # via requests
@@ -49,7 +49,7 @@ jinja2==3.1.3
     #   ansible-core
 keyring==24.3.0
     # via -r requirements.in
-markupsafe==2.1.3
+markupsafe==2.1.5
     # via jinja2
 more-itertools==10.2.0
     # via jaraco-classes
@@ -65,7 +65,7 @@ passlib==1.7.4
     # via -r requirements.in
 pathspec==0.12.1
     # via black
-platformdirs==4.1.0
+platformdirs==4.2.0
     # via black
 pycparser==2.21
     # via cffi
@@ -83,7 +83,7 @@ resolvelib==1.0.1
     # via ansible-core
 semantic-version==2.10.0
     # via -r requirements.in
-urllib3==2.1.0
+urllib3==2.2.0
     # via requests
 websocket-client==1.7.0
     # via -r requirements.in
