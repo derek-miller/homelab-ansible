@@ -1,5 +1,10 @@
-ansible_host: "{{ vault_ansible_host }}"
-ansible_port: "{{ vault_ansible_port }}"
+ansible_host: !vault |
+  $ANSIBLE_VAULT;1.1;AES256
+  39326664613561313037653063323234343436663562313939353739336136633830376137313865
+  6630393361343836356534313439626635653963383463370a396132646232346330663938393935
+  38376637326630323737313564353633643932376630626339643637656335333965373264313965
+  3134643133313336300a636664643164646431616238626339343862316235356534613539613361
+  38636435653931353637316165393736343930656536376464623938396133353331
 
 authorized_keys:
   - key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNxxAEcT71BAXlVhmi76gjI26BkXwjAgcLaPLIMI+i8 dmiller
@@ -14,7 +19,46 @@ authorized_keys:
 
 additional_docker_users:
   - pi
-docker_compose_definition: "{{ vault_docker_compose_definition }}"
+docker_compose_definition:
+  version: '3'
+  networks:
+    apps:
+      driver: bridge
+  volumes:
+    homebridge:
+  services:
+    portainer-agent:
+      container_name: portainer-agent
+      image: portainer/agent:latest
+      restart: unless-stopped
+      networks:
+        - apps
+      ports:
+        - "9001:9001"
+      volumes:
+        - /var/lib/docker/volumes:/var/lib/docker/volumes
+        - /var/run/docker.sock:/var/run/docker.sock
+      environment:
+        TZ: America/New_York
+    homebridge:
+      container_name: homebridge
+      restart: unless-stopped
+      image: homebridge/homebridge:latest
+      network_mode: host
+      logging:
+        driver: json-file
+        options:
+          max-size: "10mb"
+          max-file: "1"
+      volumes:
+        - homebridge:/homebridge
+      environment:
+        ENABLE_AVAHI: 1
+        HOMEBRIDGE_CONFIG_UI: 1
+        HOMEBRIDGE_CONFIG_UI_PORT: 8581
+        PGID: 1000
+        PUID: 1000
+        TZ: America/Chicago
 
 lightdm_autologin_user: pi
 lightdm_xorg_create_video_dummy: yes
@@ -22,10 +66,6 @@ lightdm_xorg_create_video_dummy: yes
 sudoers:
   - user: pi
     passwordless: true
-
-project_files:
-  - src: "vault/{{ inventory_hostname }}/var/docker/"
-    dest: /var/docker/
 
 raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:

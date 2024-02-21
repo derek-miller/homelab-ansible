@@ -1,0 +1,2 @@
+cifs_mount_state: present
+cifs_share_names: []

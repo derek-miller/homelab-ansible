@@ -1,5 +1,11 @@
-ansible_host: "{{ vault_ansible_host }}"
-ansible_port: "{{ vault_ansible_port }}"
+ansible_host: !vault |
+  $ANSIBLE_VAULT;1.1;AES256
+  37306436383865303738363431656338396537666130326432663139393936373764616232303136
+  3934633532356661323738393464343962333461646131640a633533623836626539356462386436
+  38626161626330373734323430316537646464643265393164373765363863656365333165373439
+  3137643138363830330a366334306131616239333735396562663338333231376233363763633139
+  38306230313064303965636234383030316261643462386336646664313034646636
+
 ansible_surrogate_ssh_host_key_algorithm: rsa
 
 root_user: admin
@@ -14,11 +20,94 @@ additional_env_paths:
    - /usr/local/bin
 
 project_files:
-  - src: "vault/{{ inventory_hostname }}/share/Container/"
+  - src: "plaintext/{{ inventory_hostname }}/share/Container/"
     dest: /share/Container/
 
 docker_compose_project_name: container
-docker_compose_definition: "{{ vault_docker_compose_definition }}"
+docker_compose_definition:
+  version: '3'
+  networks:
+    apps:
+      driver: bridge
+  volumes:
+    plex-config:
+    plex-transcode:
+  services:
+    portainer-agent:
+      container_name: portainer-agent
+      image: portainer/agent:latest
+      restart: unless-stopped
+      networks:
+        - apps
+      ports:
+        - "9001:9001"
+      volumes:
+        - /var/lib/docker/volumes:/var/lib/docker/volumes
+        - /var/run/docker.sock:/var/run/docker.sock
+      environment:
+        TZ: America/Chicago
+    telegraf:
+      container_name: telegraf
+      image: telegraf:latest
+      restart: unless-stopped
+      network_mode: host
+      user: '0:0'
+      cap_add:
+        - NET_RAW
+        - NET_ADMIN
+      volumes:
+        - /:/hostfs:ro
+        - /var/run/docker.sock:/var/run/docker.sock:ro
+        - /share/Container/Telegraf/etc/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      environment:
+        HOST_ETC: /hostfs/etc
+        HOST_MOUNT_PREFIX: /hostfs
+        HOST_PROC: /hostfs/proc
+        HOST_RUN: /hostfs/run
+        HOST_SYS: /hostfs/sys
+        HOST_VAR: /hostfs/var
+        TELEGRAF_AGENT_HOSTNAME: nas1
+        TELEGRAF_INFLUXDB_URL: "{{ influxdb2_url }}"
+        TELEGRAF_INFLUXDB_TOKEN: "{{ influxdb2_token }}"
+        TELEGRAF_INFLUXDB_ORGANIZATION: "{{ influxdb2_organization }}"
+        TELEGRAF_INFLUXDB_BUCKET: "{{ influxdb2_metrics_bucket }}"
+        TZ: America/Chicago
+      command: telegraf --config /etc/telegraf/telegraf.conf
+    plex:
+      container_name: plex
+      image: plexinc/pms-docker:latest
+      restart: unless-stopped
+      network_mode: host
+      hostname: plex
+      privileged: true
+      devices:
+        - /dev/dri:dev/dri
+      volumes:
+        - plex-config:/config
+        - plex-transcode:/transcode
+        - /share/Public:/data/public
+      environment:
+        ADVERTISE_IP: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          63653538336136383763646265666533343433333135643830383239386633356436623533336237
+          6161363165666332396531393864323136653863323538610a666564643665323563663136346538
+          38316561343164646237396538633636326665386636386335643033643961303463346238373538
+          3266313663663934350a313631656239643031303731643466323337396137393433373831633830
+          31643136613164656266373236663366306436303332343339333863326130633737633639373339
+          32653733386566626237323165646233663563626565313163356638343861633861616362356361
+          356137376637643863626436386566353532
+        ALLOWED_NETWORKS: 192.168.0.0/16
+        CHANGE_CONFIG_DIR_OWNERSHIP: 'true'
+        PLEX_CLAIM: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          62373036343963353065393561346463613431623037323533363735626633386633646530323963
+          3934373266313131333932623839373365616666343362330a643830666336616261383938623664
+          62653332366135613566373639666333653135323062333664636461663866306637343137363362
+          3630383061313235630a623666353037346138336361633135366633353163616363303135333838
+          38376236363462336364303162366662373439363432356633663363313933313538
+        PLEX_GID: 0
+        PLEX_UID: 0
+        TZ: America/Chicago
 
 authorized_keys:
   - key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQChNryHWkasg7O7YLfLSffWjrP+e6eAt5olYIPgBCeqBgPHYK3sJkAo/UHuJ1SQA22qMQlHI/2m2chASZ7tbbkaBEkWlBlbAQpwleuJE0WBN8hJd49dJToW9d6q6hNwq9bmnlA/VTkzsLAqpSEANnO28WMhHI+Upn924L4lC4tVJQmSUPm8ENgU5RVW9EcSkfIBPrIdFW0zqxPEFzZXlaOqxmbOvgS4qWirjHe4PXC1Z8DeYlK9DSTM/KGX0pz8Jgz0shKwxDpdn/j36KP1jlygwrWmnDXuWuMuU44HjMZzA3A9XKuHqiROrv1K0A4M1t5DN/UbWSNQBhQOWdica2Qaek2+dUQ5m5bgYw7sSTW5Oz/jvWU71NdFhmN9eXCJukiN7UwznecnOHf0O/Si5fFf6iJzLjHELi1JKzVLvADyZTlaxmZB82MmveB99eArOUquaeO4rOHugmOVosW/Gg4wj1j19gFy0E+yVuP01tg999YF2ST8l6Z81w2xBrZYKKw+tgQlm/WbxkzRxnumTx7JH/AddFTZvTADQB11DRySmrWBKC4QCGo8+8SdwitHt6WzDZAuOqYPK+mtMtGY3TKGazRRUvCKVTALamJWjbZcizQGj3PqfVr8+wB/+TzsUU9vJPPo9skZrYHwom/3Wu1TlAAaYd8hTriqGK7gzm1CNw== dmiller

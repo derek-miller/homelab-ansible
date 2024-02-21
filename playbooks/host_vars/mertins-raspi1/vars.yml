@@ -1,5 +1,10 @@
-ansible_host: "{{ vault_ansible_host }}"
-ansible_port: "{{ vault_ansible_port }}"
+ansible_host: !vault |
+  $ANSIBLE_VAULT;1.1;AES256
+  61653761623965656666653866346532643933313466303235376434383831336331353363386137
+  3938323662386166653131313937383466303061383433300a376364336636633935306165643038
+  39653564373262636662653037663766303439663937346363326535383833656563313930666466
+  3565393466663866380a393431376532663161663634363462656337363931346531326237346465
+  63613834383635663732626331323565383332643064393933353761663563393134
 
 authorized_keys:
   - key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNxxAEcT71BAXlVhmi76gjI26BkXwjAgcLaPLIMI+i8 dmiller
@@ -14,7 +19,46 @@ authorized_keys:
 
 additional_docker_users:
   - pi
-docker_compose_definition: "{{ vault_docker_compose_definition }}"
+docker_compose_definition:
+  version: '3'
+  networks:
+    apps:
+      driver: bridge
+  volumes:
+    homebridge:
+  services:
+    portainer-agent:
+      container_name: portainer-agent
+      image: portainer/agent:latest
+      restart: unless-stopped
+      networks:
+        - apps
+      ports:
+        - "9001:9001"
+      volumes:
+        - /var/lib/docker/volumes:/var/lib/docker/volumes
+        - /var/run/docker.sock:/var/run/docker.sock
+      environment:
+        TZ: America/Chicago
+    homebridge:
+      container_name: homebridge
+      restart: unless-stopped
+      image: homebridge/homebridge:latest
+      network_mode: host
+      logging:
+        driver: json-file
+        options:
+          max-size: "10mb"
+          max-file: "1"
+      volumes:
+        - homebridge:/homebridge
+      environment:
+        ENABLE_AVAHI: 1
+        HOMEBRIDGE_CONFIG_UI: 1
+        HOMEBRIDGE_CONFIG_UI_PORT: 8581
+        PGID: 1000
+        PUID: 1000
+        TZ: America/Chicago
 
 lightdm_autologin_user: pi
 lightdm_xorg_create_video_dummy: yes
@@ -23,11 +67,11 @@ sudoers:
   - user: pi
     passwordless: true
 
-tailscale_args: --advertise-routes=192.168.1.10/31 # Control4 controller & DS2
-
 project_files:
   - src: "vault/{{ inventory_hostname }}/var/docker/"
     dest: /var/docker/
+
+tailscale_args: --advertise-routes=192.168.1.10/31 # Control4 controller & DS2
 
 raspberry_pi_poe_hat: true
 raspberry_pi_wifi_country: US

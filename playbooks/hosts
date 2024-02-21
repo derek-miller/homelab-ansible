@@ -23,8 +23,8 @@ quinn-raspi1
 [tailscale:vars]
 create_cloudflare_ipv4_dns_record=yes
 
-[nas1-cifs-shares]
-rackpi3 nas1_cifs_share_names='["Public"]'
+[cifs-shares]
+rackpi3 cifs_shares_host_config=nas1 cifs_share_names='["Public"]'
 
 [docker]
 raspi1

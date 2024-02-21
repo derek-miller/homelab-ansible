@@ -1,4 +1,0 @@
-dependencies:
-  - role: galaxy/postfix
-  - role: generic/telegraf
-  - role: generic/telegraf-syslog

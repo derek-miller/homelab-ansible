@@ -1447,7 +1447,7 @@
   # mount_points = ["/"]
 
   ## Ignore mount points by filesystem type.
-  ignore_fs = ["tmpfs", "devtmpfs", "devfs", "overlay", "aufs", "squashfs"]
+  ignore_fs = ["nsfs", "tmpfs", "devtmpfs", "devfs", "overlay", "aufs", "squashfs"]
 
 
 # Read metrics about disk IO by device
@@ -3062,7 +3062,7 @@
   ## On linux systems telegraf also collects protocol stats.
   ## Setting ignore_protocol_stats to true will skip reporting of protocol metrics.
   ##
-  # ignore_protocol_stats = false
+  ignore_protocol_stats = true
   ##
 
 
@@ -3239,7 +3239,7 @@
 #   reverse_metric_names = true
 
 
-# # A plugin to collect stats from Opensmtpd - a validating, recursive, and caching DNS resolver 
+# # A plugin to collect stats from Opensmtpd - a validating, recursive, and caching DNS resolver
 # [[inputs.opensmtpd]]
 #   ## If running as a restricted user you can prepend sudo for additional access:
 #   #use_sudo = false
