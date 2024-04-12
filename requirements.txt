@@ -35,7 +35,8 @@ cryptography==42.0.2
     #   -r requirements.in
     #   ansible-core
     #   paramiko
-dnspython==2.5.0
+    #   secretstorage
+dnspython==2.6.1
     # via -r requirements.in
 idna==3.6
     # via requests
@@ -43,6 +44,10 @@ importlib-metadata==7.0.1
     # via keyring
 jaraco-classes==3.3.0
     # via keyring
+jeepney==0.8.0
+    # via
+    #   keyring
+    #   secretstorage
 jinja2==3.1.3
     # via
     #   -r requirements.in
@@ -81,6 +86,8 @@ requests[security]==2.31.0
     # via -r requirements.in
 resolvelib==1.0.1
     # via ansible-core
+secretstorage==3.3.3
+    # via keyring
 semantic-version==2.10.0
     # via -r requirements.in
 urllib3==2.2.0
