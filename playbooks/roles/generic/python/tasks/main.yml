@@ -11,13 +11,18 @@
   register: pip_no_disable_pip_version_check
   changed_when: (pip_no_disable_pip_version_check.stdout | regex_replace('^pip ([^ ]+).*$', '\\1')) is version_compare('6.0', '<')
 
+- name: check if pip3 needs break-system-packages flag
+  command: pip3 install --help
+  register: pip_break_system_packages_check
+  changed_when: "' --break-system-packages ' in pip_break_system_packages_check.stdout"
+
 - name: upgrade/downgrade setuptools and pip
   pip:
     name:
       - setuptools{{ setuptools_version_spec }}
       - pip{{ pip_version_spec }}
     executable: pip3
-    extra_args: "{{ '' if pip_no_disable_pip_version_check is changed else '--disable-pip-version-check' }}"
+    extra_args: "{{ '--break-system-packages' if pip_break_system_packages_check is changed else '' }} {{ '' if pip_no_disable_pip_version_check is changed else '--disable-pip-version-check' }}"
     state: latest
   environment:
     SETUPTOOLS_USE_DISTUTILS: stdlib
@@ -26,7 +31,7 @@
   pip:
     name: virtualenv{{ virtualenv_version_spec }}
     executable: pip3
-    extra_args: --disable-pip-version-check
+    extra_args: "{{ '--break-system-packages' if pip_break_system_packages_check is changed else '' }} --disable-pip-version-check"
     state: latest
   environment:
     SETUPTOOLS_USE_DISTUTILS: stdlib

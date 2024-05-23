@@ -20,12 +20,16 @@ authorized_keys:
 additional_docker_users:
   - pi
 docker_compose_definition:
-  version: '3'
   networks:
     apps:
       driver: bridge
   volumes:
     homebridge:
+    frigate-storage:
+    mosquitto-data:
+    mosquitto-log:
+    mqtt-explorer-config:
+    portainer-agent-data:
   services:
     portainer-agent:
       container_name: portainer-agent
@@ -33,13 +37,36 @@ docker_compose_definition:
       restart: unless-stopped
       networks:
         - apps
-      ports:
-        - "9001:9001"
       volumes:
         - /var/lib/docker/volumes:/var/lib/docker/volumes
         - /var/run/docker.sock:/var/run/docker.sock
+        - /:/host
+        - portainer-agent-data:/data
       environment:
         TZ: America/Chicago
+        EDGE: 1
+        EDGE_ID: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          63313638663666613539663030383331376663666165626661666633313933643261613034303862
+          3266303462396537343666646539653266346133313638640a323631643636623962653438633031
+          39303866303037356464326565333434376434373337343839616363316465623136646665313033
+          3661376531653538320a653636303438376332623837343830363461616465653063393734613632
+          66366565626536313162376364653130343133656230356234653136353730663961396236626338
+          6562653739356365393766313639663464663538373533663938
+        EDGE_KEY: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          32353537323833623636366463643135313737393135366531386265366662633264373136313837
+          3830643166646164343034316465336230623631353630320a633162656337306563313466343131
+          64343934623039383035343330313661646462383634356237653733666133316337396531393837
+          3661353038363163300a663931646138313730323763623530666433363136343634666430656633
+          64306437303132626466303862623539343632333635316133656537653361336362346131386266
+          62353435626466343138313362616533396132393931313834313732363762666266343832346237
+          33346539373434376365326562313761353236393832643532623066643337663637636262646536
+          38373937613163316365353065356331636263643633333838623066643731663130316335656431
+          36626466326636646536396436633366636130386437393336356662656539623538313238313564
+          37633834353032373665303036396638613065363765353831333765663734323766373539383063
+          333339643539646137653533333136616234
+        EDGE_INSECURE_POLL: 1
     homebridge:
       container_name: homebridge
       restart: unless-stopped
@@ -59,6 +86,92 @@ docker_compose_definition:
         PGID: 1000
         PUID: 1000
         TZ: America/Chicago
+    mosquitto:
+      image: eclipse-mosquitto
+      container_name: mosquitto
+      networks:
+        - apps
+      volumes:
+        - /var/docker/mosquitto/config:/mosquitto/config
+        - mosquitto-data:/mosquitto/data
+        - mosquitto-log:/mosquitto/log
+      environment:
+        TZ: America/Chicago
+    mqtt-explorer:
+      container_name: mqtt-explorer
+      restart: unless-stopped
+      image: smeagolworms4/mqtt-explorer:latest
+      networks:
+        - apps
+      ports:
+        - "4000:4000"
+      volumes:
+        - mqtt-explorer-config:/mqtt-explorer/config
+      environment:
+        TZ: America/Chicago
+        HTTP_PORT: 4000
+        CONFIG_PATH: /mqtt-explorer/config
+    frigate:
+      container_name: frigate
+      restart: unless-stopped
+      image: ghcr.io/blakeblackshear/frigate:stable
+      privileged: true
+      shm_size: "64mb"
+      cap_add:
+        - CAP_PERFMON
+      depends_on:
+        - mosquitto
+      networks:
+        - apps
+      devices:
+        - /dev/bus/usb:/dev/bus/usb  # Passes the USB Coral
+        - /dev/video11:/dev/video11  # For Raspberry Pi 4B
+      volumes:
+        - /etc/localtime:/etc/localtime:ro
+        - /var/docker/frigate/config:/config
+        - frigate-storage:/media/frigate
+        - type: tmpfs # 1GB of memory, reduces SSD/SD Card wear
+          target: /tmp/cache
+          tmpfs:
+            size: 1000000000
+      ports:
+        - "5000:5000"
+        - "8554:8554" # RTSP feeds
+        - "8555:8555/tcp" # WebRTC over tcp
+        - "8555:8555/udp" # WebRTC over udp
+#    unifi-cam-proxy:
+#      container_name: unifi-cam-proxy
+#      restart: unless-stopped
+#      image: keshavdv/unifi-cam-proxy:dev
+#      privileged: true
+#      networks:
+#        - apps
+#      volumes:
+#        - /var/docker/unifi-cam-proxy/app/unifi/cams/base.py:/usr/local/lib/python3.9/site-packages/unifi/cams/base.py
+#        - /var/docker/unifi-cam-proxy/client.pem:/client.pem
+#      devices:
+#        - /dev/dri/renderD128
+#      depends_on:
+#        - frigate
+#      command: >-
+#        unifi-cam-proxy
+#        --host 192.168.1.1
+#        --mac 'AC:8B:A9:8F:7D:98'
+#        --ip 192.168.1.11
+#        --cert /client.pem
+#        --token F1yfjwTa5BfCVIT4SrWYetFNLsum9PJv
+#        --name Gate
+#        --model 'UVC G4 Instant'
+#        --fw-version '4.70.39'
+#        frigate
+#        --source rtsp://admin:BiBGKbBvA3qhG6@192.168.1.11:554/h264_stream
+#        --mqtt-host mosquitto
+#        --mqtt-username mosquitto
+#        --mqtt-password KtNGubTByw37yvdeofDP
+#        --frigate-camera gate
+#        --snapshot-url http://admin:BiBGKbBvA3qhG6@192.168.1.11/api/camera/snapshot?width=640&height=480
+#        --ffmpeg-input-args='-hide_banner -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -hwaccel_output_format yuv420p'
+#        --ffmpeg-output-args='-c:v copy -ar 32000 -ac 1 -codec:a aac -b:a 32k'
 
 lightdm_autologin_user: pi
 lightdm_xorg_create_video_dummy: yes
@@ -66,6 +179,15 @@ lightdm_xorg_create_video_dummy: yes
 sudoers:
   - user: pi
     passwordless: true
+
+project_files:
+  - src: "vault/{{ inventory_hostname }}/var/docker/"
+    dest: /var/docker/
+  - src: "vault/{{ inventory_hostname }}/var/docker/mosquitto/config/mosquitto.passwd"
+    dest: /var/docker/mosquitto/config/mosquitto.passwd
+    owner: 1883
+    group: 1883
+    mode: '0700'
 
 tailscale_args: --advertise-routes=192.168.1.10/31 # Control4 controller & DS2
 

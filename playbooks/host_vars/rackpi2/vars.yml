@@ -47,6 +47,5 @@ nut_ups_monitors:
 tplink_plug_stats_ip_addresses:
   - 192.168.2.5
   - 192.168.2.6
-  - 192.168.2.7
   - 192.168.2.8
   - 192.168.2.9
