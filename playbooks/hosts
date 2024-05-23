@@ -2,33 +2,42 @@
 nas1
 
 [raspberry-pi]
-raspi1
+gianos-raspi1
 mertins-raspi1
+quinn-raspi1
 rackpi[1:5]
+raspi1
 
 [uctronics-lcd]
 rackpi[1:5]
 
 [x11vnc]
-raspi1
+gianos-raspi1
 mertins-raspi1
+quinn-raspi1
 rackpi[1:5]
+raspi1
 
 [tailscale]
-raspi1
+gianos-raspi1
 mertins-raspi1
-rackpi[1:5]
 quinn-raspi1
+rackpi[1:5]
+raspi1
 
 [tailscale:vars]
 create_cloudflare_ipv4_dns_record=yes
 
 [cifs-shares]
+rackpi1 cifs_shares_host_config=nas1 cifs_share_names='["Container"]'
 rackpi3 cifs_shares_host_config=nas1 cifs_share_names='["Public"]'
+rackpi5 cifs_shares_host_config=nas1 cifs_share_names='["Container"]'
 
 [docker]
-raspi1
+gianos-raspi1
 mertins-raspi1
+quinn-raspi1
+raspi1
 
 [docker_compose]
 nas1
@@ -40,14 +49,15 @@ rackpi1 docker_stack_name=rackpis
 rackpi[2:5]
 
 [project-files]
-raspi1
 mertins-raspi1
-rackpi1
 nas1
+rackpi1
+rackpi4
+raspi1
 
 [network-ups-tools]
-raspi1
 rackpi2
+raspi1
 
 [sysdweb]
 rackpi[1:5]
