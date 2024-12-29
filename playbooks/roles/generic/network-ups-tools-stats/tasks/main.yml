@@ -1,5 +1,6 @@
 - assert:
     that: nut_stats_state in ('present', 'absent')
+    quiet: yes
 
 - when: nut_stats_state == 'present'
   block:

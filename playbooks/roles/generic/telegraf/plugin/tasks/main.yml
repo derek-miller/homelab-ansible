@@ -1,5 +1,6 @@
 - assert:
     that: telegraf_plugin_state in ('present', 'absent')
+    quiet: yes
 
 - name: add telegraf plugin
   template:

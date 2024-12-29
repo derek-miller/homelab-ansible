@@ -24,17 +24,13 @@ docker_compose_definition:
     apps:
       driver: bridge
   volumes:
-    homebridge:
-    frigate-storage:
-    mosquitto-data:
-    mosquitto-log:
-    mqtt-explorer-config:
     portainer-agent-data:
+    homebridge:
   services:
     portainer-agent:
       container_name: portainer-agent
       image: portainer/agent:latest
-      restart: unless-stopped
+      restart: always
       networks:
         - apps
       volumes:
@@ -80,98 +76,23 @@ docker_compose_definition:
       volumes:
         - homebridge:/homebridge
       environment:
-        ENABLE_AVAHI: 1
-        HOMEBRIDGE_CONFIG_UI: 1
-        HOMEBRIDGE_CONFIG_UI_PORT: 8581
-        PGID: 1000
-        PUID: 1000
         TZ: America/Chicago
-    mosquitto:
-      image: eclipse-mosquitto
-      container_name: mosquitto
-      networks:
-        - apps
-      volumes:
-        - /var/docker/mosquitto/config:/mosquitto/config
-        - mosquitto-data:/mosquitto/data
-        - mosquitto-log:/mosquitto/log
-      environment:
-        TZ: America/Chicago
-    mqtt-explorer:
-      container_name: mqtt-explorer
+    docker-volume-backup:
+      container_name: docker-volume-backup
+      image: offen/docker-volume-backup:latest
       restart: unless-stopped
-      image: smeagolworms4/mqtt-explorer:latest
       networks:
         - apps
-      ports:
-        - "4000:4000"
-      volumes:
-        - mqtt-explorer-config:/mqtt-explorer/config
       environment:
-        TZ: America/Chicago
-        HTTP_PORT: 4000
-        CONFIG_PATH: /mqtt-explorer/config
-    frigate:
-      container_name: frigate
-      restart: unless-stopped
-      image: ghcr.io/blakeblackshear/frigate:stable
-      privileged: true
-      shm_size: "64mb"
-      cap_add:
-        - CAP_PERFMON
-      depends_on:
-        - mosquitto
-      networks:
-        - apps
-      devices:
-        - /dev/bus/usb:/dev/bus/usb  # Passes the USB Coral
-        - /dev/video11:/dev/video11  # For Raspberry Pi 4B
+        BACKUP_CRON_EXPRESSION: "0 0 * * *"
+        BACKUP_FILENAME: backup-%Y-%m-%dT%H-%M-%S.tar.gz
+        BACKUP_PRUNING_PREFIX: backup-
+        BACKUP_RETENTION_DAYS: 7
       volumes:
-        - /etc/localtime:/etc/localtime:ro
-        - /var/docker/frigate/config:/config
-        - frigate-storage:/media/frigate
-        - type: tmpfs # 1GB of memory, reduces SSD/SD Card wear
-          target: /tmp/cache
-          tmpfs:
-            size: 1000000000
-      ports:
-        - "5000:5000"
-        - "8554:8554" # RTSP feeds
-        - "8555:8555/tcp" # WebRTC over tcp
-        - "8555:8555/udp" # WebRTC over udp
-#    unifi-cam-proxy:
-#      container_name: unifi-cam-proxy
-#      restart: unless-stopped
-#      image: keshavdv/unifi-cam-proxy:dev
-#      privileged: true
-#      networks:
-#        - apps
-#      volumes:
-#        - /var/docker/unifi-cam-proxy/app/unifi/cams/base.py:/usr/local/lib/python3.9/site-packages/unifi/cams/base.py
-#        - /var/docker/unifi-cam-proxy/client.pem:/client.pem
-#      devices:
-#        - /dev/dri/renderD128
-#      depends_on:
-#        - frigate
-#      command: >-
-#        unifi-cam-proxy
-#        --host 192.168.1.1
-#        --mac 'AC:8B:A9:8F:7D:98'
-#        --ip 192.168.1.11
-#        --cert /client.pem
-#        --token F1yfjwTa5BfCVIT4SrWYetFNLsum9PJv
-#        --name Gate
-#        --model 'UVC G4 Instant'
-#        --fw-version '4.70.39'
-#        frigate
-#        --source rtsp://admin:BiBGKbBvA3qhG6@192.168.1.11:554/h264_stream
-#        --mqtt-host mosquitto
-#        --mqtt-username mosquitto
-#        --mqtt-password KtNGubTByw37yvdeofDP
-#        --frigate-camera gate
-#        --snapshot-url http://admin:BiBGKbBvA3qhG6@192.168.1.11/api/camera/snapshot?width=640&height=480
-#        --ffmpeg-input-args='-hide_banner -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -hwaccel_output_format yuv420p'
-#        --ffmpeg-output-args='-c:v copy -ar 32000 -ac 1 -codec:a aac -b:a 32k'
+        - /mnt/Backups/Volumes/mertins-raspi1:/archive
+        # volumes to backup:
+        - homebridge:/backup/homebridge:ro
+        - portainer-agent-data:/backup/portainer-agent-data:ro
 
 lightdm_autologin_user: pi
 lightdm_xorg_create_video_dummy: yes
@@ -180,16 +101,7 @@ sudoers:
   - user: pi
     passwordless: true
 
-project_files:
-  - src: "vault/{{ inventory_hostname }}/var/docker/"
-    dest: /var/docker/
-  - src: "vault/{{ inventory_hostname }}/var/docker/mosquitto/config/mosquitto.passwd"
-    dest: /var/docker/mosquitto/config/mosquitto.passwd
-    owner: 1883
-    group: 1883
-    mode: '0700'
-
-tailscale_args: --advertise-routes=192.168.1.10/31 # Control4 controller & DS2
+tailscale_args: --accept-routes --advertise-routes=192.168.1.10/32,192.168.1.11/32 # Control4 controller & DS2
 
 raspberry_pi_poe_hat: true
 raspberry_pi_wifi_country: US
@@ -198,3 +110,4 @@ raspberry_pi_video_group_users:
 raspberry_pi_boot_config_options:
   - option: gpu_mem
     value: 160
+raspberry_pi_swap_size_mb: 0

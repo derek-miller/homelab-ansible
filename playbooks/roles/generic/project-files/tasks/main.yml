@@ -10,3 +10,12 @@
    - project_files | length > 0
    - (item.state | default('present')) == "present"
   loop: "{{ project_files }}"
+
+- name: Delete project files
+  file:
+    path: "{{ item.dest }}"
+    state: absent
+  when:
+    - project_files | length > 0
+    - (item.state | default('present')) == "absent"
+  loop: "{{ project_files }}"

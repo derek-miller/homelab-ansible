@@ -6,19 +6,19 @@
 #
 --index-url https://pypi.python.org/simple
 
-ansible==9.6.0
+ansible==11.0.0
     # via -r requirements.in
-ansible-core==2.16.7
+ansible-core==2.18.0
     # via ansible
-backports-tarfile==1.1.1
+backports-tarfile==1.2.0
     # via jaraco-context
-bcrypt==4.1.3
+bcrypt==4.2.1
     # via paramiko
-black==24.4.2
+black==24.10.0
     # via -r requirements.in
-certifi==2024.2.2
+certifi==2024.8.30
     # via requests
-cffi==1.16.0
+cffi==1.17.1
     # via
     #   cryptography
     #   pynacl
@@ -26,54 +26,54 @@ chardet==5.2.0
     # via
     #   -r requirements.in
     #   python-debian
-charset-normalizer==3.3.2
+charset-normalizer==3.4.0
     # via requests
 click==8.1.7
     # via
     #   -r requirements.in
     #   black
-cryptography==42.0.7
+cryptography==43.0.3
     # via
     #   -r requirements.in
     #   ansible-core
     #   paramiko
-dnspython==2.6.1
+dnspython==2.7.0
     # via -r requirements.in
-idna==3.7
+idna==3.10
     # via requests
-importlib-metadata==7.1.0
+importlib-metadata==8.5.0
     # via keyring
 jaraco-classes==3.4.0
     # via keyring
-jaraco-context==5.3.0
+jaraco-context==6.0.1
     # via keyring
-jaraco-functools==4.0.1
+jaraco-functools==4.1.0
     # via keyring
 jinja2==3.1.4
     # via
     #   -r requirements.in
     #   ansible-core
-keyring==25.2.1
+keyring==25.5.0
     # via -r requirements.in
-markupsafe==2.1.5
+markupsafe==3.0.2
     # via jinja2
-more-itertools==10.2.0
+more-itertools==10.5.0
     # via
     #   jaraco-classes
     #   jaraco-functools
 mypy-extensions==1.0.0
     # via black
-packaging==24.0
+packaging==24.2
     # via
     #   ansible-core
     #   black
-paramiko==3.4.0
+paramiko==3.5.0
     # via -r requirements.in
 passlib==1.7.4
     # via -r requirements.in
 pathspec==0.12.1
     # via black
-platformdirs==4.2.2
+platformdirs==4.3.6
     # via black
 pycparser==2.22
     # via cffi
@@ -81,19 +81,19 @@ pynacl==1.5.0
     # via paramiko
 python-debian==0.1.49
     # via -r requirements.in
-pyyaml==6.0.1
+pyyaml==6.0.2
     # via
     #   -r requirements.in
     #   ansible-core
-requests[security]==2.32.2
+requests[security]==2.32.3
     # via -r requirements.in
 resolvelib==1.0.1
     # via ansible-core
 semantic-version==2.10.0
     # via -r requirements.in
-urllib3==2.2.1
+urllib3==2.2.3
     # via requests
 websocket-client==1.8.0
     # via -r requirements.in
-zipp==3.18.2
+zipp==3.21.0
     # via importlib-metadata

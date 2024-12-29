@@ -1,7 +1,9 @@
 - assert:
     that: sysdweb_state in ('present', 'absent')
+    quiet: yes
 - assert:
     that: ansible_service_mgr == 'systemd'
+    quiet: yes
 
 - when: sysdweb_state == 'present'
   block:
@@ -23,8 +25,6 @@
           - sysdweb
         extra_args: --pre --upgrade-strategy only-if-needed
         state: latest
-      environment:
-        SETUPTOOLS_USE_DISTUTILS: stdlib
 
     - name: get systemd service info
       ansible.builtin.service_facts:

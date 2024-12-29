@@ -1,11 +1,14 @@
 ansible_host: !vault |
   $ANSIBLE_VAULT;1.1;AES256
-  30623766643666306436313935616133613235313962363733393265653366316438376139653332
-  6534393936353939336639306233666234656135353931350a353664356165633732643937313539
-  32313764313139343065383762343763613066663330373836656263666366623563663364666331
-  6332363432356161320a373037333335353430333665613761623639366264646662393964386634
-  63623162383962383363353239333163663864313765316334633462356639383334
+  38633136366534356636636130356434343261663734366339353765656161313035346662363833
+  3339393661386632626334333237363630323261623262630a363761666562336436356238646565
+  30613935313461616234313636613536613761396235646263356464306664316430636265313535
+  3537323032353932350a366435376164313462656432626135306131643433613065333633323063
+  64343366313465376463653765323638373464356633663063613537616139366562
 
+additional_env_vars: # TODO: Why is this needed?
+  XAUTHORITY: /home/pi/.Xauthority
+  DISPLAY: :0
 
 authorized_keys:
   - key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNxxAEcT71BAXlVhmi76gjI26BkXwjAgcLaPLIMI+i8 dmiller
@@ -31,7 +34,7 @@ docker_compose_definition:
     portainer-agent:
       container_name: portainer-agent
       image: portainer/agent:latest
-      restart: unless-stopped
+      restart: always
       networks:
         - apps
       volumes:
@@ -77,12 +80,23 @@ docker_compose_definition:
       volumes:
         - homebridge:/homebridge
       environment:
-        ENABLE_AVAHI: 1
-        HOMEBRIDGE_CONFIG_UI: 1
-        HOMEBRIDGE_CONFIG_UI_PORT: 8581
-        PGID: 1000
-        PUID: 1000
         TZ: America/Chicago
+    docker-volume-backup:
+      container_name: docker-volume-backup
+      image: offen/docker-volume-backup:latest
+      restart: unless-stopped
+      networks:
+        - apps
+      environment:
+        BACKUP_CRON_EXPRESSION: "0 0 * * *"
+        BACKUP_FILENAME: backup-%Y-%m-%dT%H-%M-%S.tar.gz
+        BACKUP_PRUNING_PREFIX: backup-
+        BACKUP_RETENTION_DAYS: 7
+      volumes:
+        - /mnt/Backups/Volumes/quinn-raspi1:/archive
+        # volumes to backup:
+        - homebridge:/backup/homebridge:ro
+        - portainer-agent-data:/backup/portainer-agent-data:ro
 
 lightdm_autologin_user: pi
 lightdm_xorg_create_video_dummy: yes
@@ -91,8 +105,9 @@ sudoers:
   - user: pi
     passwordless: true
 
-tailscale_args: --advertise-routes=192.168.1.108/32 # Control4 controller
+tailscale_args: --accept-routes --advertise-routes=192.168.1.108/32 # Control4 controller
 
 raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:
   - pi
+raspberry_pi_swap_size_mb: 0

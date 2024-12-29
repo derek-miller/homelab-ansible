@@ -1,7 +1,9 @@
 - assert:
     that: ansible_os_family == 'Debian'
+    quiet: yes
 - assert:
     that: ansible_service_mgr == 'systemd'
+    quiet: yes
 
 - name: install x11vnc
   apt:

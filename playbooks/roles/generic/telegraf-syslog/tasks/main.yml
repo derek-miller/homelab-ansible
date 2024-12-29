@@ -1,9 +1,12 @@
 - assert:
     that: telegraf_syslog_state in ('present',)
+    quiet: yes
 - assert:
     that: ansible_os_family == 'Debian'
+    quiet: yes
 - assert:
     that: ansible_service_mgr == 'systemd'
+    quiet: yes
 
 - name: install rsyslog
   apt:

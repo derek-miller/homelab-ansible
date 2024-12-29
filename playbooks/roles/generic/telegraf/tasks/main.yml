@@ -1,5 +1,6 @@
 - assert:
     that: telegraf_state in ('present', 'absent')
+    quiet: yes
 
 - name: stop and disable telegraf service
   service:

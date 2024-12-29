@@ -10,7 +10,6 @@
     state: latest
   tags:
     - base
-  when: "'qnap' not in group_names"
 
 - name: create ansible remote dir
   file:
@@ -36,8 +35,6 @@
     virtualenv_site_packages: yes
     extra_args: --no-build-isolation
     state: present
-  environment:
-    SETUPTOOLS_USE_DISTUTILS: stdlib
   tags:
     - base
 

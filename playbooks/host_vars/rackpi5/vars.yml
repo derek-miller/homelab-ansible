@@ -27,9 +27,14 @@ sudoers:
   - user: pi
     passwordless: true
 
+project_files:
+  - src: "plaintext/{{ inventory_hostname }}/var/docker/"
+    dest: /var/docker/
+
 raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:
   - pi
 raspberry_pi_boot_config_options:
   - option: gpu_mem
     value: 160
+raspberry_pi_swap_size_mb: 0

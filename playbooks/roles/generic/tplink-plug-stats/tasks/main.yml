@@ -1,5 +1,6 @@
 - assert:
     that: tplink_plug_stats_state in ('present', 'absent')
+    quiet: yes
 
 - when: tplink_plug_stats_state == 'present'
   block:
@@ -11,8 +12,6 @@
           - python-kasa
         extra_args: --pre --upgrade-strategy only-if-needed
         state: latest
-      environment:
-        SETUPTOOLS_USE_DISTUTILS: stdlib
 
     - name: create tplink-plug-stats script dir
       file:

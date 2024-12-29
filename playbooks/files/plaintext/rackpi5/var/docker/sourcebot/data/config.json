@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/sourcebot-dev/sourcebot/main/schemas/v2/index.json",
+  "repos": [
+    {
+      "type": "local",
+      "path": "/repos/drivers",
+      "watch": true
+    }
+  ]
+}
