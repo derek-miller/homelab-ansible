@@ -18,3 +18,4 @@ raspberry_pi_boot_config_path: /boot/config.txt
 #raspberry_pi_onewire: false
 #raspberry_pi_rgpio: false
 #raspberry_pi_poe_hat: false
+#raspberry_pi_swap_size_mb: 100

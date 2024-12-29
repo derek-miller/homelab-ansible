@@ -46,7 +46,7 @@
     - ansible-remote
 
 - name: common
-  hosts: all:!qnap
+  hosts: all
   roles:
     - common
   tags:
@@ -55,7 +55,7 @@
     - common
 
 - name: telegraf
-  hosts: all:!qnap
+  hosts: all
   roles:
     - generic/telegraf
     - generic/telegraf-syslog
@@ -171,18 +171,11 @@
     - docker
     - docker-swarm
 
-- hosts: docker:docker_compose
+- hosts: docker
   tasks:
-    - name: check for docker_compose_v2 module support
-      shell: "PATH=\"{{ ansible_env.PATH }}\"; docker compose version"
-      register: docker_compose_no_v2_check
-      changed_when: false
-    - name: set docker_compose_use_v2_module var
-      set_fact:
-        docker_compose_use_v2_module: "{{ (docker_compose_no_v2_check.stdout | regex_replace('^Docker Compose version v([0-9\\.]+).*$', '\\1')) is version_compare('2.18.0', '>=') }}"
-    - name: create docker containers (V2)
-      when: docker_compose_definition is defined and docker_compose_use_v2_module
+    - name: create docker containers
       community.docker.docker_compose_v2:
+        docker_cli: "{{ docker_cli|default(omit) }}"
         state: "{{ docker_compose_state|default('present') }}"
         remove_images: all
         remove_volumes: yes
@@ -190,20 +183,6 @@
         project_name: "{{ docker_compose_project_name|default(inventory_hostname) }}"
         definition: "{{ docker_compose_definition }}"
         pull: always
-      tags:
-        - docker-compose
-    - name: create docker containers
-      when: docker_compose_definition is defined and not docker_compose_use_v2_module
-      community.general.docker_compose:
-        state: "{{ docker_compose_state|default('present') }}"
-        remove_images: all
-        remove_volumes: yes
-        remove_orphans: yes
-        project_name: "{{ docker_compose_project_name|default(inventory_hostname) }}"
-        definition: "{{ docker_compose_definition }}"
-        pull: yes
-      tags:
-        - docker-compose
   tags:
     - docker
     - docker-compose

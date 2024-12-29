@@ -16,7 +16,7 @@
     owner: "{{ root_user|default('root') }}"
     group: "{{ root_group|default('root') }}"
     mode: 0440
-    validate: "{{ 'visudo -cf %s' if 'qnap' not in group_names else omit }}"
+    validate: "{{ 'visudo -cf %s' }}"
   when: sudoers|default([])|length > 0
 
 - name: delete additional sudoers file

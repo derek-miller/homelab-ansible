@@ -1,5 +1,6 @@
 - assert:
     that: python_state == 'present'
+    quiet: yes
 
 - name: install pip3
   apt:
@@ -14,7 +15,11 @@
 - name: check if pip3 needs break-system-packages flag
   command: pip3 install --help
   register: pip_break_system_packages_check
-  changed_when: "' --break-system-packages ' in pip_break_system_packages_check.stdout"
+  changed_when: false
+
+- name: set pip_break_system_packages var
+  set_fact:
+    pip_break_system_packages: "{{ ' --break-system-packages ' in pip_break_system_packages_check.stdout }}"
 
 - name: upgrade/downgrade setuptools and pip
   pip:
@@ -22,16 +27,12 @@
       - setuptools{{ setuptools_version_spec }}
       - pip{{ pip_version_spec }}
     executable: pip3
-    extra_args: "{{ '--break-system-packages' if pip_break_system_packages_check is changed else '' }} {{ '' if pip_no_disable_pip_version_check is changed else '--disable-pip-version-check' }}"
+    extra_args: "{{ '--break-system-packages' if pip_break_system_packages else '' }} {{ '' if pip_no_disable_pip_version_check is changed else '--disable-pip-version-check' }}"
     state: latest
-  environment:
-    SETUPTOOLS_USE_DISTUTILS: stdlib
 
 - name: install/upgrade virtualenv
   pip:
     name: virtualenv{{ virtualenv_version_spec }}
     executable: pip3
-    extra_args: "{{ '--break-system-packages' if pip_break_system_packages_check is changed else '' }} --disable-pip-version-check"
+    extra_args: "{{ '--break-system-packages' if pip_break_system_packages else '' }} --disable-pip-version-check"
     state: latest
-  environment:
-    SETUPTOOLS_USE_DISTUTILS: stdlib

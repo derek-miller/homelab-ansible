@@ -2,7 +2,6 @@
   group:
     name: ssh
     state: present
-  when: "'qnap' not in group_names"
 
 - name: create ansible surrogate user
   user:
@@ -13,7 +12,6 @@
     password: !
     shell: /bin/bash
     createhome: yes
-  when: "'qnap' not in group_names"
 
 - name: authorize ansible surrogate ssh key
   authorized_key:
@@ -38,4 +36,4 @@
     owner: "{{ root_user|default('root') }}"
     group: "{{ root_group|default('root') }}"
     mode: 0440
-    validate: "{{ 'visudo -cf %s' if 'qnap' not in group_names else omit }}"
+    validate: "{{ 'visudo -cf %s' }}"

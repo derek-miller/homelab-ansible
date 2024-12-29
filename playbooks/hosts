@@ -1,6 +1,3 @@
-[qnap]
-nas1
-
 [raspberry-pi]
 gianos-raspi1
 mertins-raspi1
@@ -29,18 +26,21 @@ raspi1
 create_cloudflare_ipv4_dns_record=yes
 
 [cifs-shares]
-rackpi1 cifs_shares_host_config=nas1 cifs_share_names='["Container"]'
-rackpi3 cifs_shares_host_config=nas1 cifs_share_names='["Public"]'
-rackpi5 cifs_shares_host_config=nas1 cifs_share_names='["Container"]'
+gianos-raspi1  cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
+mertins-raspi1 cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
+quinn-raspi1   cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
+rackpi1        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container"]'
+rackpi2        cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
+rackpi3        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Public"]'
+rackpi4        cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
+rackpi5        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container", "Public"]'
+raspi1         cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 
 [docker]
 gianos-raspi1
 mertins-raspi1
 quinn-raspi1
 raspi1
-
-[docker_compose]
-nas1
 
 [docker_swarm_manager]
 rackpi1 docker_stack_name=rackpis
@@ -49,10 +49,9 @@ rackpi1 docker_stack_name=rackpis
 rackpi[2:5]
 
 [project-files]
-mertins-raspi1
-nas1
 rackpi1
 rackpi4
+rackpi5
 raspi1
 
 [network-ups-tools]

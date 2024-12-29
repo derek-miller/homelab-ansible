@@ -1,12 +1,12 @@
 ---
 - assert:
     that: ansible_os_family == 'Debian'
+    quiet: yes
 
 - name: install raspi-config dependency
   apt:
     name:
       - raspi-config
-      - libraspberrypi-bin
 
 - name: configure options in {{ raspberry_pi_boot_config_path }}
   lineinfile:
@@ -84,40 +84,63 @@
 
 - name: enable/disable serial
   shell: "raspi-config nonint do_serial {{ 0 if raspberry_pi_serial else 1 }}"
+  environment: "{{ ansible_env | default({}) }}"
   changed_when: false
   when: raspberry_pi_serial is defined and raspberry_pi_serial in (true, false)
 
 - name: enable/disable I2C
   shell: "raspi-config nonint do_i2c {{ 0 if raspberry_pi_i2c else 1 }}"
+  environment: "{{ ansible_env | default({}) }}"
   changed_when: false
   when: raspberry_pi_i2c is defined and raspberry_pi_i2c in (true, false)
 
 - name: enable/disable SPI
   shell: "raspi-config nonint do_spi {{ 0 if raspberry_pi_spi else 1 }}"
+  environment: "{{ ansible_env | default({}) }}"
   changed_when: false
   when: raspberry_pi_spi is defined and raspberry_pi_spi in (true, false)
 
 - name: enable/disable Camera
   shell: "raspi-config nonint do_camera {{ 0 if raspberry_pi_camera else 1 }}"
+  environment: "{{ ansible_env | default({}) }}"
   changed_when: false
   when: raspberry_pi_camera is defined and raspberry_pi_camera in (true, false)
 
 - name: enable/disable VNC
   shell: "raspi-config nonint do_vnc {{ 0 if raspberry_pi_vnc else 1 }}"
+  environment: "{{ ansible_env | default({}) }}"
   changed_when: false
   when: raspberry_pi_vnc is defined and raspberry_pi_vnc in (true, false)
 
 - name: enable/disable OneWire
   shell: "raspi-config nonint do_onewire {{ 0 if raspberry_pi_onewire else 1 }}"
+  environment: "{{ ansible_env | default({}) }}"
   changed_when: false
   when: raspberry_pi_onewire is defined and raspberry_pi_onewire in (true, false)
 
 - name: enable/disable Remote GPIO
   shell: "raspi-config nonint do_rgpio {{ 0 if raspberry_pi_rgpio else 1 }}"
+  environment: "{{ ansible_env | default({}) }}"
   changed_when: false
   when: raspberry_pi_rgpio is defined and raspberry_pi_rgpio in (true, false)
 
 - name: set WiFi country
   shell: "raspi-config nonint do_wifi_country {{ raspberry_pi_wifi_country }}"
+  environment: "{{ ansible_env | default({}) }}"
   changed_when: false
   when: raspberry_pi_wifi_country is defined
+
+- name: configure swap size
+  lineinfile:
+    dest: /etc/dphys-swapfile
+    regexp: "^#?CONF_SWAPSIZE="
+    line: "CONF_SWAPSIZE={{ raspberry_pi_swap_size_mb|int }}"
+    insertafter: EOF
+    create: false # file should exist
+    state: present
+  when: raspberry_pi_swap_size_mb is defined
+  register: raspberry_pi_etc_dphys_swapfile
+
+- name: reboot to apply swap size changes
+  ansible.builtin.reboot:
+  when: raspberry_pi_etc_dphys_swapfile.changed

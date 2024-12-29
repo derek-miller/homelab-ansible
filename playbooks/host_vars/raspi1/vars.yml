@@ -30,7 +30,7 @@ docker_compose_definition:
     portainer-agent:
       container_name: portainer-agent
       image: portainer/agent:latest
-      restart: unless-stopped
+      restart: always
       networks:
         - apps
       volumes:
@@ -76,12 +76,23 @@ docker_compose_definition:
       volumes:
         - homebridge:/homebridge
       environment:
-        ENABLE_AVAHI: 1
-        HOMEBRIDGE_CONFIG_UI: 1
-        HOMEBRIDGE_CONFIG_UI_PORT: 8581
-        PGID: 1000
-        PUID: 1000
-        TZ: America/Chicago
+        TZ: America/New_York
+    docker-volume-backup:
+      container_name: docker-volume-backup
+      image: offen/docker-volume-backup:latest
+      restart: unless-stopped
+      networks:
+        - apps
+      environment:
+        BACKUP_CRON_EXPRESSION: "0 0 * * *"
+        BACKUP_FILENAME: backup-%Y-%m-%dT%H-%M-%S.tar.gz
+        BACKUP_PRUNING_PREFIX: backup-
+        BACKUP_RETENTION_DAYS: 7
+      volumes:
+        - /mnt/Backups/Volumes/raspi1:/archive
+        # volumes to backup:
+        - homebridge:/backup/homebridge:ro
+        - portainer-agent-data:/backup/portainer-agent-data:ro
 
 lightdm_autologin_user: pi
 lightdm_xorg_create_video_dummy: yes
@@ -90,12 +101,15 @@ sudoers:
   - user: pi
     passwordless: true
 
+tailscale_args: --accept-routes
+
 raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:
   - pi
 raspberry_pi_boot_config_options:
   - option: gpu_mem
     value: 160
+raspberry_pi_swap_size_mb: 0
 
 nut_stats_target: wan-i10-ups
 nut_ups_devices:

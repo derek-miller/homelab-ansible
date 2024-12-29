@@ -37,8 +37,6 @@
     name: setuptools{{ setuptools_version_spec }}
     extra_args: --upgrade-strategy only-if-needed
     state: latest
-  environment:
-    SETUPTOOLS_USE_DISTUTILS: stdlib
 
 - name: create virtualenv and upgrade pip
   pip:
@@ -47,5 +45,3 @@
     name: pip{{ pip_version_spec }}
     extra_args: --upgrade-strategy only-if-needed
     state: latest
-  environment:
-    SETUPTOOLS_USE_DISTUTILS: stdlib

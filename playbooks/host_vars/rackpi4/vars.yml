@@ -28,8 +28,11 @@ sudoers:
     passwordless: true
 
 project_files:
-  - src: "vault/{{ inventory_hostname }}/var/docker/"
-    dest: /var/docker/
+  - src: "plaintext/{{ inventory_hostname }}/var/docker/mosquitto/config/mosquitto.conf"
+    dest: /var/docker/mosquitto/config/mosquitto.conf
+    owner: 1883
+    group: 1883
+    mode: '0640'
   - src: "vault/{{ inventory_hostname }}/var/docker/mosquitto/config/mosquitto.passwd"
     dest: /var/docker/mosquitto/config/mosquitto.passwd
     owner: 1883
@@ -39,3 +42,4 @@ project_files:
 raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:
   - pi
+raspberry_pi_swap_size_mb: 0
