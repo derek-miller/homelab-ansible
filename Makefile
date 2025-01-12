@@ -70,7 +70,10 @@ endif
 pip_compile = pip-compile -i $(PIP_INDEX_URL) $(pip_compile_flags)
 
 requirements.txt: requirements.in
-	$(pip_compile) $< -o requirements.txt
+	$(pip_compile) $< -o $@
+
+playbooks/roles/ansible/remote/files/requirements.txt: playbooks/roles/ansible/remote/files/requirements.in
+	$(pip_compile) --pip-args='--no-build-isolation' $< -o $@
 
 .PHONY: fmt
 fmt:

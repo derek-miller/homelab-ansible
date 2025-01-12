@@ -6,9 +6,9 @@
 #
 --index-url https://pypi.python.org/simple
 
-ansible==11.0.0
+ansible==11.1.0
     # via -r requirements.in
-ansible-core==2.18.0
+ansible-core==2.18.1
     # via ansible
 backports-tarfile==1.2.0
     # via jaraco-context
@@ -16,7 +16,7 @@ bcrypt==4.2.1
     # via paramiko
 black==24.10.0
     # via -r requirements.in
-certifi==2024.8.30
+certifi==2024.12.14
     # via requests
 cffi==1.17.1
     # via
@@ -26,13 +26,13 @@ chardet==5.2.0
     # via
     #   -r requirements.in
     #   python-debian
-charset-normalizer==3.4.0
+charset-normalizer==3.4.1
     # via requests
-click==8.1.7
+click==8.1.8
     # via
     #   -r requirements.in
     #   black
-cryptography==43.0.3
+cryptography==44.0.0
     # via
     #   -r requirements.in
     #   ansible-core
@@ -49,11 +49,11 @@ jaraco-context==6.0.1
     # via keyring
 jaraco-functools==4.1.0
     # via keyring
-jinja2==3.1.4
+jinja2==3.1.5
     # via
     #   -r requirements.in
     #   ansible-core
-keyring==25.5.0
+keyring==25.6.0
     # via -r requirements.in
 markupsafe==3.0.2
     # via jinja2
@@ -91,7 +91,7 @@ resolvelib==1.0.1
     # via ansible-core
 semantic-version==2.10.0
     # via -r requirements.in
-urllib3==2.2.3
+urllib3==2.3.0
     # via requests
 websocket-client==1.8.0
     # via -r requirements.in
