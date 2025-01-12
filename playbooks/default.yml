@@ -28,14 +28,6 @@
   tags:
     - bootstrap
 
-- name: bootstrap tailscale
-  hosts: tailscale
-  roles:
-    - role: galaxy/tailscale
-      when: bootstrap|default(false)|bool
-  tags:
-    - bootstrap
-
 - name: set up ansible environment on remote
   hosts: all
   roles:
@@ -77,7 +69,6 @@
 - hosts: tailscale
   roles:
     - role: galaxy/tailscale
-      tailscale_up_skip: yes # Only authenticate tailscale during bootstrapping
   tasks:
     - name: get tailscale ip addresses
       command: tailscale ip

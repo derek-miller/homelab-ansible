@@ -95,7 +95,7 @@ sudoers:
   - user: pi
     passwordless: true
 
-tailscale_args: --accept-routes --advertise-routes=10.0.0.0/24
+tailscale_args: --accept-routes --advertise-routes=''
 
 raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:

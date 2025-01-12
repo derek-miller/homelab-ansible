@@ -101,7 +101,7 @@ sudoers:
   - user: pi
     passwordless: true
 
-tailscale_args: --accept-routes --advertise-routes=192.168.1.10/32,192.168.1.11/32 # Control4 controller & DS2
+tailscale_args: --accept-routes --advertise-routes=''
 
 raspberry_pi_poe_hat: true
 raspberry_pi_wifi_country: US

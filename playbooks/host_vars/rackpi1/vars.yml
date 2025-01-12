@@ -32,7 +32,7 @@ project_files:
   - src: "vault/{{ inventory_hostname }}/var/docker/"
     dest: /var/docker/
 
-tailscale_args: --advertise-routes=fd7a:115c:a1e0:b1a:0:1:c0a8:10a/128 # unas (192.168.1.10)
+tailscale_args: --advertise-routes=fd7a:115c:a1e0:b1a:0:1:c0a8:10a/128,192.168.1.10/32 # unas-pro
 
 raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:
