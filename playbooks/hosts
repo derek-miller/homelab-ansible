@@ -1,5 +1,6 @@
 [raspberry-pi]
 gianos-raspi1
+harlan-raspi1
 mertins-raspi1
 quinn-raspi1
 rackpi[1:5]
@@ -10,6 +11,7 @@ rackpi[1:5]
 
 [x11vnc]
 gianos-raspi1
+harlan-raspi1
 mertins-raspi1
 quinn-raspi1
 rackpi[1:5]
@@ -17,6 +19,7 @@ raspi1
 
 [tailscale]
 gianos-raspi1
+harlan-raspi1
 mertins-raspi1
 quinn-raspi1
 rackpi[1:5]
@@ -27,6 +30,7 @@ create_cloudflare_ipv4_dns_record=yes
 
 [cifs-shares]
 gianos-raspi1  cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
+harlan-raspi1  cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 mertins-raspi1 cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 quinn-raspi1   cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 rackpi1        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container"]'
@@ -38,9 +42,11 @@ raspi1         cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"
 
 [docker]
 gianos-raspi1
+harlan-raspi1
 mertins-raspi1
 quinn-raspi1
 raspi1
+rackpi[1:5]
 
 [docker_swarm_manager]
 rackpi1 docker_stack_name=rackpis
@@ -63,3 +69,6 @@ rackpi[1:5]
 
 [tplink-plug-stats]
 rackpi2
+
+[ser2net]
+rackpi4

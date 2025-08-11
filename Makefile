@@ -54,7 +54,7 @@ init:
 	pip install -i $(PIP_INDEX_URL) -U setuptools pip wheel pip-tools
 
 .PHONY: install
-install: requirements.txt
+install: requirements.txt playbooks/roles/ansible/remote/files/requirements.txt
 	pip-sync -i $(PIP_INDEX_URL)
 
 .PHONY: galaxy-install

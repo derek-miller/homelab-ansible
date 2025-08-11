@@ -43,3 +43,14 @@ raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:
   - pi
 raspberry_pi_swap_size_mb: 0
+
+# ser2net configuration for ConBee II Zigbee coordinator
+ser2net_connections:
+  - name: conbee
+    accepter: tcp,3333
+    enable: 'on'
+    options:
+      kickolduser: 'true'
+      chardelay-min: 0
+      chardelay-max: 0
+    connector: serialdev,/dev/serial/by-id/usb-dresden_elektronik_ingenieurtechnik_GmbH_ConBee_II_DE2469046-if00,115200n81,nobreak,local

@@ -1,0 +1,52 @@
+---
+- name: Validate ser2net connections are defined
+  assert:
+    that:
+      - ser2net_connections is defined
+      - ser2net_connections | length > 0
+    fail_msg: "ser2net_connections must be defined with at least one connection"
+  when: ser2net_state|default('present') == 'present'
+
+- name: Install ser2net
+  package:
+    name: ser2net
+    state: "{{ ser2net_state|default('present') }}"
+  when: ser2net_state|default('present') == 'present'
+
+- name: Create ser2net configuration
+  template:
+    src: ser2net.yaml.jinja2
+    dest: /etc/ser2net.yaml
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart ser2net
+  when: ser2net_state|default('present') == 'present'
+
+- name: Enable and start ser2net service
+  systemd:
+    name: ser2net
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  when: ser2net_state|default('present') == 'present'
+
+- name: Stop and disable ser2net service
+  systemd:
+    name: ser2net
+    enabled: no
+    state: stopped
+    daemon_reload: yes
+  when: ser2net_state|default('present') == 'absent'
+
+- name: Remove ser2net configuration
+  file:
+    path: /etc/ser2net.yaml
+    state: absent
+  when: ser2net_state|default('present') == 'absent'
+
+- name: Uninstall ser2net
+  package:
+    name: ser2net
+    state: absent
+  when: ser2net_state|default('present') == 'absent'

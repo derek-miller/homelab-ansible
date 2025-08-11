@@ -1,0 +1,15 @@
+---
+# Default state for ser2net service
+ser2net_state: present
+
+# Default connections (empty by default, should be configured in host vars)
+ser2net_connections: []
+
+# Example connection configuration:
+# ser2net_connections:
+#   - name: conbee
+#     accepter: tcp,3333
+#     enable: on
+#     options:
+#       kickolduser: true
+#     connector: serialdev,/dev/ttyACM0,115200n81,local

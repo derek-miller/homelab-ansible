@@ -6,6 +6,10 @@ ansible_host: !vault |
   3565393466663866380a393431376532663161663634363462656337363931346531326237346465
   63613834383635663732626331323565383332643064393933353761663563393134
 
+additional_env_vars: # TODO: Why is this needed?
+  XAUTHORITY: /home/pi/.Xauthority
+  DISPLAY: :0
+
 authorized_keys:
   - key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNxxAEcT71BAXlVhmi76gjI26BkXwjAgcLaPLIMI+i8 dmiller
     user: pi
@@ -101,9 +105,8 @@ sudoers:
   - user: pi
     passwordless: true
 
-tailscale_args: --accept-routes --advertise-routes=''
+tailscale_args: --accept-routes
 
-raspberry_pi_poe_hat: true
 raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:
   - pi
