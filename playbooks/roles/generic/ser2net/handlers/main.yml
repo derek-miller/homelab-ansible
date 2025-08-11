@@ -1,0 +1,5 @@
+---
+- name: restart ser2net
+  systemd:
+    name: ser2net
+    state: restarted

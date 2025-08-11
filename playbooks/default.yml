@@ -124,6 +124,12 @@
   tags:
     - project-files
 
+- hosts: ser2net
+  roles:
+    - role: generic/ser2net
+  tags:
+    - ser2net
+
 - hosts: docker
   roles:
     - role: galaxy/docker
@@ -165,6 +171,7 @@
 - hosts: docker
   tasks:
     - name: create docker containers
+      when: docker_compose_definition is defined
       community.docker.docker_compose_v2:
         docker_cli: "{{ docker_cli|default(omit) }}"
         state: "{{ docker_compose_state|default('present') }}"
