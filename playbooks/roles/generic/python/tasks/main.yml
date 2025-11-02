@@ -29,6 +29,7 @@
     executable: pip3
     extra_args: "{{ '--break-system-packages' if pip_break_system_packages else '' }} {{ '' if pip_no_disable_pip_version_check is changed else '--disable-pip-version-check' }}"
     state: latest
+  when: not (ansible_distribution == 'Ubuntu' and ansible_distribution_major_version | int >= 24)
 
 - name: install/upgrade virtualenv
   pip:

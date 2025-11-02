@@ -111,12 +111,13 @@ raspberry_pi_boot_config_options:
     value: 160
 raspberry_pi_swap_size_mb: 0
 
-nut_stats_target: wan-i10-ups
+nut_stats_targets:
+  - wan-i10-ups
 nut_ups_devices:
   - |
-    [{{ nut_stats_target }}]
+    [wan-i10-ups]
         driver = usbhid-ups
         port = auto
         desc = "WAN UPS"
 nut_ups_monitors:
-  - "MONITOR {{ nut_stats_target }}@localhost 1 {{ nut_user_master_name }} {{ nut_user_master_password | mandatory }} master"
+  - "MONITOR wan-i10-ups@localhost 1 {{ nut_user_master_name }} {{ nut_user_master_password | mandatory }} master"

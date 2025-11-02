@@ -15,10 +15,10 @@ override inventory_file = $(or $(wildcard $(inventory_file_maybe)),$(error could
 playbook_file_maybe = playbooks/$(playbook).yml
 override playbook_file = $(or $(wildcard $(playbook_file_maybe)),$(error could not find playbook file $(playbook_file_maybe)))
 
-vault_files = $(shell find playbooks -type f -path '*vault*' -not -path '*vault-plaintext*' -not -path 'playbooks/collections/*' -not -path 'playbooks/roles/galaxy/*')
+vault_files ?= $(shell find playbooks -type f -path '*vault*' -not -path '*vault-plaintext*' -not -path 'playbooks/collections/*' -not -path 'playbooks/roles/galaxy/*')
 vault_flag = --vault-id=.vault_pass
 
-ansible_default_flags = --inventory-file=$(inventory_file) $(vault_flag)
+ansible_default_flags = --inventory=$(inventory_file) $(vault_flag)
 
 ansible_flags ?= $(or $(ANSIBLE_FLAGS),$(ANSIBLE_OPTS))
 override ansible_flags += $(if $(hosts),--limit='$(hosts)')
@@ -51,7 +51,7 @@ install-git-hooks: .git/hooks/pre-commit
 
 .PHONY: init
 init:
-	pip install -i $(PIP_INDEX_URL) -U setuptools pip wheel pip-tools
+	pip install -i $(PIP_INDEX_URL) -U setuptools 'pip<25' wheel pip-tools
 
 .PHONY: install
 install: requirements.txt playbooks/roles/ansible/remote/files/requirements.txt

@@ -24,7 +24,7 @@
     name: generic/telegraf/plugin
   vars:
     telegraf_plugin_conf_src: telegraf.conf.jinja2
-    telegraf_plugin_conf: nut-stats-{{ nut_stats_target | mandatory }}.conf
+    telegraf_plugin_conf: nut-stats.conf
     telegraf_plugin_state: "{{ nut_stats_state }}"
 
 - name: delete nut-stats script

@@ -1,0 +1,19 @@
+---
+- name: Create docker images build directory
+  file:
+    path: /tmp/docker-image-builds
+    state: directory
+    mode: '0755'
+  when: docker_images_to_build is defined
+
+- name: Parse comma-separated image list
+  set_fact:
+    docker_images_list: "{{ docker_images_to_build.split(',') | map('trim') | list }}"
+  when: docker_images_to_build is defined
+
+- name: Build requested docker images
+  include_tasks: build_image.yml
+  loop: "{{ docker_images_list }}"
+  loop_control:
+    loop_var: image_name
+  when: docker_images_to_build is defined

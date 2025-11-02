@@ -6,46 +6,46 @@
 #
 --index-url https://pypi.python.org/simple
 
-ansible==11.8.0
+ansible==12.1.0
     # via -r requirements.in
-ansible-core==2.18.7
+ansible-core==2.19.3
     # via ansible
-bcrypt==4.3.0
+bcrypt==5.0.0
     # via paramiko
-black==25.1.0
+black==25.9.0
     # via -r requirements.in
-certifi==2025.8.3
+certifi==2025.10.5
     # via requests
-cffi==1.17.1
+cffi==2.0.0
     # via
     #   cryptography
     #   pynacl
 chardet==5.2.0
     # via -r requirements.in
-charset-normalizer==3.4.3
+charset-normalizer==3.4.4
     # via
     #   python-debian
     #   requests
-click==8.2.1
+click==8.3.0
     # via
     #   -r requirements.in
     #   black
-cryptography==45.0.6
+cryptography==46.0.3
     # via
     #   -r requirements.in
     #   ansible-core
     #   paramiko
-dnspython==2.7.0
+dnspython==2.8.0
     # via -r requirements.in
-idna==3.10
+idna==3.11
     # via requests
-invoke==2.2.0
+invoke==2.2.1
     # via paramiko
 jaraco-classes==3.4.0
     # via keyring
 jaraco-context==6.0.1
     # via keyring
-jaraco-functools==4.2.1
+jaraco-functools==4.3.0
     # via keyring
 jinja2==3.1.6
     # via
@@ -53,9 +53,9 @@ jinja2==3.1.6
     #   ansible-core
 keyring==25.6.0
     # via -r requirements.in
-markupsafe==3.0.2
+markupsafe==3.0.3
     # via jinja2
-more-itertools==10.7.0
+more-itertools==10.8.0
     # via
     #   jaraco-classes
     #   jaraco-functools
@@ -71,25 +71,27 @@ passlib==1.7.4
     # via -r requirements.in
 pathspec==0.12.1
     # via black
-platformdirs==4.3.8
+platformdirs==4.5.0
     # via black
-pycparser==2.22
+pycparser==2.23
     # via cffi
-pynacl==1.5.0
+pynacl==1.6.0
     # via paramiko
 python-debian==1.0.1
     # via -r requirements.in
-pyyaml==6.0.2
+pytokens==0.2.0
+    # via black
+pyyaml==6.0.3
     # via
     #   -r requirements.in
     #   ansible-core
-requests[security]==2.32.4
+requests[security]==2.32.5
     # via -r requirements.in
-resolvelib==1.0.1
+resolvelib==1.2.1
     # via ansible-core
 semantic-version==2.10.0
     # via -r requirements.in
 urllib3==2.5.0
     # via requests
-websocket-client==1.8.0
+websocket-client==1.9.0
     # via -r requirements.in

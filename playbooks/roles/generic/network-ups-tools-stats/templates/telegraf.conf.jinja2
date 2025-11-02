@@ -1,7 +1,9 @@
 [[inputs.exec]]
   name_override = "{{ nut_stats_metric_name }}"
   commands = [
-    "{{ nut_stats_script_path }} {{ nut_stats_target | mandatory }}"
+  {% for target in nut_stats_targets | mandatory %}
+    "{{ nut_stats_script_path }} {{ target }}"{{ "," if not loop.last else "" }}
+  {% endfor -%}
   ]
   timeout = "{{ nut_stats_timeout_s|int }}s"
   data_format = "influx"

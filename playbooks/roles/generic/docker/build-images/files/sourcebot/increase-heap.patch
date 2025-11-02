@@ -1,0 +1,10 @@
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -106,6 +106,7 @@ COPY --from=shared-libs-builder /app/packages/shared ./packages/shared
+ RUN yarn workspace @sourcebot/web install
+ 
+ ENV NEXT_TELEMETRY_DISABLED=1
++ENV NODE_OPTIONS=--max-old-space-size=8192
+ RUN yarn workspace @sourcebot/web build
+ ENV SKIP_ENV_VALIDATION=0
+ # ------------------------------
