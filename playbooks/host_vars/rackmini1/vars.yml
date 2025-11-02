@@ -1,56 +1,34 @@
 ansible_host: !vault |
   $ANSIBLE_VAULT;1.1;AES256
-  38356233353336393466316238336561643862393061653933396566326462373738663862653966
-  6238653034386430356532623230333636313865373536640a636533383636393263626137333138
-  35636263613434333562306466353637376530623035336633393130653766646561323839306437
-  6465653433386663370a313866653539313734663866363661316132366664363637373163383330
-  37316530653132393736663732383733336233336132386662666337356539356435
+  62653365666131666161313237333262363137343638313133656231666439616665633664306636
+  3333366133623634333632323264613961643963303334660a366162623263336238386630323664
+  62613766323266356366396461366630376361663433333439366436623139656637313134616235
+  3131376335336463620a383762353462313966303064323261396465633932636566373062306362
+  33326631336265363933373962323032366637343236306338363838663736343761
 
 authorized_keys:
   - key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNxxAEcT71BAXlVhmi76gjI26BkXwjAgcLaPLIMI+i8 dmiller
-    user: pi
+    user: parallels
     state: present
   - key: ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBPUgzXYNTvTCcUHjzdXvy2LZA6YFZKrHrfsse3ipP2ldbhnmU/Io9I/lUligmdaCFktcxwgzZRYawWJI1IsUnZA= dmiller
-    user: pi
+    user: parallels
     state: present
   - key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQChNryHWkasg7O7YLfLSffWjrP+e6eAt5olYIPgBCeqBgPHYK3sJkAo/UHuJ1SQA22qMQlHI/2m2chASZ7tbbkaBEkWlBlbAQpwleuJE0WBN8hJd49dJToW9d6q6hNwq9bmnlA/VTkzsLAqpSEANnO28WMhHI+Upn924L4lC4tVJQmSUPm8ENgU5RVW9EcSkfIBPrIdFW0zqxPEFzZXlaOqxmbOvgS4qWirjHe4PXC1Z8DeYlK9DSTM/KGX0pz8Jgz0shKwxDpdn/j36KP1jlygwrWmnDXuWuMuU44HjMZzA3A9XKuHqiROrv1K0A4M1t5DN/UbWSNQBhQOWdica2Qaek2+dUQ5m5bgYw7sSTW5Oz/jvWU71NdFhmN9eXCJukiN7UwznecnOHf0O/Si5fFf6iJzLjHELi1JKzVLvADyZTlaxmZB82MmveB99eArOUquaeO4rOHugmOVosW/Gg4wj1j19gFy0E+yVuP01tg999YF2ST8l6Z81w2xBrZYKKw+tgQlm/WbxkzRxnumTx7JH/AddFTZvTADQB11DRySmrWBKC4QCGo8+8SdwitHt6WzDZAuOqYPK+mtMtGY3TKGazRRUvCKVTALamJWjbZcizQGj3PqfVr8+wB/+TzsUU9vJPPo9skZrYHwom/3Wu1TlAAaYd8hTriqGK7gzm1CNw== dmiller
-    user: pi
+    user: parallels
     state: present
 
 additional_docker_users:
-  - pi
-
-lightdm_autologin_user: pi
-lightdm_xorg_create_video_dummy: yes
+  - parallels
 
 sudoers:
-  - user: pi
+  - user: parallels
     passwordless: true
 
-raspberry_pi_wifi_country: US
-raspberry_pi_video_group_users:
-  - pi
-raspberry_pi_swap_size_mb: 0
+project_files:
+  - src: "plaintext/{{ inventory_hostname }}/var/docker/"
+    dest: /var/docker/
 
-nut_stats_targets:
-  - wan-ups
-  - office-ups@192.168.1.193:3493
+tailscale_args: --accept-routes
 
-nut_ups_devices:
-  - |
-    [wan-ups]
-        driver = snmp-ups
-        port = 192.168.2.18
-        community = private
-        snmp_version = v1
-        pollfreq = 15
-        desc = "WAN UPS"
-nut_ups_monitors:
-  - "MONITOR wan-ups@localhost 1 {{ nut_user_master_name }} {{ nut_user_master_password | mandatory }} master"
-
-tplink_plug_stats_ip_addresses:
-  - 192.168.2.5
-  - 192.168.2.6
-  - 192.168.2.7
-  - 192.168.2.8
-  - 192.168.2.9
+# Docker Swarm configuration
+docker_swarm_network_interface: enp0s5

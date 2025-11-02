@@ -68,7 +68,7 @@
 
 - hosts: tailscale
   roles:
-    - role: galaxy/tailscale
+    - role: artis3n.tailscale.machine
   tasks:
     - name: get tailscale ip addresses
       command: tailscale ip
@@ -89,7 +89,7 @@
         ttl: 1
         proxied: no
         solo: yes
-      when: create_cloudflare_ipv4_dns_record|default(false)
+      when: create_cloudflare_ipv4_dns_record is defined and create_cloudflare_ipv4_dns_record is truthy
     - name: add Cloudflare DNS record for tailscale ipv6 address
       community.general.cloudflare_dns:
         zone: "{{ cloudflare_zone }}"
@@ -101,7 +101,7 @@
         ttl: 1
         proxied: no
         solo: yes
-      when: create_cloudflare_ipv6_dns_record|default(false)
+      when: create_cloudflare_ipv6_dns_record is defined and create_cloudflare_ipv6_dns_record is truthy
   tags:
     - tailscale
 
@@ -151,6 +151,13 @@
     - docker
     - docker-swarm
 
+- hosts: docker-build-images
+  roles:
+    - role: generic/docker/build-images
+  tags:
+    - docker
+    - docker-build-images
+
 - hosts: docker_swarm_manager[0]
   tasks:
     - name: deploy docker stack
@@ -194,11 +201,14 @@
 - hosts: network-ups-tools
   roles:
     - role: generic/network-ups-tools
-    - role: generic/network-ups-tools-stats
-      tags:
-        - network-ups-tools-stats
   tags:
     - network-ups-tools
+
+- hosts: network-ups-tools:network-ups-tools-stats
+  roles:
+    - role: generic/network-ups-tools-stats
+  tags:
+    - network-ups-tools-stats
 
 - hosts: tplink-plug-stats
   roles:

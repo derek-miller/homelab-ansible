@@ -4,5 +4,3 @@ roles:
     name: galaxy/docker
   - src: thomasjpfan.docker-swarm
     name: galaxy/docker-swarm
-  - src: artis3n.tailscale
-    name: galaxy/tailscale

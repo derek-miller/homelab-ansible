@@ -3,20 +3,20 @@
     ansible_python_interpreter: "{{ override_ansible_python_interpreter|default('/usr/bin/python3') }}"
 
 - name: make local ssh key dir
-  local_action:
-    module: file
+  file:
     path: "{{ local_ssh_key_dir }}"
     mode: 0700
     state: directory
+  delegate_to: 127.0.0.1 # Run locally
   check_mode: no
   run_once: yes
 
 - name: copy ansible surrogate user ssh private key
-  local_action:
-    module: copy
+  copy:
     src: "{{ ansible_surrogate_private_key_file }}"
     dest: "{{ local_ssh_key_dir }}/{{ ansible_surrogate_private_key_file|basename }}"
     mode: 0600
+  delegate_to: 127.0.0.1 # Run locally
   check_mode: no
   run_once: yes
 

@@ -6,19 +6,19 @@
 #
 --index-url https://pypi.python.org/simple
 
-attrs==25.3.0
+attrs==25.4.0
     # via jsonschema
-bcrypt==4.3.0
+bcrypt==5.0.0
     # via paramiko
-certifi==2025.8.3
+certifi==2025.10.5
     # via requests
-cffi==1.17.1
+cffi==2.0.0
     # via
     #   cryptography
     #   pynacl
-charset-normalizer==3.4.3
+charset-normalizer==3.4.4
     # via requests
-cryptography==45.0.6
+cryptography==46.0.3
     # via paramiko
 distro==1.9.0
     # via docker-compose
@@ -32,9 +32,9 @@ dockerpty==0.4.1
     # via docker-compose
 docopt==0.6.2
     # via docker-compose
-idna==3.10
+idna==3.11
     # via requests
-invoke==2.2.0
+invoke==2.2.1
     # via paramiko
 jsondiff==2.2.1
     # via -r playbooks/roles/ansible/remote/files/requirements.in
@@ -42,9 +42,9 @@ jsonschema==3.2.0
     # via docker-compose
 paramiko==4.0.0
     # via docker
-pycparser==2.22
+pycparser==2.23
     # via cffi
-pynacl==1.5.0
+pynacl==1.6.0
     # via paramiko
 pyrsistent==0.20.0
     # via jsonschema
@@ -55,7 +55,7 @@ pyyaml==5.4.1
     #   -r playbooks/roles/ansible/remote/files/requirements.in
     #   docker-compose
     #   jsondiff
-requests==2.32.4
+requests==2.32.5
     # via
     #   docker
     #   docker-compose

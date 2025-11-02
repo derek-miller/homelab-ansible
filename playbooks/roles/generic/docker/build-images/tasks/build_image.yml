@@ -1,0 +1,49 @@
+---
+- name: Set image config
+  set_fact:
+    image_config: "{{ available_docker_images[image_name] }}"
+
+- name: Check if {{ image_name }} image already exists
+  community.docker.docker_image_info:
+    name: "{{ image_config.image_name }}:{{ image_config.image_tag }}"
+  register: image_info
+
+- name: Clone {{ image_name }} repository
+  git:
+    repo: "{{ image_config.repo }}"
+    dest: "/tmp/docker-image-builds/{{ image_name }}"
+    version: "{{ image_config.version }}"
+    force: yes
+  when: force_rebuild|default(false)|bool or image_info.images|length == 0
+
+- name: Copy patches for {{ image_name }} to remote
+  copy:
+    src: "{{ item }}"
+    dest: "/tmp/docker-image-builds/{{ image_name }}-{{ item | basename }}"
+  loop: "{{ image_config.patches | default([]) }}"
+  when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.patches is defined
+
+- name: Apply patches for {{ image_name }}
+  patch:
+    src: "/tmp/docker-image-builds/{{ image_name }}-{{ item | basename }}"
+    basedir: "/tmp/docker-image-builds/{{ image_name }}"
+    strip: 1
+    remote_src: true
+  loop: "{{ image_config.patches | default([]) }}"
+  when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.patches is defined
+
+- name: Copy custom Dockerfile for {{ image_name }}
+  copy:
+    src: "{{ image_config.dockerfile }}"
+    dest: "/tmp/docker-image-builds/{{ image_name }}/Dockerfile"
+  when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.dockerfile is defined
+
+- name: Build {{ image_name }} docker image
+  community.docker.docker_image:
+    name: "{{ image_config.image_name }}"
+    tag: "{{ image_config.image_tag }}"
+    build:
+      path: "/tmp/docker-image-builds/{{ image_name }}"
+    source: build
+    force_source: yes
+  when: force_rebuild|default(false)|bool or image_info.images|length == 0

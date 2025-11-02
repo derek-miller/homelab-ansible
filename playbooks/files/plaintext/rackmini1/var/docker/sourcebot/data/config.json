@@ -1,0 +1,98 @@
+{
+  "$schema": "https://raw.githubusercontent.com/sourcebot-dev/sourcebot/main/schemas/v3/index.json",
+  "connections": {
+    "drivers-control4-com-driver-repos-shard0": {
+      "type": "git",
+      "url": "file:///repos/drivers-control4-com/shard0/*"
+    },
+    "drivers-control4-com-driver-repos-shard1": {
+      "type": "git",
+      "url": "file:///repos/drivers-control4-com/shard1/*"
+    },
+    "drivers-control4-com-driver-repos-shard2": {
+      "type": "git",
+      "url": "file:///repos/drivers-control4-com/shard2/*"
+    },
+    "drivers-control4-com-driver-repos-shard3": {
+      "type": "git",
+      "url": "file:///repos/drivers-control4-com/shard3/*"
+    },
+    "drivers-control4-com-driver-repos-shard4": {
+      "type": "git",
+      "url": "file:///repos/drivers-control4-com/shard4/*"
+    },
+    "drivers-control4-com-driver-repos-shard5": {
+      "type": "git",
+      "url": "file:///repos/drivers-control4-com/shard5/*"
+    },
+    "drivers-control4-com-driver-repos-shard6": {
+      "type": "git",
+      "url": "file:///repos/drivers-control4-com/shard6/*"
+    },
+    "drivers-control4-com-driver-repos-shard7": {
+      "type": "git",
+      "url": "file:///repos/drivers-control4-com/shard7/*"
+    },
+    "drivers-control4-com-driver-repos-shard8": {
+      "type": "git",
+      "url": "file:///repos/drivers-control4-com/shard8/*"
+    },
+    "drivers-control4-com-driver-repos-shard9": {
+      "type": "git",
+      "url": "file:///repos/drivers-control4-com/shard9/*"
+    },
+    "chowmain-software-driver-repos": {
+      "type": "git",
+      "url": "file:///repos/chowmain-software/*"
+    },
+    "github-personal": {
+      "type": "github",
+      "users": [
+        "derek-miller"
+      ],
+      "exclude": {
+        "archived": true,
+        "forks": true
+      },
+      "token": {
+        "env": "GITHUB_PERSONAL_TOKEN"
+      }
+    },
+    "github-black-ops-drivers": {
+      "type": "github",
+      "users": [
+        "black-ops-drivers"
+      ],
+      "exclude": {
+        "archived": true,
+        "forks": true
+      },
+      "token": {
+        "env": "GITHUB_BLACKOPSDRIVERS_TOKEN"
+      }
+    },
+    "github-finitelabs": {
+      "type": "github",
+      "orgs": [
+        "finitelabs"
+      ],
+      "exclude": {
+        "archived": true,
+        "forks": true
+      },
+      "token": {
+        "env": "GITHUB_FINITELABS_TOKEN"
+      }
+    }
+  },
+  "models": [
+    {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-5-20250929",
+      "displayName": "Claude Sonnet 4.5",
+      "token": {
+        "env": "ANTHROPIC_API_KEY"
+      }
+    }
+  ]
+}

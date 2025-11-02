@@ -5,9 +5,9 @@
     - name: add additional paths to environment
       set_fact:
         ansible_env: "{{ ansible_env | default({}) | combine({'PATH': _path}) }}"
-  when: ansible_env is defined and additional_env_paths is defined and additional_env_paths
+  when: ansible_env is defined and additional_env_paths is defined and additional_env_paths is truthy
 
 - name: add additional env vars to environment
   set_fact:
     ansible_env: "{{ ansible_env | default({}) | combine(additional_env_vars) }}"
-  when: ansible_env is defined and additional_env_vars is defined and additional_env_vars
+  when: ansible_env is defined and additional_env_vars is defined and additional_env_vars is truthy
