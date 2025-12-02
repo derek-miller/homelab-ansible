@@ -13,14 +13,28 @@
     - "'not find' not in service_result.msg"
   when: telegraf_state == 'absent'
 
-- name: add/remove influxdb gpg signing key
-  apt_key:
+- name: remove old influxdata apt source file without signed-by
+  file:
+    path: /etc/apt/sources.list.d/repos_influxdata_com_debian.list
+    state: absent
+
+- name: add influxdb gpg signing key
+  get_url:
     url: https://repos.influxdata.com/influxdata-archive_compat.key
-    state: "{{ telegraf_state }}"
+    dest: /usr/share/keyrings/influxdata-archive.asc
+    mode: '0644'
+  when: telegraf_state == 'present'
+
+- name: remove influxdb gpg signing key
+  file:
+    path: /usr/share/keyrings/influxdata-archive.asc
+    state: absent
+  when: telegraf_state == 'absent'
 
 - name: add/remove influxdb repository
   apt_repository:
-    repo: 'deb https://repos.influxdata.com/debian stable main'
+    repo: 'deb [signed-by=/usr/share/keyrings/influxdata-archive.asc] https://repos.influxdata.com/debian stable main'
+    filename: influxdata
     state: "{{ telegraf_state }}"
 
 - name: install telegraf dependencies

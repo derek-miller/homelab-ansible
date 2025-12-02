@@ -201,14 +201,9 @@
 - hosts: network-ups-tools
   roles:
     - role: generic/network-ups-tools
-  tags:
-    - network-ups-tools
-
-- hosts: network-ups-tools:network-ups-tools-stats
-  roles:
     - role: generic/network-ups-tools-stats
   tags:
-    - network-ups-tools-stats
+    - network-ups-tools
 
 - hosts: tplink-plug-stats
   roles:
