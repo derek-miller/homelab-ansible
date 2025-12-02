@@ -27,7 +27,7 @@ override ansible_flags += $(if $(tags),--skip-tags=base$(comma)common --tags='$(
 
 ansible_playbook_cmd_fn = ansible-playbook $(1) $(ansible_default_flags) $(ansible_flags)
 ansible_playbook_cmd = $(call ansible_playbook_cmd_fn,$(playbook_file))
-ansible_setup = ansible -m setup $(ansible_default_flags) $(if $(filter dev,$(env)),--user=vagrant --private-key=.vagrant/machines/ansible-dev/virtualbox/private_key) $(ansible_flags)
+ansible_setup = ansible -m setup $(ansible_default_flags) $(ansible_flags)
 
 ansible_bootstrap_flags = --user=$(user) --ask-become-pass --ask-pass
 
@@ -51,7 +51,7 @@ install-git-hooks: .git/hooks/pre-commit
 
 .PHONY: init
 init:
-	pip install -i $(PIP_INDEX_URL) -U setuptools 'pip<25' wheel pip-tools
+	pip install -i $(PIP_INDEX_URL) -U setuptools pip wheel pip-tools
 
 .PHONY: install
 install: requirements.txt playbooks/roles/ansible/remote/files/requirements.txt
@@ -67,7 +67,7 @@ upgrade = $(or UPGRADE,0)
 ifneq ($(upgrade),0)
 pip_compile_flags += --upgrade --rebuild
 endif
-pip_compile = pip-compile -i $(PIP_INDEX_URL) $(pip_compile_flags)
+pip_compile = pip-compile -i $(PIP_INDEX_URL) --no-strip-extras $(pip_compile_flags)
 
 requirements.txt: requirements.in
 	$(pip_compile) $< -o $@
@@ -138,3 +138,6 @@ vault-check:
 		cat hooks/nope >&2; echo 'must encrypt vault files by running make vault-encrypt-all' >&2; exit 1;\
 	)
 
+.PHONY: docker-prune
+docker-prune:
+	ansible docker $(ansible_default_flags) $(ansible_flags) -m shell -a "docker system prune -f"
