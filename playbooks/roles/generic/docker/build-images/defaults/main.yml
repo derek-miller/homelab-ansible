@@ -2,9 +2,9 @@
 available_docker_images:
   sourcebot:
     repo: https://github.com/sourcebot-dev/sourcebot.git
-    version: 2c0540f6bfb9f95ba3de5bc85c25d24d68bf6434 #v4.8.1
+    version: v4.10.3
     patches:
       - sourcebot/increase-heap.patch
       - sourcebot/vault-enable-demo-features.patch
     image_name: sourcebot
-    image_tag: v4.8.1-patched
+    image_tag: v4.10.3-patched
