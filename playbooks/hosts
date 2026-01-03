@@ -76,6 +76,3 @@ rackpi[1:5]
 
 [tplink-plug-stats]
 rackpi2
-
-[ser2net]
-rackpi4

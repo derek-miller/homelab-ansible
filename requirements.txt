@@ -6,7 +6,7 @@
 #
 --index-url https://pypi.python.org/simple
 
-ansible==13.1.0
+ansible==13.2.0
     # via -r requirements.in
 ansible-core==2.20.1
     # via ansible
@@ -43,7 +43,7 @@ invoke==2.2.1
     # via paramiko
 jaraco-classes==3.4.0
     # via keyring
-jaraco-context==6.0.1
+jaraco-context==6.0.2
     # via keyring
 jaraco-functools==4.4.0
     # via keyring
@@ -75,7 +75,7 @@ platformdirs==4.5.1
     # via black
 pycparser==2.23
     # via cffi
-pynacl==1.6.1
+pynacl==1.6.2
     # via paramiko
 python-debian==1.0.1
     # via -r requirements.in
