@@ -6,15 +6,15 @@
 #
 --index-url https://pypi.python.org/simple
 
-ansible==13.2.0
+ansible==13.3.0
     # via -r requirements.in
-ansible-core==2.20.1
+ansible-core==2.20.2
     # via ansible
 bcrypt==5.0.0
     # via paramiko
-black==25.12.0
+black==26.1.0
     # via -r requirements.in
-certifi==2025.11.12
+certifi==2026.1.4
     # via requests
 cffi==2.0.0
     # via
@@ -30,7 +30,7 @@ click==8.3.1
     # via
     #   -r requirements.in
     #   black
-cryptography==46.0.3
+cryptography==46.0.4
     # via
     #   -r requirements.in
     #   ansible-core
@@ -43,7 +43,7 @@ invoke==2.2.1
     # via paramiko
 jaraco-classes==3.4.0
     # via keyring
-jaraco-context==6.0.2
+jaraco-context==6.1.0
     # via keyring
 jaraco-functools==4.4.0
     # via keyring
@@ -61,7 +61,7 @@ more-itertools==10.8.0
     #   jaraco-functools
 mypy-extensions==1.1.0
     # via black
-packaging==25.0
+packaging==26.0
     # via
     #   ansible-core
     #   black
@@ -69,17 +69,17 @@ paramiko==4.0.0
     # via -r requirements.in
 passlib==1.7.4
     # via -r requirements.in
-pathspec==0.12.1
+pathspec==1.0.4
     # via black
 platformdirs==4.5.1
     # via black
-pycparser==2.23
+pycparser==3.0
     # via cffi
 pynacl==1.6.2
     # via paramiko
 python-debian==1.0.1
     # via -r requirements.in
-pytokens==0.3.0
+pytokens==0.4.1
     # via black
 pyyaml==6.0.3
     # via
@@ -91,7 +91,7 @@ resolvelib==1.2.1
     # via ansible-core
 semantic-version==2.10.0
     # via -r requirements.in
-urllib3==2.6.2
+urllib3==2.6.3
     # via requests
 websocket-client==1.9.0
     # via -r requirements.in
