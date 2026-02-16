@@ -30,7 +30,7 @@ click==8.3.1
     # via
     #   -r requirements.in
     #   black
-cryptography==46.0.4
+cryptography==46.0.5
     # via
     #   -r requirements.in
     #   ansible-core
@@ -71,13 +71,13 @@ passlib==1.7.4
     # via -r requirements.in
 pathspec==1.0.4
     # via black
-platformdirs==4.5.1
+platformdirs==4.9.2
     # via black
 pycparser==3.0
     # via cffi
 pynacl==1.6.2
     # via paramiko
-python-debian==1.0.1
+python-debian==1.1.0
     # via -r requirements.in
 pytokens==0.4.1
     # via black
