@@ -88,8 +88,8 @@
   "models": [
     {
       "provider": "anthropic",
-      "model": "claude-sonnet-4-5-20250929",
-      "displayName": "Claude Sonnet 4.5",
+      "model": "claude-opus-4-6",
+      "displayName": "Claude Opus 4.6",
       "token": {
         "env": "ANTHROPIC_API_KEY"
       }

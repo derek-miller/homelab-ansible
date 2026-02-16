@@ -177,17 +177,65 @@
 
 - hosts: docker
   tasks:
+    - name: log in to Docker Hub
+      community.docker.docker_login:
+        username: "{{ docker_hub_username }}"
+        password: "{{ docker_hub_password }}"
+      when: docker_hub_username is defined and docker_hub_password is defined
+      tags:
+        - docker
+        - docker-compose
+    - name: log out of Docker Hub
+      community.docker.docker_login:
+        state: absent
+      when: docker_hub_username is not defined or docker_hub_password is not defined
+      tags:
+        - docker
+        - docker-compose
+
     - name: create docker containers
       when: docker_compose_definition is defined
-      community.docker.docker_compose_v2:
-        docker_cli: "{{ docker_cli|default(omit) }}"
-        state: "{{ docker_compose_state|default('present') }}"
-        remove_images: all
-        remove_volumes: yes
-        remove_orphans: yes
-        project_name: "{{ docker_compose_project_name|default(inventory_hostname) }}"
-        definition: "{{ docker_compose_definition }}"
-        pull: always
+      block:
+        - name: create docker containers (parallel pull)
+          community.docker.docker_compose_v2:
+            docker_cli: "{{ docker_cli|default(omit) }}"
+            state: "{{ docker_compose_state|default('present') }}"
+            remove_images: all
+            remove_volumes: yes
+            remove_orphans: yes
+            project_name: "{{ docker_compose_project_name|default(inventory_hostname) }}"
+            definition: "{{ docker_compose_definition }}"
+            pull: always
+      rescue:
+        - name: fail if not a rate limit error
+          fail:
+            msg: "{{ ansible_failed_result.msg }}"
+          when: "'toomanyrequests' not in (ansible_failed_result.msg | default(''))"
+
+        - name: pull docker images sequentially (rate limit fallback)
+          community.docker.docker_image:
+            name: "{{ item.value.image }}"
+            source: pull
+            force_source: true
+          loop: "{{ docker_compose_definition.services | dict2items }}"
+          loop_control:
+            label: "{{ item.value.image }}"
+            pause: 5
+          retries: 3
+          delay: 60
+          register: docker_pull_result
+          until: docker_pull_result is not failed
+
+        - name: create docker containers (images pre-pulled)
+          community.docker.docker_compose_v2:
+            docker_cli: "{{ docker_cli|default(omit) }}"
+            state: "{{ docker_compose_state|default('present') }}"
+            remove_images: all
+            remove_volumes: yes
+            remove_orphans: yes
+            project_name: "{{ docker_compose_project_name|default(inventory_hostname) }}"
+            definition: "{{ docker_compose_definition }}"
+            pull: never
   tags:
     - docker
     - docker-compose
