@@ -158,7 +158,7 @@
   # influx_uint_support = false
 
 {% endfor %}
-{% for output in influxdb2_outputs|default([]) + influxdb3_outputs|default([]) %}
+{% for output in influxdb3_outputs|default([]) %}
 [[outputs.influxdb_v2]]
   ## The URLs of the InfluxDB cluster nodes.
   ##
