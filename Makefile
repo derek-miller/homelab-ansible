@@ -153,8 +153,8 @@ vault-diff:
 		else \
 			cat "$$file" > "$$curr_tmp" 2>/dev/null; \
 		fi; \
-		if ! diff -q "$$head_tmp" "$$curr_tmp" > /dev/null 2>&1; then \
-			diff -u --label "a/$$file" --label "b/$$file" "$$head_tmp" "$$curr_tmp" || true; \
+		if ! diff -qw "$$head_tmp" "$$curr_tmp" > /dev/null 2>&1; then \
+			diff -uw --label "a/$$file" --label "b/$$file" "$$head_tmp" "$$curr_tmp" || true; \
 		fi; \
 		rm -f "$$head_tmp" "$$curr_tmp"; \
 	done
