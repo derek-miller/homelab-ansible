@@ -138,6 +138,27 @@ vault-check:
 		cat hooks/nope >&2; echo 'must encrypt vault files by running make vault-encrypt-all' >&2; exit 1;\
 	)
 
+.PHONY: vault-diff
+vault-diff:
+	@for file in $(vault_files); do \
+		head_tmp=$$(mktemp); \
+		curr_tmp=$$(mktemp); \
+		git show HEAD:"$$file" > "$$head_tmp" 2>/dev/null \
+			&& ansible-vault decrypt $(vault_flag) "$$head_tmp" 2>/dev/null \
+			|| : > "$$head_tmp"; \
+		if [ ! -f "$$file" ]; then \
+			: > "$$curr_tmp"; \
+		elif grep -q '$(vault_marker)' "$$file" 2>/dev/null; then \
+			ansible-vault view $(vault_flag) "$$file" > "$$curr_tmp" 2>/dev/null; \
+		else \
+			cat "$$file" > "$$curr_tmp" 2>/dev/null; \
+		fi; \
+		if ! diff -q "$$head_tmp" "$$curr_tmp" > /dev/null 2>&1; then \
+			diff -u --label "a/$$file" --label "b/$$file" "$$head_tmp" "$$curr_tmp" || true; \
+		fi; \
+		rm -f "$$head_tmp" "$$curr_tmp"; \
+	done
+
 .PHONY: docker-prune
 docker-prune:
 	ansible docker $(ansible_default_flags) $(ansible_flags) -m shell -a "docker system prune -f"

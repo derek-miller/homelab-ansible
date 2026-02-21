@@ -1,0 +1,9 @@
+---
+raspberry_pi_cmdline_extra_params:
+  - option: cgroup_disable
+    value: memory
+    state: absent
+  - option: cgroup_memory
+    value: "1"
+  - option: cgroup_enable
+    value: memory
