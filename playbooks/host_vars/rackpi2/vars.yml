@@ -34,7 +34,6 @@ raspberry_pi_swap_size_mb: 0
 
 nut_stats_targets:
   - wan-ups
-  - office-ups@192.168.1.193:3493
 
 nut_ups_devices:
   - |

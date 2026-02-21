@@ -3,6 +3,11 @@ raspberry_pi_boot_config_path: /boot/config.txt
 #raspberry_pi_boot_config_options:
 #  - option: ""
 #    value: ""
+raspberry_pi_cmdline_path: /boot/cmdline.txt
+#raspberry_pi_cmdline_extra_params:
+#  - option: ""
+#    value: ""        # optional, omit for bare flags
+#    state: present   # present (default) or absent
 #raspberry_pi_rc_local_options:
 #  - option: ""
 #    value: ""

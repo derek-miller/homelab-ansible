@@ -1,0 +1,32 @@
+{%- set current_params = _raspberry_pi_cmdline_current.split() -%}
+{%- set override_map = {} -%}
+{%- for p in raspberry_pi_cmdline_extra_params -%}
+  {%- set _ = override_map.update({p.option: p}) -%}
+{%- endfor -%}
+{%- set ns = namespace(result=[], seen=[]) -%}
+{%- for param in current_params -%}
+  {%- set key = param.split('=', 1)[0] -%}
+  {%- if key in override_map -%}
+    {%- set entry = override_map[key] -%}
+    {%- if entry.state | default('present') == 'present' -%}
+      {%- if entry.value is defined -%}
+        {%- set _ = ns.result.append(entry.option ~ '=' ~ entry.value | string) -%}
+      {%- else -%}
+        {%- set _ = ns.result.append(entry.option) -%}
+      {%- endif -%}
+    {%- endif -%}
+    {%- set _ = ns.seen.append(key) -%}
+  {%- else -%}
+    {%- set _ = ns.result.append(param) -%}
+  {%- endif -%}
+{%- endfor -%}
+{%- for p in raspberry_pi_cmdline_extra_params -%}
+  {%- if p.option not in ns.seen and p.state | default('present') == 'present' -%}
+    {%- if p.value is defined -%}
+      {%- set _ = ns.result.append(p.option ~ '=' ~ p.value | string) -%}
+    {%- else -%}
+      {%- set _ = ns.result.append(p.option) -%}
+    {%- endif -%}
+  {%- endif -%}
+{%- endfor -%}
+{{ ns.result | join(' ') }}

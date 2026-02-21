@@ -130,6 +130,32 @@
   changed_when: false
   when: raspberry_pi_wifi_country is defined
 
+- name: check for Bookworm cmdline path
+  stat:
+    path: /boot/firmware/cmdline.txt
+  register: _raspberry_pi_firmware_cmdline
+  when: raspberry_pi_cmdline_extra_params is defined
+
+- name: set cmdline path
+  set_fact:
+    _raspberry_pi_cmdline_dest: "{{ '/boot/firmware/cmdline.txt' if _raspberry_pi_firmware_cmdline.stat.exists else raspberry_pi_cmdline_path }}"
+  when: raspberry_pi_cmdline_extra_params is defined
+
+- name: read kernel cmdline
+  slurp:
+    src: "{{ _raspberry_pi_cmdline_dest }}"
+  register: _raspberry_pi_cmdline
+  when: raspberry_pi_cmdline_extra_params is defined
+
+- name: configure kernel cmdline parameters
+  template:
+    src: cmdline.txt.j2
+    dest: "{{ _raspberry_pi_cmdline_dest }}"
+  vars:
+    _raspberry_pi_cmdline_current: "{{ (_raspberry_pi_cmdline.content | b64decode).strip() }}"
+  when: raspberry_pi_cmdline_extra_params is defined
+  register: _raspberry_pi_cmdline_changed
+
 - name: configure swap size
   lineinfile:
     dest: /etc/dphys-swapfile
@@ -139,8 +165,10 @@
     create: false # file should exist
     state: present
   when: raspberry_pi_swap_size_mb is defined
-  register: raspberry_pi_etc_dphys_swapfile
+  register: _raspberry_pi_swap_changed
 
-- name: reboot to apply swap size changes
+- name: reboot to apply changes
   ansible.builtin.reboot:
-  when: raspberry_pi_etc_dphys_swapfile.changed
+  when: >
+    (_raspberry_pi_cmdline_changed is defined and _raspberry_pi_cmdline_changed.changed) or
+    (_raspberry_pi_swap_changed is defined and _raspberry_pi_swap_changed.changed)
