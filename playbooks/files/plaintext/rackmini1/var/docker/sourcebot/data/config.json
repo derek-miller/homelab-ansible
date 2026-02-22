@@ -45,6 +45,10 @@
       "type": "git",
       "url": "file:///repos/chowmain-software/*"
     },
+    "drivercentral-io-driver-repos": {
+      "type": "git",
+      "url": "file:///repos/drivercentral-io/*"
+    },
     "github-personal": {
       "type": "github",
       "users": [
