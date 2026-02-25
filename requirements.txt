@@ -6,21 +6,21 @@
 #
 --index-url https://pypi.python.org/simple
 
-ansible==13.3.0
+ansible==13.4.0
     # via -r requirements.in
-ansible-core==2.20.2
+ansible-core==2.20.3
     # via ansible
 bcrypt==5.0.0
     # via paramiko
 black==26.1.0
     # via -r requirements.in
-certifi==2026.1.4
+certifi==2026.2.25
     # via requests
 cffi==2.0.0
     # via
     #   cryptography
     #   pynacl
-chardet==5.2.0
+chardet==6.0.0.post1
     # via -r requirements.in
 charset-normalizer==3.4.4
     # via

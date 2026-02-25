@@ -10,7 +10,7 @@ attrs==25.4.0
     # via jsonschema
 bcrypt==5.0.0
     # via paramiko
-certifi==2026.1.4
+certifi==2026.2.25
     # via requests
 cffi==2.0.0
     # via
