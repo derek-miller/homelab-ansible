@@ -12,7 +12,7 @@ ansible-core==2.20.3
     # via ansible
 bcrypt==5.0.0
     # via paramiko
-black==26.1.0
+black==26.3.0
     # via -r requirements.in
 certifi==2026.2.25
     # via requests
@@ -20,9 +20,9 @@ cffi==2.0.0
     # via
     #   cryptography
     #   pynacl
-chardet==6.0.0.post1
+chardet==7.0.1
     # via -r requirements.in
-charset-normalizer==3.4.4
+charset-normalizer==3.4.5
     # via
     #   python-debian
     #   requests
@@ -43,7 +43,7 @@ invoke==2.2.1
     # via paramiko
 jaraco-classes==3.4.0
     # via keyring
-jaraco-context==6.1.0
+jaraco-context==6.1.1
     # via keyring
 jaraco-functools==4.4.0
     # via keyring
@@ -71,7 +71,7 @@ passlib==1.7.4
     # via -r requirements.in
 pathspec==1.0.4
     # via black
-platformdirs==4.9.2
+platformdirs==4.9.4
     # via black
 pycparser==3.0
     # via cffi
