@@ -1,6 +1,6 @@
 --- a/Dockerfile
 +++ b/Dockerfile
-@@ -106,6 +106,9 @@ COPY --from=shared-libs-builder /app/packages/shared ./packages/shared
+@@ -92,6 +92,9 @@ COPY --from=shared-libs-builder /app/packages/queryLanguage ./packages/queryLang
  RUN yarn workspace @sourcebot/web install
 
  ENV NEXT_TELEMETRY_DISABLED=1
