@@ -49,8 +49,3 @@ jobs:
             args="$args tags=${{ inputs.tags }}"
           fi
           make run $args
-
-      - name: Prune unused Docker resources
-        run: |
-          source .venv/bin/activate
-          make docker-prune
