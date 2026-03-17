@@ -170,7 +170,3 @@ vault-diff:
 		fi; \
 		rm -f "$$head_tmp" "$$curr_tmp"; \
 	done
-
-.PHONY: docker-prune
-docker-prune:
-	ansible docker $(ansible_default_flags) $(ansible_flags) -m shell -a "docker system prune -f"

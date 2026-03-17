@@ -240,6 +240,22 @@
     - docker
     - docker-compose
 
+- name: prune unused docker resources
+  hosts: docker
+  tasks:
+    - name: prune stopped containers, unused images, networks, and volumes
+      community.docker.docker_prune:
+        containers: yes
+        images: yes
+        images_filters:
+          dangling: "false"
+        networks: yes
+        volumes: yes
+        builder_cache: yes
+  tags:
+    - docker
+    - docker-prune
+
 - hosts: x11vnc
   roles:
     - role: generic/x11vnc
