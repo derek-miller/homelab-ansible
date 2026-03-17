@@ -1,0 +1,51 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      hosts:
+        description: Limit to specific host(s)
+        required: false
+      tags:
+        description: Run specific tag(s)
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Write vault password
+        run: echo "${{ secrets.VAULT_PASS }}" > .vault_pass
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          make after-git-pull
+
+      - name: Run playbook
+        run: |
+          source .venv/bin/activate
+          args=""
+          if [ -n "${{ inputs.hosts }}" ]; then
+            args="$args hosts=${{ inputs.hosts }}"
+          fi
+          if [ -n "${{ inputs.tags }}" ]; then
+            args="$args tags=${{ inputs.tags }}"
+          fi
+          make run $args
