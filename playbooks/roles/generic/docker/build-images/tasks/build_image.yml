@@ -8,13 +8,20 @@
     name: "{{ image_config.image_name }}:{{ image_config.image_tag }}"
   register: image_info
 
+- name: Create build directory for {{ image_name }}
+  file:
+    path: "/tmp/docker-image-builds/{{ image_name }}"
+    state: directory
+    mode: '0755'
+  when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.repo is not defined
+
 - name: Clone {{ image_name }} repository
   git:
     repo: "{{ image_config.repo }}"
     dest: "/tmp/docker-image-builds/{{ image_name }}"
     version: "{{ image_config.version }}"
     force: yes
-  when: force_rebuild|default(false)|bool or image_info.images|length == 0
+  when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.repo is defined
 
 - name: Copy patches for {{ image_name }} to remote
   copy:

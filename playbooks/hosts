@@ -53,6 +53,7 @@ raspi1
 
 [docker-build-images]
 rackmini1 docker_images_to_build=sourcebot
+rackpi5   docker_images_to_build=youtrack
 
 [docker_swarm_manager]
 rackpi1 docker_stack_name=rackpis
