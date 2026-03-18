@@ -8,3 +8,7 @@ available_docker_images:
       - sourcebot/vault-entitlements.patch
     image_name: sourcebot
     image_tag: v4.15.6-patched
+  youtrack:
+    dockerfile: youtrack/Dockerfile
+    image_name: youtrack
+    image_tag: 2025.3.131383-arm64-3

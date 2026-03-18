@@ -137,7 +137,7 @@ vault-encrypt:
 			|| : > "$$head_tmp"; \
 		if diff -qw "$$head_tmp" "$$file" > /dev/null 2>&1 && [ -s "$$head_tmp" ]; then \
 			echo "Reverting unchanged vault file: $$file"; \
-			git checkout -- "$$file"; \
+			git checkout HEAD -- "$$file"; \
 		else \
 			ansible-vault encrypt -v $(vault_flag) "$$file"; \
 		fi; \
