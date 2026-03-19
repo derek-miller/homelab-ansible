@@ -45,6 +45,13 @@
     dest: "/tmp/docker-image-builds/{{ image_name }}/Dockerfile"
   when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.dockerfile is defined
 
+- name: Copy build files for {{ image_name }}
+  copy:
+    src: "{{ item }}"
+    dest: "/tmp/docker-image-builds/{{ image_name }}/{{ item | basename }}"
+  loop: "{{ image_config.build_files | default([]) }}"
+  when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.build_files is defined
+
 - name: Build {{ image_name }} docker image
   community.docker.docker_image:
     name: "{{ image_config.image_name }}"
