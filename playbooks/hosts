@@ -53,6 +53,7 @@ raspi1
 
 [docker-build-images]
 rackmini1 docker_images_to_build=sourcebot
+rackpi1   docker_images_to_build=openclaw-webhook-proxy
 rackpi5   docker_images_to_build=youtrack
 
 [docker_swarm_manager]
