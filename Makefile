@@ -17,6 +17,7 @@ override playbook_file = $(or $(wildcard $(playbook_file_maybe)),$(error could n
 
 vault_files ?= $(shell find playbooks -type f -path '*vault*' -not -path '*vault-plaintext*' -not -path 'playbooks/collections/*' -not -path 'playbooks/roles/galaxy/*')
 vault_flag = --vault-id=.vault_pass
+base ?= HEAD
 
 ansible_default_flags = --inventory=$(inventory_file) $(vault_flag)
 
@@ -155,7 +156,7 @@ vault-diff:
 	@for file in $(vault_files); do \
 		head_tmp=$$(mktemp); \
 		curr_tmp=$$(mktemp); \
-		git show HEAD:"$$file" > "$$head_tmp" 2>/dev/null \
+		git show $(base):"$$file" > "$$head_tmp" 2>/dev/null \
 			&& ansible-vault decrypt $(vault_flag) "$$head_tmp" 2>/dev/null \
 			|| : > "$$head_tmp"; \
 		if [ ! -f "$$file" ]; then \
