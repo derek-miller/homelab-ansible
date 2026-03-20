@@ -517,9 +517,12 @@ function getGitHubBatchKey(event, payload) {
 
 /** Return true if this event should flush its batch right away */
 function isImmediateFlushEvent(event, payload) {
+  // Only flush immediately on approval — changes_requested reviews are
+  // typically accompanied by review comments that arrive as separate webhook
+  // events shortly after, so we let the batch window collect them together.
   if (event === "pull_request_review") {
     const state = (payload.review?.state || "").toLowerCase();
-    return state === "approved" || state === "changes_requested";
+    return state === "approved";
   }
   return false;
 }
