@@ -121,7 +121,7 @@ const YOUTRACK_IGNORE_USERS = (process.env.YOUTRACK_IGNORE_USERS || "")
 const OPENCLAW_WAKE_MODE = process.env.OPENCLAW_WAKE_MODE || "now";
 const OPENCLAW_DELIVER = (process.env.OPENCLAW_DELIVER || "false").toLowerCase() === "true";
 const BATCH_WINDOW_MS = parseInt(process.env.BATCH_WINDOW_MS || "10000", 10);
-const MAX_BATCH_SIZE = 20;
+const MAX_BATCH_SIZE = 50;
 
 /** Map of batchKey → { events: [{eventType, detail, formattedMessage}], timer, guardrails, source } */
 const pendingBatches = new Map();
