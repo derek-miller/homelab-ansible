@@ -15,8 +15,8 @@
  *   YOUTRACK_HOOK_PATH       — URL path prefix for YouTrack webhooks
  *   GITHUB_GUARDRAILS_FILE   — path to file containing GitHub guardrails text
  *   YOUTRACK_GUARDRAILS_FILE — path to file containing YouTrack guardrails text
- *   OPENCLAW_WAKE_MODE       — wake mode for OpenClaw hooks (e.g. "now", "next-heartbeat")
- *   OPENCLAW_DELIVER         — deliver flag for OpenClaw hooks ("true" or "false")
+ *   OPENCLAW_WAKE_MODE       — wake mode for OpenClaw hooks (default: "now")
+ *   OPENCLAW_DELIVER         — deliver flag for OpenClaw hooks (default: "false")
  *   PORT                     — listen port (default: 3000)
  */
 
@@ -37,8 +37,6 @@ const REQUIRED_ENV = [
   "YOUTRACK_SELF_USER",
   "GITHUB_HOOK_PATH",
   "YOUTRACK_HOOK_PATH",
-  "OPENCLAW_WAKE_MODE",
-  "OPENCLAW_DELIVER",
   "GITHUB_GUARDRAILS_FILE",
   "YOUTRACK_GUARDRAILS_FILE",
 ];
@@ -58,10 +56,10 @@ const YOUTRACK_SELF_USER = process.env.YOUTRACK_SELF_USER;
 const GITHUB_HOOK_PATH = process.env.GITHUB_HOOK_PATH;
 const YOUTRACK_HOOK_PATH = process.env.YOUTRACK_HOOK_PATH;
 
-// ─── Wake/deliver configuration ─────────────────────────────────────
+// ─── Wake/deliver configuration (optional, with defaults) ──────────
 
-const OPENCLAW_WAKE_MODE = process.env.OPENCLAW_WAKE_MODE;
-const OPENCLAW_DELIVER = process.env.OPENCLAW_DELIVER.toLowerCase() === "true";
+const OPENCLAW_WAKE_MODE = process.env.OPENCLAW_WAKE_MODE || "now";
+const OPENCLAW_DELIVER = (process.env.OPENCLAW_DELIVER || "false").toLowerCase() === "true";
 
 // ─── Load guardrails from mounted files ─────────────────────────────
 
