@@ -12,6 +12,12 @@
  *                            (default: http://openclaw:18789/hooks/agent)
  *   YOUTRACK_BASE_URL      — base URL for YouTrack instance
  *                            (default: https://youtrack.dmiller.me)
+ *   YOUTRACK_SELF_USER     — YouTrack login to skip for self-event filtering
+ *                            (default: openclaw)
+ *   GITHUB_HOOK_PATH       — URL path prefix for GitHub webhooks
+ *                            (default: /hooks/svc-derek-miller)
+ *   YOUTRACK_HOOK_PATH     — URL path prefix for YouTrack webhooks
+ *                            (default: /hooks/youtrack)
  *   PORT                   — listen port (default: 3000)
  */
 
@@ -26,6 +32,9 @@ const OPENCLAW_HOOKS_URL =
   process.env.OPENCLAW_HOOKS_URL || "http://openclaw:18789/hooks/agent";
 const YOUTRACK_BASE_URL =
   process.env.YOUTRACK_BASE_URL || "https://youtrack.dmiller.me";
+const YOUTRACK_SELF_USER = process.env.YOUTRACK_SELF_USER || "openclaw";
+const GITHUB_HOOK_PATH = process.env.GITHUB_HOOK_PATH || "/hooks/svc-derek-miller";
+const YOUTRACK_HOOK_PATH = process.env.YOUTRACK_HOOK_PATH || "/hooks/youtrack";
 
 if (!OPENCLAW_HOOKS_TOKEN) {
   console.error("FATAL: OPENCLAW_HOOKS_TOKEN is required");
@@ -44,8 +53,8 @@ if (!YOUTRACK_WEBHOOK_SECRET) {
 
 /** Detect webhook source from request URL path */
 function detectSource(url) {
-  if (url.startsWith("/hooks/youtrack")) return "youtrack";
-  if (url.startsWith("/hooks/svc-derek-miller")) return "github";
+  if (url.startsWith(YOUTRACK_HOOK_PATH)) return "youtrack";
+  if (url.startsWith(GITHUB_HOOK_PATH)) return "github";
   return null;
 }
 
@@ -522,9 +531,9 @@ const server = createServer(async (req, res) => {
       payload.author?.login ||
       payload.comment?.author?.login ||
       "";
-    if (updaterLogin === "openclaw") {
+    if (updaterLogin === YOUTRACK_SELF_USER) {
       console.log(
-        `[${new Date().toISOString()}] Skipping YouTrack event from openclaw (self)`
+        `[${new Date().toISOString()}] Skipping YouTrack event from ${YOUTRACK_SELF_USER} (self)`
       );
       res.writeHead(200);
       res.end("OK (skipped self)");
@@ -584,5 +593,5 @@ async function forwardToOpenClaw(message, sourceName, res) {
 server.listen(PORT, () => {
   console.log(`OpenClaw webhook proxy listening on port ${PORT}`);
   console.log(`Forwarding to: ${OPENCLAW_HOOKS_URL}`);
-  console.log(`Sources: GitHub (/hooks/svc-derek-miller), YouTrack (/hooks/youtrack)`);
+  console.log(`Sources: GitHub (${GITHUB_HOOK_PATH}), YouTrack (${YOUTRACK_HOOK_PATH})`);
 });
