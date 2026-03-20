@@ -17,6 +17,7 @@
  *   LOG_LEVEL                — logging level: "info" (default) or "debug"
  *   OPENCLAW_WAKE_MODE       — wake mode for OpenClaw hooks (default: "now")
  *   OPENCLAW_DELIVER         — deliver flag for OpenClaw hooks (default: "false")
+ *   BATCH_WINDOW_MS          — debounce window in ms to batch related events (default: 10000)
  *
  * At least one hook source must be configured:
  *
@@ -119,6 +120,11 @@ const YOUTRACK_IGNORE_USERS = (process.env.YOUTRACK_IGNORE_USERS || "")
 
 const OPENCLAW_WAKE_MODE = process.env.OPENCLAW_WAKE_MODE || "now";
 const OPENCLAW_DELIVER = (process.env.OPENCLAW_DELIVER || "false").toLowerCase() === "true";
+const BATCH_WINDOW_MS = parseInt(process.env.BATCH_WINDOW_MS || "10000", 10);
+const MAX_BATCH_SIZE = 20;
+
+/** Map of batchKey → { events: [{eventType, detail, formattedMessage}], timer, guardrails, source } */
+const pendingBatches = new Map();
 
 // ─── Load guardrails from mounted files ─────────────────────────────
 
@@ -491,6 +497,113 @@ function formatYouTrackMessage(payload) {
   return lines.filter(Boolean).join("\n");
 }
 
+// ─── Batching helpers ────────────────────────────────────────────────
+
+/** Return the batch key for a GitHub event, or null to forward immediately */
+function getGitHubBatchKey(event, payload) {
+  const repo = payload.repository?.full_name || "unknown";
+  switch (event) {
+    case "pull_request_review":
+    case "pull_request_review_comment":
+    case "pull_request":
+      return `github:${repo}:${payload.pull_request?.number}`;
+    case "issue_comment":
+    case "issues":
+      return `github:${repo}:${payload.issue?.number}`;
+    default:
+      return null; // push and unknown events: forward immediately
+  }
+}
+
+/** Return true if this event should flush its batch right away */
+function isImmediateFlushEvent(event, payload) {
+  if (event === "pull_request_review") {
+    const state = (payload.review?.state || "").toLowerCase();
+    return state === "approved" || state === "changes_requested";
+  }
+  return false;
+}
+
+/** Return a human-readable { eventType, detail } for batch event headers */
+function getGitHubEventDetail(event, payload) {
+  const repo = payload.repository?.full_name || "unknown";
+  switch (event) {
+    case "pull_request_review":
+      return { eventType: event, detail: `${repo}#${payload.pull_request?.number} state=${payload.review?.state}` };
+    case "pull_request_review_comment":
+      return { eventType: event, detail: `${repo}#${payload.pull_request?.number}` };
+    case "pull_request":
+      return { eventType: event, detail: `${repo}#${payload.pull_request?.number} action=${payload.action}` };
+    case "issue_comment":
+      return { eventType: event, detail: `${repo}#${payload.issue?.number}` };
+    case "issues":
+      return { eventType: event, detail: `${repo}#${payload.issue?.number} action=${payload.action}` };
+    default:
+      return { eventType: event, detail: repo };
+  }
+}
+
+/** Return a human-readable { eventType, detail } for a YouTrack batch event header */
+function getYouTrackEventDetail(payload) {
+  const issueId = payload.issue?.idReadable || payload.issue?.id || "unknown";
+  const action = payload.action || "event";
+  return { eventType: action, detail: issueId };
+}
+
+/** Add an event entry to a pending batch, starting the debounce timer if needed */
+function addToBatch(key, eventEntry, guardrails, source) {
+  if (pendingBatches.has(key)) {
+    const batch = pendingBatches.get(key);
+    batch.events.push(eventEntry);
+    logDebug(`Added event to batch ${key} (${batch.events.length} total)`);
+    if (batch.events.length >= MAX_BATCH_SIZE) {
+      logDebug(`Batch ${key} reached max size (${MAX_BATCH_SIZE}), flushing immediately`);
+      flushBatch(key);
+    }
+  } else {
+    const timer = setTimeout(() => {
+      logDebug(`Batch window expired for ${key}, flushing`);
+      flushBatch(key);
+    }, BATCH_WINDOW_MS);
+    pendingBatches.set(key, { events: [eventEntry], timer, guardrails, source });
+    logDebug(`Started new batch for ${key}`);
+  }
+}
+
+/** Build the combined message for a batch and forward it to OpenClaw */
+async function flushBatch(key) {
+  const batch = pendingBatches.get(key);
+  if (!batch) return;
+  clearTimeout(batch.timer);
+  pendingBatches.delete(key);
+
+  const { events, guardrails, source } = batch;
+  if (events.length === 0) return;
+
+  let message;
+  if (events.length === 1) {
+    message = `${guardrails}\n${events[0].formattedMessage}`;
+  } else {
+    const parts = events.map(
+      (e, i) =>
+        `--- Event ${i + 1} of ${events.length}: ${e.eventType} (${e.detail}) ---\n${e.formattedMessage}`
+    );
+    message = `${guardrails}\n\n${parts.join("\n\n")}`;
+  }
+
+  logDebug(`Flushing batch ${key} with ${events.length} event(s)`);
+  await forwardToOpenClaw(message, source);
+}
+
+/** Flush all pending batches — called on graceful shutdown */
+async function flushAllBatches() {
+  const keys = [...pendingBatches.keys()];
+  if (keys.length > 0) {
+    console.log(`[${new Date().toISOString()}] Flushing ${keys.length} pending batch(es) before shutdown`);
+    await Promise.all(keys.map((k) => flushBatch(k)));
+  }
+}
+
 // ─── Request handler ────────────────────────────────────────────────
 
 const server = createServer(async (req, res) => {
@@ -596,9 +709,33 @@ const server = createServer(async (req, res) => {
     }
 
     const eventMessage = formatGitHubMessage(event, payload);
+    const batchKey = getGitHubBatchKey(event, payload);
 
-    const message = `${GITHUB_GUARDRAILS}\n${eventMessage}`;
-    await forwardToOpenClaw(message, "GitHub", res);
+    if (!batchKey) {
+      // No batch key (e.g. push) — forward immediately
+      logDebug(`GitHub ${event}: no batch key, forwarding immediately`);
+      const message = `${GITHUB_GUARDRAILS}\n${eventMessage}`;
+      res.writeHead(200);
+      res.end("OK");
+      forwardToOpenClaw(message, "GitHub");
+      return;
+    }
+
+    const { eventType, detail } = getGitHubEventDetail(event, payload);
+    const eventEntry = { eventType, detail, formattedMessage: eventMessage };
+
+    if (isImmediateFlushEvent(event, payload)) {
+      logDebug(`GitHub ${event} (${detail}): immediate flush trigger`);
+      addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub");
+      res.writeHead(200);
+      res.end("OK");
+      flushBatch(batchKey);
+      return;
+    }
+
+    addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub");
+    res.writeHead(200);
+    res.end("OK");
     return;
   }
 
@@ -653,14 +790,17 @@ const server = createServer(async (req, res) => {
     }
 
     const eventMessage = formatYouTrackMessage(payload);
-    const message = `${YOUTRACK_GUARDRAILS}\n${eventMessage}`;
-    await forwardToOpenClaw(message, "YouTrack", res);
+    const batchKey = `youtrack:${issueId}`;
+    const { eventType, detail } = getYouTrackEventDetail(payload);
+    addToBatch(batchKey, { eventType, detail, formattedMessage: eventMessage }, YOUTRACK_GUARDRAILS, "YouTrack");
+    res.writeHead(200);
+    res.end("OK");
     return;
   }
 });
 
 /** Forward a formatted message to the OpenClaw hooks API */
-async function forwardToOpenClaw(message, sourceName, res) {
+async function forwardToOpenClaw(message, sourceName) {
   try {
     const hookPayload = JSON.stringify({
       message,
@@ -685,24 +825,30 @@ async function forwardToOpenClaw(message, sourceName, res) {
       console.error(
         `[${new Date().toISOString()}] OpenClaw hooks returned ${response.status}: ${text}`
       );
-      res.writeHead(502);
-      res.end("Upstream error");
       return;
     }
 
     console.log(
       `[${new Date().toISOString()}] Forwarded ${sourceName} event to OpenClaw hooks`
     );
-    res.writeHead(200);
-    res.end("OK");
   } catch (err) {
     console.error(
       `[${new Date().toISOString()}] Failed to forward to OpenClaw: ${err.message}`
     );
-    res.writeHead(502);
-    res.end("Upstream error");
   }
 }
+
+async function shutdown(signal) {
+  console.log(`[${new Date().toISOString()}] Received ${signal}, shutting down`);
+  await flushAllBatches();
+  server.close(() => {
+    console.log(`[${new Date().toISOString()}] Server closed`);
+    process.exit(0);
+  });
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 server.listen(PORT, () => {
   const sources = [];
