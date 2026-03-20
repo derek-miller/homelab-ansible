@@ -4,42 +4,53 @@
  * Receives webhook POSTs from GitHub and YouTrack, validates authentication,
  * and forwards valid payloads to the OpenClaw hooks API with bearer auth.
  *
- * Environment variables:
- *   GITHUB_WEBHOOK_SECRET  — the webhook secret shared with GitHub
- *   YOUTRACK_WEBHOOK_SECRET — shared secret for YouTrack webhook validation
- *   OPENCLAW_HOOKS_TOKEN   — bearer token for the OpenClaw hooks API
- *   OPENCLAW_HOOKS_URL     — full URL to OpenClaw hooks endpoint
- *                            (default: http://openclaw:18789/hooks/agent)
- *   YOUTRACK_BASE_URL      — base URL for YouTrack instance
- *                            (default: https://youtrack.dmiller.me)
- *   YOUTRACK_SELF_USER     — YouTrack login to skip for self-event filtering
- *                            (default: openclaw)
- *   GITHUB_HOOK_PATH       — URL path prefix for GitHub webhooks
- *                            (default: /hooks/svc-derek-miller)
- *   YOUTRACK_HOOK_PATH     — URL path prefix for YouTrack webhooks
- *                            (default: /hooks/youtrack)
- *   PORT                   — listen port (default: 3000)
+ * All configuration is via environment variables (no defaults — all required):
+ *   GITHUB_WEBHOOK_SECRET    — the webhook secret shared with GitHub
+ *   YOUTRACK_WEBHOOK_SECRET  — shared secret for YouTrack webhook validation
+ *   OPENCLAW_HOOKS_TOKEN     — bearer token for the OpenClaw hooks API
+ *   OPENCLAW_HOOKS_URL       — full URL to OpenClaw hooks endpoint
+ *   YOUTRACK_BASE_URL        — base URL for YouTrack instance
+ *   YOUTRACK_SELF_USER       — YouTrack login to skip for self-event filtering
+ *   GITHUB_HOOK_PATH         — URL path prefix for GitHub webhooks
+ *   YOUTRACK_HOOK_PATH       — URL path prefix for YouTrack webhooks
+ *   GITHUB_GUARDRAILS_FILE   — path to file containing GitHub guardrails text (optional)
+ *   YOUTRACK_GUARDRAILS_FILE — path to file containing YouTrack guardrails text (optional)
+ *   OPENCLAW_WAKE_MODE       — wake mode for OpenClaw hooks (default: "now")
+ *   OPENCLAW_DELIVER         — deliver flag for OpenClaw hooks (default: "false")
+ *   PORT                     — listen port (default: 3000)
  */
 
 import { createServer } from "node:http";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
+
+// ─── Required environment variables ─────────────────────────────────
+
+const REQUIRED_ENV = [
+  "OPENCLAW_HOOKS_TOKEN",
+  "OPENCLAW_HOOKS_URL",
+  "YOUTRACK_BASE_URL",
+  "YOUTRACK_SELF_USER",
+  "GITHUB_HOOK_PATH",
+  "YOUTRACK_HOOK_PATH",
+];
+
+const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
+if (missing.length > 0) {
+  console.error(`FATAL: Missing required environment variables: ${missing.join(", ")}`);
+  process.exit(1);
+}
+
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET;
 const YOUTRACK_WEBHOOK_SECRET = process.env.YOUTRACK_WEBHOOK_SECRET;
 const OPENCLAW_HOOKS_TOKEN = process.env.OPENCLAW_HOOKS_TOKEN;
-const OPENCLAW_HOOKS_URL =
-  process.env.OPENCLAW_HOOKS_URL || "http://openclaw:18789/hooks/agent";
-const YOUTRACK_BASE_URL =
-  process.env.YOUTRACK_BASE_URL || "https://youtrack.dmiller.me";
-const YOUTRACK_SELF_USER = process.env.YOUTRACK_SELF_USER || "openclaw";
-const GITHUB_HOOK_PATH = process.env.GITHUB_HOOK_PATH || "/hooks/svc-derek-miller";
-const YOUTRACK_HOOK_PATH = process.env.YOUTRACK_HOOK_PATH || "/hooks/youtrack";
-
-if (!OPENCLAW_HOOKS_TOKEN) {
-  console.error("FATAL: OPENCLAW_HOOKS_TOKEN is required");
-  process.exit(1);
-}
+const OPENCLAW_HOOKS_URL = process.env.OPENCLAW_HOOKS_URL;
+const YOUTRACK_BASE_URL = process.env.YOUTRACK_BASE_URL;
+const YOUTRACK_SELF_USER = process.env.YOUTRACK_SELF_USER;
+const GITHUB_HOOK_PATH = process.env.GITHUB_HOOK_PATH;
+const YOUTRACK_HOOK_PATH = process.env.YOUTRACK_HOOK_PATH;
 
 if (!GITHUB_WEBHOOK_SECRET) {
   console.warn("WARNING: GITHUB_WEBHOOK_SECRET not set — GitHub webhooks will be rejected");
@@ -48,6 +59,28 @@ if (!GITHUB_WEBHOOK_SECRET) {
 if (!YOUTRACK_WEBHOOK_SECRET) {
   console.warn("WARNING: YOUTRACK_WEBHOOK_SECRET not set — YouTrack webhooks will be rejected");
 }
+
+// ─── Wake/deliver configuration ─────────────────────────────────────
+
+const OPENCLAW_WAKE_MODE = process.env.OPENCLAW_WAKE_MODE || "now";
+const OPENCLAW_DELIVER = (process.env.OPENCLAW_DELIVER || "false").toLowerCase() === "true";
+
+// ─── Optional guardrails from mounted files ─────────────────────────
+
+function loadGuardrails(envVar) {
+  const filePath = process.env[envVar];
+  if (!filePath) return "";
+  try {
+    const content = readFileSync(filePath, "utf-8").trim();
+    return content ? content + "\n---\n" : "";
+  } catch (err) {
+    console.warn(`WARNING: Could not read guardrails file ${filePath} (${envVar}): ${err.message}`);
+    return "";
+  }
+}
+
+const GITHUB_GUARDRAILS = loadGuardrails("GITHUB_GUARDRAILS_FILE");
+const YOUTRACK_GUARDRAILS = loadGuardrails("YOUTRACK_GUARDRAILS_FILE");
 
 // ─── Source detection ───────────────────────────────────────────────
 
@@ -397,29 +430,6 @@ function formatYouTrackMessage(payload) {
   return lines.filter(Boolean).join("\n");
 }
 
-// ─── Guardrails ─────────────────────────────────────────────────────
-
-const GITHUB_GUARDRAILS = [
-  "## GitHub Event Guardrails (MANDATORY)",
-  "- NEVER merge a PR without an explicit approval review from Derek",
-  "- NEVER push directly to main/master",
-  "- NEVER open PRs on repos outside derek-miller / finitelabs orgs",
-  "- Read YouTrack KB articles (Guardrails, Workflow Guide) before acting",
-  "- If unsure about any action, do NOT act — respond with a comment asking for clarification",
-  "---",
-].join("\n");
-
-const YOUTRACK_GUARDRAILS = [
-  "## YouTrack Event Guardrails (MANDATORY)",
-  "- Read YouTrack KB articles (Guardrails, Workflow Guide) before acting on any ticket",
-  "- Do NOT move tickets to Done/Resolved without Derek's explicit approval",
-  "- When picking up a ticket (Ready state), move it to In Progress and acknowledge",
-  "- When a ticket returns from Review, read the feedback and address it",
-  "- If unsure about scope or approach, comment on the ticket asking for clarification",
-  "- Do NOT create new tickets without being asked",
-  "---",
-].join("\n");
-
 // ─── Request handler ────────────────────────────────────────────────
 
 const server = createServer(async (req, res) => {
@@ -553,8 +563,8 @@ async function forwardToOpenClaw(message, sourceName, res) {
     const hookPayload = JSON.stringify({
       message,
       name: sourceName,
-      wakeMode: "now",
-      deliver: false,
+      wakeMode: OPENCLAW_WAKE_MODE,
+      deliver: OPENCLAW_DELIVER,
     });
 
     const response = await fetch(OPENCLAW_HOOKS_URL, {
