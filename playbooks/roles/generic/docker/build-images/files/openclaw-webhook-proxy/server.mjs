@@ -4,22 +4,33 @@
  * Receives webhook POSTs from GitHub and YouTrack, validates authentication,
  * and forwards valid payloads to the OpenClaw hooks API with bearer auth.
  *
- * All configuration is via environment variables (all required, no defaults):
- *   GITHUB_WEBHOOK_SECRET    — the webhook secret shared with GitHub
- *   YOUTRACK_WEBHOOK_SECRET  — shared secret for YouTrack webhook validation
+ * Supports single-source or dual-source deployment: at least one of
+ * GITHUB_HOOK_PATH or YOUTRACK_HOOK_PATH must be set. Each source's
+ * env vars are only required when that source is enabled.
+ *
+ * Always required:
  *   OPENCLAW_HOOKS_TOKEN     — bearer token for the OpenClaw hooks API
  *   OPENCLAW_HOOKS_URL       — full URL to OpenClaw hooks endpoint
- *   YOUTRACK_BASE_URL        — base URL for YouTrack instance
- *   YOUTRACK_SELF_USER       — YouTrack login to skip for self-event filtering
- *   GITHUB_HOOK_PATH         — URL path prefix for GitHub webhooks
- *   YOUTRACK_HOOK_PATH       — URL path prefix for YouTrack webhooks
- *   GITHUB_GUARDRAILS_FILE   — path to file containing GitHub guardrails text
- *   YOUTRACK_GUARDRAILS_FILE — path to file containing YouTrack guardrails text
+ *
+ * Optional (with defaults):
+ *   PORT                     — listen port (default: 3000)
+ *   LOG_LEVEL                — logging level: "info" (default) or "debug"
  *   OPENCLAW_WAKE_MODE       — wake mode for OpenClaw hooks (default: "now")
  *   OPENCLAW_DELIVER         — deliver flag for OpenClaw hooks (default: "false")
- *   LOG_LEVEL                — logging level: "info" (default) or "debug"
- *                              debug logs full inbound payloads and forwarded messages
- *   PORT                     — listen port (default: 3000)
+ *
+ * At least one hook source must be configured:
+ *
+ * GitHub (enabled when GITHUB_HOOK_PATH is set):
+ *   GITHUB_HOOK_PATH         — URL path prefix for GitHub webhooks
+ *   GITHUB_WEBHOOK_SECRET    — the webhook secret shared with GitHub
+ *   GITHUB_GUARDRAILS_FILE   — path to file containing GitHub guardrails text
+ *
+ * YouTrack (enabled when YOUTRACK_HOOK_PATH is set):
+ *   YOUTRACK_HOOK_PATH       — URL path prefix for YouTrack webhooks
+ *   YOUTRACK_WEBHOOK_SECRET  — shared secret for YouTrack webhook validation
+ *   YOUTRACK_BASE_URL        — base URL for YouTrack instance
+ *   YOUTRACK_SELF_USER       — YouTrack login to skip for self-event filtering
+ *   YOUTRACK_GUARDRAILS_FILE — path to file containing YouTrack guardrails text
  */
 
 import { createServer } from "node:http";
@@ -34,35 +45,68 @@ function logDebug(...args) {
   if (DEBUG) console.log(`[${new Date().toISOString()}] [DEBUG]`, ...args);
 }
 
-// ─── Required environment variables ─────────────────────────────────
+// ─── Environment variable validation ────────────────────────────────
 
-const REQUIRED_ENV = [
-  "GITHUB_WEBHOOK_SECRET",
-  "YOUTRACK_WEBHOOK_SECRET",
-  "OPENCLAW_HOOKS_TOKEN",
-  "OPENCLAW_HOOKS_URL",
-  "YOUTRACK_BASE_URL",
-  "YOUTRACK_SELF_USER",
-  "GITHUB_HOOK_PATH",
-  "YOUTRACK_HOOK_PATH",
-  "GITHUB_GUARDRAILS_FILE",
-  "YOUTRACK_GUARDRAILS_FILE",
-];
+// Always required
+const ALWAYS_REQUIRED = ["OPENCLAW_HOOKS_TOKEN", "OPENCLAW_HOOKS_URL"];
 
-const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
+const missing = ALWAYS_REQUIRED.filter((key) => !process.env[key]);
 if (missing.length > 0) {
   console.error(`FATAL: Missing required environment variables: ${missing.join(", ")}`);
   process.exit(1);
 }
 
-const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET;
-const YOUTRACK_WEBHOOK_SECRET = process.env.YOUTRACK_WEBHOOK_SECRET;
+// Determine which sources are enabled
+const GITHUB_ENABLED = !!process.env.GITHUB_HOOK_PATH;
+const YOUTRACK_ENABLED = !!process.env.YOUTRACK_HOOK_PATH;
+
+if (!GITHUB_ENABLED && !YOUTRACK_ENABLED) {
+  console.error(
+    "FATAL: At least one hook source must be configured. " +
+      "Set GITHUB_HOOK_PATH and/or YOUTRACK_HOOK_PATH."
+  );
+  process.exit(1);
+}
+
+// Conditionally required env vars per source
+const conditionalMissing = [];
+
+if (GITHUB_ENABLED) {
+  for (const key of ["GITHUB_WEBHOOK_SECRET", "GITHUB_GUARDRAILS_FILE"]) {
+    if (!process.env[key]) conditionalMissing.push(key);
+  }
+}
+
+if (YOUTRACK_ENABLED) {
+  for (const key of [
+    "YOUTRACK_WEBHOOK_SECRET",
+    "YOUTRACK_BASE_URL",
+    "YOUTRACK_SELF_USER",
+    "YOUTRACK_GUARDRAILS_FILE",
+  ]) {
+    if (!process.env[key]) conditionalMissing.push(key);
+  }
+}
+
+if (conditionalMissing.length > 0) {
+  console.error(
+    `FATAL: Missing required environment variables for enabled sources: ${conditionalMissing.join(", ")}`
+  );
+  process.exit(1);
+}
+
 const OPENCLAW_HOOKS_TOKEN = process.env.OPENCLAW_HOOKS_TOKEN;
 const OPENCLAW_HOOKS_URL = process.env.OPENCLAW_HOOKS_URL;
-const YOUTRACK_BASE_URL = process.env.YOUTRACK_BASE_URL;
-const YOUTRACK_SELF_USER = process.env.YOUTRACK_SELF_USER;
-const GITHUB_HOOK_PATH = process.env.GITHUB_HOOK_PATH;
-const YOUTRACK_HOOK_PATH = process.env.YOUTRACK_HOOK_PATH;
+
+// GitHub config (only when enabled)
+const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
+const GITHUB_HOOK_PATH = process.env.GITHUB_HOOK_PATH || "";
+
+// YouTrack config (only when enabled)
+const YOUTRACK_WEBHOOK_SECRET = process.env.YOUTRACK_WEBHOOK_SECRET || "";
+const YOUTRACK_BASE_URL = process.env.YOUTRACK_BASE_URL || "";
+const YOUTRACK_SELF_USER = process.env.YOUTRACK_SELF_USER || "";
+const YOUTRACK_HOOK_PATH = process.env.YOUTRACK_HOOK_PATH || "";
 
 // ─── Wake/deliver configuration (optional, with defaults) ──────────
 
@@ -85,15 +129,19 @@ function loadGuardrails(filePath, label) {
   }
 }
 
-const GITHUB_GUARDRAILS = loadGuardrails(process.env.GITHUB_GUARDRAILS_FILE, "GitHub");
-const YOUTRACK_GUARDRAILS = loadGuardrails(process.env.YOUTRACK_GUARDRAILS_FILE, "YouTrack");
+const GITHUB_GUARDRAILS = GITHUB_ENABLED
+  ? loadGuardrails(process.env.GITHUB_GUARDRAILS_FILE, "GitHub")
+  : "";
+const YOUTRACK_GUARDRAILS = YOUTRACK_ENABLED
+  ? loadGuardrails(process.env.YOUTRACK_GUARDRAILS_FILE, "YouTrack")
+  : "";
 
 // ─── Source detection ───────────────────────────────────────────────
 
-/** Detect webhook source from request URL path */
+/** Detect webhook source from request URL path (only for enabled sources) */
 function detectSource(url) {
-  if (url.startsWith(YOUTRACK_HOOK_PATH)) return "youtrack";
-  if (url.startsWith(GITHUB_HOOK_PATH)) return "github";
+  if (YOUTRACK_ENABLED && url.startsWith(YOUTRACK_HOOK_PATH)) return "youtrack";
+  if (GITHUB_ENABLED && url.startsWith(GITHUB_HOOK_PATH)) return "github";
   return null;
 }
 
@@ -613,8 +661,11 @@ async function forwardToOpenClaw(message, sourceName, res) {
 }
 
 server.listen(PORT, () => {
+  const sources = [];
+  if (GITHUB_ENABLED) sources.push(`GitHub (${GITHUB_HOOK_PATH})`);
+  if (YOUTRACK_ENABLED) sources.push(`YouTrack (${YOUTRACK_HOOK_PATH})`);
   console.log(`OpenClaw webhook proxy listening on port ${PORT}`);
   console.log(`Forwarding to: ${OPENCLAW_HOOKS_URL}`);
-  console.log(`Sources: GitHub (${GITHUB_HOOK_PATH}), YouTrack (${YOUTRACK_HOOK_PATH})`);
+  console.log(`Active sources: ${sources.join(", ")}`);
   console.log(`Log level: ${LOG_LEVEL}`);
 });
