@@ -17,6 +17,8 @@
  *   YOUTRACK_GUARDRAILS_FILE — path to file containing YouTrack guardrails text
  *   OPENCLAW_WAKE_MODE       — wake mode for OpenClaw hooks (default: "now")
  *   OPENCLAW_DELIVER         — deliver flag for OpenClaw hooks (default: "false")
+ *   LOG_LEVEL                — logging level: "info" (default) or "debug"
+ *                              debug logs full inbound payloads and forwarded messages
  *   PORT                     — listen port (default: 3000)
  */
 
@@ -25,6 +27,12 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
+const LOG_LEVEL = (process.env.LOG_LEVEL || "info").toLowerCase();
+const DEBUG = LOG_LEVEL === "debug";
+
+function logDebug(...args) {
+  if (DEBUG) console.log(`[${new Date().toISOString()}] [DEBUG]`, ...args);
+}
 
 // ─── Required environment variables ─────────────────────────────────
 
@@ -482,6 +490,8 @@ const server = createServer(async (req, res) => {
     const event = req.headers["x-github-event"];
     const delivery = req.headers["x-github-delivery"];
 
+    logDebug(`GitHub inbound payload:\n${JSON.stringify(payload, null, 2)}`);
+
     // Skip ping events
     if (event === "ping") {
       console.log(
@@ -525,6 +535,8 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    logDebug(`YouTrack inbound payload:\n${JSON.stringify(payload, null, 2)}`);
+
     const issueId =
       payload.issue?.idReadable || payload.issue?.id || "unknown";
     const action = payload.action || "event";
@@ -565,6 +577,8 @@ async function forwardToOpenClaw(message, sourceName, res) {
       deliver: OPENCLAW_DELIVER,
     });
 
+    logDebug(`Forwarding ${sourceName} message to OpenClaw:\n${message}`);
+
     const response = await fetch(OPENCLAW_HOOKS_URL, {
       method: "POST",
       headers: {
@@ -602,4 +616,5 @@ server.listen(PORT, () => {
   console.log(`OpenClaw webhook proxy listening on port ${PORT}`);
   console.log(`Forwarding to: ${OPENCLAW_HOOKS_URL}`);
   console.log(`Sources: GitHub (${GITHUB_HOOK_PATH}), YouTrack (${YOUTRACK_HOOK_PATH})`);
+  console.log(`Log level: ${LOG_LEVEL}`);
 });
