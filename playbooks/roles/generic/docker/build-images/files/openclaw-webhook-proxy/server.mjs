@@ -4,7 +4,7 @@
  * Receives webhook POSTs from GitHub and YouTrack, validates authentication,
  * and forwards valid payloads to the OpenClaw hooks API with bearer auth.
  *
- * All configuration is via environment variables (no defaults — all required):
+ * All configuration is via environment variables (all required, no defaults):
  *   GITHUB_WEBHOOK_SECRET    — the webhook secret shared with GitHub
  *   YOUTRACK_WEBHOOK_SECRET  — shared secret for YouTrack webhook validation
  *   OPENCLAW_HOOKS_TOKEN     — bearer token for the OpenClaw hooks API
@@ -13,10 +13,10 @@
  *   YOUTRACK_SELF_USER       — YouTrack login to skip for self-event filtering
  *   GITHUB_HOOK_PATH         — URL path prefix for GitHub webhooks
  *   YOUTRACK_HOOK_PATH       — URL path prefix for YouTrack webhooks
- *   GITHUB_GUARDRAILS_FILE   — path to file containing GitHub guardrails text (optional)
- *   YOUTRACK_GUARDRAILS_FILE — path to file containing YouTrack guardrails text (optional)
- *   OPENCLAW_WAKE_MODE       — wake mode for OpenClaw hooks (default: "now")
- *   OPENCLAW_DELIVER         — deliver flag for OpenClaw hooks (default: "false")
+ *   GITHUB_GUARDRAILS_FILE   — path to file containing GitHub guardrails text
+ *   YOUTRACK_GUARDRAILS_FILE — path to file containing YouTrack guardrails text
+ *   OPENCLAW_WAKE_MODE       — wake mode for OpenClaw hooks (e.g. "now", "next-heartbeat")
+ *   OPENCLAW_DELIVER         — deliver flag for OpenClaw hooks ("true" or "false")
  *   PORT                     — listen port (default: 3000)
  */
 
@@ -29,12 +29,18 @@ const PORT = parseInt(process.env.PORT || "3000", 10);
 // ─── Required environment variables ─────────────────────────────────
 
 const REQUIRED_ENV = [
+  "GITHUB_WEBHOOK_SECRET",
+  "YOUTRACK_WEBHOOK_SECRET",
   "OPENCLAW_HOOKS_TOKEN",
   "OPENCLAW_HOOKS_URL",
   "YOUTRACK_BASE_URL",
   "YOUTRACK_SELF_USER",
   "GITHUB_HOOK_PATH",
   "YOUTRACK_HOOK_PATH",
+  "OPENCLAW_WAKE_MODE",
+  "OPENCLAW_DELIVER",
+  "GITHUB_GUARDRAILS_FILE",
+  "YOUTRACK_GUARDRAILS_FILE",
 ];
 
 const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
@@ -52,35 +58,29 @@ const YOUTRACK_SELF_USER = process.env.YOUTRACK_SELF_USER;
 const GITHUB_HOOK_PATH = process.env.GITHUB_HOOK_PATH;
 const YOUTRACK_HOOK_PATH = process.env.YOUTRACK_HOOK_PATH;
 
-if (!GITHUB_WEBHOOK_SECRET) {
-  console.warn("WARNING: GITHUB_WEBHOOK_SECRET not set — GitHub webhooks will be rejected");
-}
-
-if (!YOUTRACK_WEBHOOK_SECRET) {
-  console.warn("WARNING: YOUTRACK_WEBHOOK_SECRET not set — YouTrack webhooks will be rejected");
-}
-
 // ─── Wake/deliver configuration ─────────────────────────────────────
 
-const OPENCLAW_WAKE_MODE = process.env.OPENCLAW_WAKE_MODE || "now";
-const OPENCLAW_DELIVER = (process.env.OPENCLAW_DELIVER || "false").toLowerCase() === "true";
+const OPENCLAW_WAKE_MODE = process.env.OPENCLAW_WAKE_MODE;
+const OPENCLAW_DELIVER = process.env.OPENCLAW_DELIVER.toLowerCase() === "true";
 
-// ─── Optional guardrails from mounted files ─────────────────────────
+// ─── Load guardrails from mounted files ─────────────────────────────
 
-function loadGuardrails(envVar) {
-  const filePath = process.env[envVar];
-  if (!filePath) return "";
+function loadGuardrails(filePath, label) {
   try {
     const content = readFileSync(filePath, "utf-8").trim();
-    return content ? content + "\n---\n" : "";
+    if (!content) {
+      console.error(`FATAL: Guardrails file is empty: ${filePath} (${label})`);
+      process.exit(1);
+    }
+    return content;
   } catch (err) {
-    console.warn(`WARNING: Could not read guardrails file ${filePath} (${envVar}): ${err.message}`);
-    return "";
+    console.error(`FATAL: Failed to read ${label} guardrails file (${filePath}): ${err.message}`);
+    process.exit(1);
   }
 }
 
-const GITHUB_GUARDRAILS = loadGuardrails("GITHUB_GUARDRAILS_FILE");
-const YOUTRACK_GUARDRAILS = loadGuardrails("YOUTRACK_GUARDRAILS_FILE");
+const GITHUB_GUARDRAILS = loadGuardrails(process.env.GITHUB_GUARDRAILS_FILE, "GitHub");
+const YOUTRACK_GUARDRAILS = loadGuardrails(process.env.YOUTRACK_GUARDRAILS_FILE, "YouTrack");
 
 // ─── Source detection ───────────────────────────────────────────────
 
