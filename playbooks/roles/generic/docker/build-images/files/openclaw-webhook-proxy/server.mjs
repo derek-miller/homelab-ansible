@@ -30,8 +30,7 @@
  *   YOUTRACK_HOOK_PATH       — URL path prefix for YouTrack webhooks
  *   YOUTRACK_WEBHOOK_SECRET  — shared secret for YouTrack webhook validation
  *   YOUTRACK_BASE_URL        — base URL for YouTrack instance
- *   YOUTRACK_SELF_USER       — YouTrack login to skip for self-event filtering
- *   YOUTRACK_IGNORE_USERS    — comma-separated usernames to skip (e.g. bot accounts)
+ *   YOUTRACK_IGNORE_USERS    — comma-separated usernames to skip (e.g. bot accounts, self)
  *   YOUTRACK_GUARDRAILS_FILE — path to file containing YouTrack guardrails text
  */
 
@@ -83,7 +82,6 @@ if (YOUTRACK_ENABLED) {
   for (const key of [
     "YOUTRACK_WEBHOOK_SECRET",
     "YOUTRACK_BASE_URL",
-    "YOUTRACK_SELF_USER",
     "YOUTRACK_GUARDRAILS_FILE",
   ]) {
     if (!process.env[key]) conditionalMissing.push(key);
@@ -111,7 +109,6 @@ const GITHUB_IGNORE_USERS = (process.env.GITHUB_IGNORE_USERS || "")
 // YouTrack config (only when enabled)
 const YOUTRACK_WEBHOOK_SECRET = process.env.YOUTRACK_WEBHOOK_SECRET || "";
 const YOUTRACK_BASE_URL = process.env.YOUTRACK_BASE_URL || "";
-const YOUTRACK_SELF_USER = process.env.YOUTRACK_SELF_USER || "";
 const YOUTRACK_HOOK_PATH = process.env.YOUTRACK_HOOK_PATH || "";
 const YOUTRACK_IGNORE_USERS = (process.env.YOUTRACK_IGNORE_USERS || "")
   .split(",")
@@ -636,22 +633,12 @@ const server = createServer(async (req, res) => {
       `[${new Date().toISOString()}] YouTrack ${action} on ${issueId}`
     );
 
-    // Skip events from the OpenClaw user to avoid feedback loops
+    // Skip events from ignored users (e.g. bot accounts, self)
     const updaterLogin =
       payload.updater?.login ||
       payload.author?.login ||
       payload.comment?.author?.login ||
       "";
-    if (updaterLogin === YOUTRACK_SELF_USER) {
-      console.log(
-        `[${new Date().toISOString()}] Skipping YouTrack event from ${YOUTRACK_SELF_USER} (self)`
-      );
-      res.writeHead(200);
-      res.end("OK (skipped self)");
-      return;
-    }
-
-    // Skip events from ignored users (e.g. bot accounts)
     if (
       YOUTRACK_IGNORE_USERS.length > 0 &&
       updaterLogin &&
