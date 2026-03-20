@@ -24,12 +24,13 @@
  *   GITHUB_HOOK_PATH         — URL path prefix for GitHub webhooks
  *   GITHUB_WEBHOOK_SECRET    — the webhook secret shared with GitHub
  *   GITHUB_GUARDRAILS_FILE   — path to file containing GitHub guardrails text
+ *   GITHUB_IGNORE_USERS      — comma-separated usernames to skip (e.g. bot accounts)
  *
  * YouTrack (enabled when YOUTRACK_HOOK_PATH is set):
  *   YOUTRACK_HOOK_PATH       — URL path prefix for YouTrack webhooks
  *   YOUTRACK_WEBHOOK_SECRET  — shared secret for YouTrack webhook validation
  *   YOUTRACK_BASE_URL        — base URL for YouTrack instance
- *   YOUTRACK_SELF_USER       — YouTrack login to skip for self-event filtering
+ *   YOUTRACK_IGNORE_USERS    — comma-separated usernames to skip (e.g. bot accounts, self)
  *   YOUTRACK_GUARDRAILS_FILE — path to file containing YouTrack guardrails text
  */
 
@@ -81,7 +82,6 @@ if (YOUTRACK_ENABLED) {
   for (const key of [
     "YOUTRACK_WEBHOOK_SECRET",
     "YOUTRACK_BASE_URL",
-    "YOUTRACK_SELF_USER",
     "YOUTRACK_GUARDRAILS_FILE",
   ]) {
     if (!process.env[key]) conditionalMissing.push(key);
@@ -101,12 +101,19 @@ const OPENCLAW_HOOKS_URL = process.env.OPENCLAW_HOOKS_URL;
 // GitHub config (only when enabled)
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 const GITHUB_HOOK_PATH = process.env.GITHUB_HOOK_PATH || "";
+const GITHUB_IGNORE_USERS = (process.env.GITHUB_IGNORE_USERS || "")
+  .split(",")
+  .map((u) => u.trim().toLowerCase())
+  .filter(Boolean);
 
 // YouTrack config (only when enabled)
 const YOUTRACK_WEBHOOK_SECRET = process.env.YOUTRACK_WEBHOOK_SECRET || "";
 const YOUTRACK_BASE_URL = process.env.YOUTRACK_BASE_URL || "";
-const YOUTRACK_SELF_USER = process.env.YOUTRACK_SELF_USER || "";
 const YOUTRACK_HOOK_PATH = process.env.YOUTRACK_HOOK_PATH || "";
+const YOUTRACK_IGNORE_USERS = (process.env.YOUTRACK_IGNORE_USERS || "")
+  .split(",")
+  .map((u) => u.trim().toLowerCase())
+  .filter(Boolean);
 
 // ─── Wake/deliver configuration (optional, with defaults) ──────────
 
@@ -550,12 +557,45 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    const eventMessage = formatGitHubMessage(event, payload);
     const repo = payload.repository?.full_name || "unknown";
 
     console.log(
       `[${new Date().toISOString()}] GitHub ${event} on ${repo} (delivery: ${delivery})`
     );
+
+    // Skip events from ignored users (e.g. bot accounts)
+    if (GITHUB_IGNORE_USERS.length > 0) {
+      let actor = null;
+      switch (event) {
+        case "pull_request_review":
+          actor = payload.review?.user?.login;
+          break;
+        case "pull_request_review_comment":
+        case "issue_comment":
+          actor = payload.comment?.user?.login;
+          break;
+        case "issues":
+        case "pull_request":
+          actor = payload.sender?.login;
+          break;
+        case "push":
+          actor = payload.pusher?.name || payload.sender?.login;
+          break;
+        default:
+          actor = payload.sender?.login;
+          break;
+      }
+      if (actor && GITHUB_IGNORE_USERS.includes(actor.toLowerCase())) {
+        console.log(
+          `[${new Date().toISOString()}] Skipping GitHub event from ${actor} (ignored user)`
+        );
+        res.writeHead(200);
+        res.end("OK (skipped ignored user)");
+        return;
+      }
+    }
+
+    const eventMessage = formatGitHubMessage(event, payload);
 
     const message = `${GITHUB_GUARDRAILS}\n${eventMessage}`;
     await forwardToOpenClaw(message, "GitHub", res);
@@ -593,18 +633,22 @@ const server = createServer(async (req, res) => {
       `[${new Date().toISOString()}] YouTrack ${action} on ${issueId}`
     );
 
-    // Skip events from the OpenClaw user to avoid feedback loops
+    // Skip events from ignored users (e.g. bot accounts, self)
     const updaterLogin =
       payload.updater?.login ||
       payload.author?.login ||
       payload.comment?.author?.login ||
       "";
-    if (updaterLogin === YOUTRACK_SELF_USER) {
+    if (
+      YOUTRACK_IGNORE_USERS.length > 0 &&
+      updaterLogin &&
+      YOUTRACK_IGNORE_USERS.includes(updaterLogin.toLowerCase())
+    ) {
       console.log(
-        `[${new Date().toISOString()}] Skipping YouTrack event from ${YOUTRACK_SELF_USER} (self)`
+        `[${new Date().toISOString()}] Skipping YouTrack event from ${updaterLogin} (ignored user)`
       );
       res.writeHead(200);
-      res.end("OK (skipped self)");
+      res.end("OK (skipped ignored user)");
       return;
     }
 
