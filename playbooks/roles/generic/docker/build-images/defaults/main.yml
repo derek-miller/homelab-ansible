@@ -16,5 +16,7 @@ available_docker_images:
     dockerfile: openclaw-webhook-proxy/Dockerfile
     build_files:
       - openclaw-webhook-proxy/server.mjs
+      - openclaw-webhook-proxy/guardrails/github.txt
+      - openclaw-webhook-proxy/guardrails/youtrack.txt
     image_name: openclaw-webhook-proxy
-    image_tag: "2.0.0"
+    image_tag: "3.0.0"
