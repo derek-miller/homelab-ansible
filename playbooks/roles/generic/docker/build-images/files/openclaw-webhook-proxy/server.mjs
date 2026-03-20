@@ -40,6 +40,13 @@ function validateSignature(payload, signatureHeader) {
   return timingSafeEqual(expected, actual);
 }
 
+/** Check if a review comment body contains a GitHub suggestion block */
+function extractSuggestion(body) {
+  if (!body) return null;
+  const match = body.match(/```suggestion\r?\n([\s\S]*?)```/);
+  return match ? match[1].trimEnd() : null;
+}
+
 /** Format GitHub event into a meaningful agent message */
 function formatMessage(event, payload) {
   const repo = payload.repository?.full_name || "unknown";
@@ -48,12 +55,18 @@ function formatMessage(event, payload) {
     case "pull_request_review": {
       const pr = payload.pull_request;
       const review = payload.review;
+      const action = payload.action; // submitted, edited, dismissed
+      // Diff URL: PR html_url + /files
+      const diffUrl = `${pr.html_url}/files`;
       return [
-        `GitHub PR Review on ${repo}#${pr.number}: "${pr.title}"`,
+        `GitHub PR Review [${action}] on ${repo}#${pr.number}: "${pr.title}"`,
         `Reviewer: ${review.user.login}`,
         `State: ${review.state}`,
-        review.body ? `Comment: ${review.body}` : null,
+        `Action: ${action}`,
+        review.body ? `Review body:\n${review.body}` : null,
         `PR URL: ${pr.html_url}`,
+        `Diff URL: ${diffUrl}`,
+        `Review URL: ${review.html_url}`,
       ]
         .filter(Boolean)
         .join("\n");
@@ -62,34 +75,56 @@ function formatMessage(event, payload) {
     case "pull_request_review_comment": {
       const pr = payload.pull_request;
       const comment = payload.comment;
+      const action = payload.action;
+      const suggestion = extractSuggestion(comment.body);
+      // diff_hunk gives the surrounding code context
+      const diffHunk = comment.diff_hunk
+        ? `\nCode context (diff hunk):\n${comment.diff_hunk}`
+        : "";
+      const replyInfo = comment.in_reply_to_id
+        ? `\nIn reply to comment #${comment.in_reply_to_id}`
+        : "";
       return [
-        `GitHub PR Comment on ${repo}#${pr.number}: "${pr.title}"`,
+        `GitHub PR Review Comment [${action}] on ${repo}#${pr.number}: "${pr.title}"`,
         `Author: ${comment.user.login}`,
         `File: ${comment.path}:${comment.line || comment.original_line || "?"}`,
-        `Comment: ${comment.body}`,
+        replyInfo || null,
+        `Comment:\n${comment.body}`,
+        suggestion ? `\nSuggested change:\n${suggestion}` : null,
+        diffHunk || null,
         `PR URL: ${pr.html_url}`,
         `Comment URL: ${comment.html_url}`,
-      ].join("\n");
+      ]
+        .filter(Boolean)
+        .join("\n");
     }
 
     case "issue_comment": {
       const issue = payload.issue;
       const comment = payload.comment;
+      const action = payload.action;
       const isPR = !!issue.pull_request;
+      const issueState = issue.state; // open or closed
+      // GitHub doesn't provide in_reply_to for issue comments in the webhook
+      // but we can note the issue/PR state
       return [
-        `GitHub ${isPR ? "PR" : "Issue"} Comment on ${repo}#${issue.number}: "${issue.title}"`,
+        `GitHub ${isPR ? "PR" : "Issue"} Comment [${action}] on ${repo}#${issue.number}: "${issue.title}"`,
         `Author: ${comment.user.login}`,
-        `Comment: ${comment.body}`,
-        `URL: ${comment.html_url}`,
+        `${isPR ? "PR" : "Issue"} state: ${issueState}`,
+        `Comment:\n${comment.body}`,
+        `Issue URL: ${issue.html_url}`,
+        `Comment URL: ${comment.html_url}`,
       ].join("\n");
     }
 
     case "issues": {
       const issue = payload.issue;
+      const action = payload.action;
       return [
-        `GitHub Issue ${payload.action} on ${repo}#${issue.number}: "${issue.title}"`,
-        issue.body ? `Body: ${issue.body.slice(0, 500)}` : null,
+        `GitHub Issue [${action}] on ${repo}#${issue.number}: "${issue.title}"`,
         `Author: ${issue.user.login}`,
+        `State: ${issue.state}`,
+        issue.body ? `\nBody:\n${issue.body}` : null,
         `URL: ${issue.html_url}`,
       ]
         .filter(Boolean)
@@ -98,14 +133,91 @@ function formatMessage(event, payload) {
 
     case "pull_request": {
       const pr = payload.pull_request;
-      return [
-        `GitHub PR ${payload.action} on ${repo}#${pr.number}: "${pr.title}"`,
-        pr.body ? `Body: ${pr.body.slice(0, 500)}` : null,
+      const action = payload.action;
+      const lines = [
+        `GitHub PR [${action}] on ${repo}#${pr.number}: "${pr.title}"`,
         `Author: ${pr.user.login}`,
-        `URL: ${pr.html_url}`,
-      ]
-        .filter(Boolean)
-        .join("\n");
+        `Branch: ${pr.head.ref} → ${pr.base.ref}`,
+        `State: ${pr.state}`,
+      ];
+
+      // Include full body for opened/edited PRs
+      if (action === "opened" || action === "edited" || action === "reopened") {
+        if (pr.body) {
+          lines.push(`\nDescription:\n${pr.body}`);
+        }
+      }
+
+      // For merged PRs, include merge commit
+      if (pr.merged) {
+        lines.push(`Merged: yes`);
+        if (pr.merge_commit_sha) {
+          lines.push(`Merge commit: ${pr.merge_commit_sha}`);
+        }
+        if (pr.merged_by) {
+          lines.push(`Merged by: ${pr.merged_by.login}`);
+        }
+      }
+
+      // For ready_for_review, make it clear
+      if (action === "ready_for_review") {
+        lines.push(`PR is now ready for review (was draft)`);
+      }
+
+      lines.push(`URL: ${pr.html_url}`);
+      return lines.filter(Boolean).join("\n");
+    }
+
+    case "push": {
+      const ref = payload.ref || "";
+      // Extract branch name from refs/heads/branch-name
+      const branch = ref.startsWith("refs/heads/")
+        ? ref.slice("refs/heads/".length)
+        : ref;
+      const pusher = payload.pusher?.name || "unknown";
+      const commits = payload.commits || [];
+      const commitCount = commits.length;
+      const forced = payload.forced ? " (force push)" : "";
+
+      // Summarize commits (up to 10)
+      const commitLines = commits.slice(0, 10).map((c) => {
+        const shortSha = c.id.slice(0, 7);
+        const msg = c.message.split("\n")[0]; // first line only
+        return `  ${shortSha} ${msg}`;
+      });
+      if (commits.length > 10) {
+        commitLines.push(`  ... and ${commits.length - 10} more commits`);
+      }
+
+      // Files changed summary across all commits
+      const allAdded = new Set();
+      const allModified = new Set();
+      const allRemoved = new Set();
+      for (const c of commits) {
+        (c.added || []).forEach((f) => allAdded.add(f));
+        (c.modified || []).forEach((f) => allModified.add(f));
+        (c.removed || []).forEach((f) => allRemoved.add(f));
+      }
+      const filesSummary = [];
+      if (allAdded.size > 0) filesSummary.push(`+${allAdded.size} added`);
+      if (allModified.size > 0) filesSummary.push(`~${allModified.size} modified`);
+      if (allRemoved.size > 0) filesSummary.push(`-${allRemoved.size} removed`);
+
+      const lines = [
+        `GitHub Push to ${repo} (branch: ${branch})${forced}`,
+        `Pusher: ${pusher}`,
+        `Commits: ${commitCount}`,
+      ];
+      if (commitLines.length > 0) {
+        lines.push(`\nCommit messages:\n${commitLines.join("\n")}`);
+      }
+      if (filesSummary.length > 0) {
+        lines.push(`\nFiles changed: ${filesSummary.join(", ")}`);
+      }
+      if (payload.compare) {
+        lines.push(`Compare: ${payload.compare}`);
+      }
+      return lines.filter(Boolean).join("\n");
     }
 
     default:
