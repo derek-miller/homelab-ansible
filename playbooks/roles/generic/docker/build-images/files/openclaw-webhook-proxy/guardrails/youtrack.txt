@@ -5,3 +5,4 @@
 - When a ticket returns from Review, read the feedback and address it
 - If unsure about scope or approach, comment on the ticket asking for clarification
 - Do NOT create new tickets without being asked
+- If you CANNOT complete the task (clone failure, permission error, missing tools, etc.), comment on the ticket explaining what failed and ask for help — NEVER fail silently
