@@ -1,14 +1,17 @@
 /**
  * OpenClaw Webhook Proxy
  *
- * Receives GitHub webhook POSTs, validates HMAC-SHA256 signatures,
+ * Receives webhook POSTs from GitHub and YouTrack, validates authentication,
  * and forwards valid payloads to the OpenClaw hooks API with bearer auth.
  *
  * Environment variables:
  *   GITHUB_WEBHOOK_SECRET  — the webhook secret shared with GitHub
+ *   YOUTRACK_WEBHOOK_SECRET — shared secret for YouTrack webhook validation
  *   OPENCLAW_HOOKS_TOKEN   — bearer token for the OpenClaw hooks API
  *   OPENCLAW_HOOKS_URL     — full URL to OpenClaw hooks endpoint
  *                            (default: http://openclaw:18789/hooks/agent)
+ *   YOUTRACK_BASE_URL      — base URL for YouTrack instance
+ *                            (default: https://youtrack.dmiller.me)
  *   PORT                   — listen port (default: 3000)
  */
 
@@ -17,20 +20,40 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET;
+const YOUTRACK_WEBHOOK_SECRET = process.env.YOUTRACK_WEBHOOK_SECRET;
 const OPENCLAW_HOOKS_TOKEN = process.env.OPENCLAW_HOOKS_TOKEN;
 const OPENCLAW_HOOKS_URL =
   process.env.OPENCLAW_HOOKS_URL || "http://openclaw:18789/hooks/agent";
+const YOUTRACK_BASE_URL =
+  process.env.YOUTRACK_BASE_URL || "https://youtrack.dmiller.me";
 
-if (!GITHUB_WEBHOOK_SECRET || !OPENCLAW_HOOKS_TOKEN) {
-  console.error(
-    "FATAL: GITHUB_WEBHOOK_SECRET and OPENCLAW_HOOKS_TOKEN are required"
-  );
+if (!OPENCLAW_HOOKS_TOKEN) {
+  console.error("FATAL: OPENCLAW_HOOKS_TOKEN is required");
   process.exit(1);
 }
 
+if (!GITHUB_WEBHOOK_SECRET) {
+  console.warn("WARNING: GITHUB_WEBHOOK_SECRET not set — GitHub webhooks will be rejected");
+}
+
+if (!YOUTRACK_WEBHOOK_SECRET) {
+  console.warn("WARNING: YOUTRACK_WEBHOOK_SECRET not set — YouTrack webhooks will be rejected");
+}
+
+// ─── Source detection ───────────────────────────────────────────────
+
+/** Detect webhook source from request URL path */
+function detectSource(url) {
+  if (url.startsWith("/hooks/youtrack")) return "youtrack";
+  if (url.startsWith("/hooks/svc-derek-miller")) return "github";
+  return null;
+}
+
+// ─── GitHub helpers ─────────────────────────────────────────────────
+
 /** Validate GitHub HMAC-SHA256 signature */
-function validateSignature(payload, signatureHeader) {
-  if (!signatureHeader) return false;
+function validateGitHubSignature(payload, signatureHeader) {
+  if (!signatureHeader || !GITHUB_WEBHOOK_SECRET) return false;
   const expected = Buffer.from(
     "sha256=" +
       createHmac("sha256", GITHUB_WEBHOOK_SECRET).update(payload).digest("hex")
@@ -48,7 +71,7 @@ function extractSuggestion(body) {
 }
 
 /** Format GitHub event into a meaningful agent message */
-function formatMessage(event, payload) {
+function formatGitHubMessage(event, payload) {
   const repo = payload.repository?.full_name || "unknown";
 
   switch (event) {
@@ -105,8 +128,6 @@ function formatMessage(event, payload) {
       const action = payload.action;
       const isPR = !!issue.pull_request;
       const issueState = issue.state; // open or closed
-      // GitHub doesn't provide in_reply_to for issue comments in the webhook
-      // but we can note the issue/PR state
       return [
         `GitHub ${isPR ? "PR" : "Issue"} Comment [${action}] on ${repo}#${issue.number}: "${issue.title}"`,
         `Author: ${comment.user.login}`,
@@ -225,6 +246,173 @@ function formatMessage(event, payload) {
   }
 }
 
+// ─── YouTrack helpers ───────────────────────────────────────────────
+
+/** Validate YouTrack webhook shared secret */
+function validateYouTrackSecret(req) {
+  if (!YOUTRACK_WEBHOOK_SECRET) return false;
+  const provided = req.headers["x-youtrack-token"];
+  if (!provided) return false;
+  const expected = Buffer.from(YOUTRACK_WEBHOOK_SECRET);
+  const actual = Buffer.from(provided);
+  if (expected.length !== actual.length) return false;
+  return timingSafeEqual(expected, actual);
+}
+
+/**
+ * Extract readable field changes from a YouTrack webhook payload.
+ * YouTrack sends an array of changed fields in `updatedFields` or
+ * individual `oldValue`/`newValue` pairs.
+ */
+function formatFieldChanges(fields) {
+  if (!fields || !Array.isArray(fields) || fields.length === 0) return null;
+  return fields
+    .map((f) => {
+      const name = f.name || f.id || "unknown field";
+      const oldVal = extractFieldValue(f.oldValue);
+      const newVal = extractFieldValue(f.newValue);
+      if (oldVal && newVal) return `  ${name}: ${oldVal} → ${newVal}`;
+      if (newVal) return `  ${name}: → ${newVal}`;
+      if (oldVal) return `  ${name}: ${oldVal} → (cleared)`;
+      return `  ${name}: changed`;
+    })
+    .join("\n");
+}
+
+/** Extract a human-readable value from a YouTrack field value object */
+function extractFieldValue(val) {
+  if (val == null) return null;
+  if (typeof val === "string") return val;
+  if (typeof val === "number" || typeof val === "boolean") return String(val);
+  if (Array.isArray(val)) {
+    return val.map((v) => extractFieldValue(v)).filter(Boolean).join(", ");
+  }
+  // YouTrack field values are objects with name/login/text/presentation
+  return val.name || val.login || val.text || val.presentation || val.id || JSON.stringify(val);
+}
+
+/** Build a YouTrack issue URL from the issue ID */
+function youtrackIssueUrl(issueId) {
+  return `${YOUTRACK_BASE_URL}/issue/${issueId}`;
+}
+
+/**
+ * Format a YouTrack webhook payload into a meaningful agent message.
+ *
+ * YouTrack webhook payloads vary by event type. Common structure:
+ * - Issue events: { issue: { id, idReadable, summary, ... }, updatedFields: [...] }
+ * - Comment events: { issue: { ... }, comment: { text, author: { login, name }, ... } }
+ * - The top-level may also include: action, timestamp, updater
+ */
+function formatYouTrackMessage(payload) {
+  const issue = payload.issue;
+  const issueId = issue?.idReadable || issue?.id || "unknown";
+  const summary = issue?.summary || "(no summary)";
+  const action = payload.action || "updated";
+  const updater =
+    payload.updater?.name ||
+    payload.updater?.login ||
+    payload.author?.name ||
+    payload.author?.login ||
+    "unknown";
+
+  // Comment added/updated/removed
+  if (payload.comment) {
+    const comment = payload.comment;
+    const commentAuthor =
+      comment.author?.name || comment.author?.login || updater;
+    const commentText = comment.text || "(empty comment)";
+    const deleted = comment.deleted ? " [DELETED]" : "";
+    return [
+      `YouTrack Comment${deleted} on ${issueId}: "${summary}"`,
+      `Author: ${commentAuthor}`,
+      `Comment:\n${commentText}`,
+      `URL: ${youtrackIssueUrl(issueId)}`,
+    ].join("\n");
+  }
+
+  // Field changes (state transitions, assignments, etc.)
+  const fields = payload.updatedFields || payload.changedFields;
+  const fieldChanges = formatFieldChanges(fields);
+
+  // Detect specific high-value events
+  let eventType = `Issue [${action}]`;
+
+  if (fields && Array.isArray(fields)) {
+    for (const f of fields) {
+      const fname = (f.name || f.id || "").toLowerCase();
+      const newVal = extractFieldValue(f.newValue);
+
+      // State change detection
+      if (fname === "state" || fname === "status") {
+        const oldVal = extractFieldValue(f.oldValue);
+        if (newVal) {
+          eventType = `Issue State Change`;
+          // Check for key transitions
+          const newLower = newVal.toLowerCase();
+          if (newLower === "ready" || newLower === "open") {
+            eventType = `Issue Moved to Ready`;
+          } else if (
+            newLower === "in progress" ||
+            newLower === "in review"
+          ) {
+            eventType = `Issue Moved to ${newVal}`;
+          } else if (newLower === "done" || newLower === "resolved" || newLower === "closed") {
+            eventType = `Issue Resolved`;
+          }
+        }
+      }
+
+      // Assignment detection
+      if (fname === "assignee" || fname === "assignees") {
+        eventType = `Issue Assigned`;
+      }
+    }
+  }
+
+  const lines = [
+    `YouTrack ${eventType} — ${issueId}: "${summary}"`,
+    `Updated by: ${updater}`,
+  ];
+
+  if (fieldChanges) {
+    lines.push(`\nField changes:\n${fieldChanges}`);
+  }
+
+  // Include description for new issues
+  if (action === "created" && issue?.description) {
+    lines.push(`\nDescription:\n${issue.description}`);
+  }
+
+  lines.push(`URL: ${youtrackIssueUrl(issueId)}`);
+  return lines.filter(Boolean).join("\n");
+}
+
+// ─── Guardrails ─────────────────────────────────────────────────────
+
+const GITHUB_GUARDRAILS = [
+  "## GitHub Event Guardrails (MANDATORY)",
+  "- NEVER merge a PR without an explicit approval review from Derek",
+  "- NEVER push directly to main/master",
+  "- NEVER open PRs on repos outside derek-miller / finitelabs orgs",
+  "- Read YouTrack KB articles (Guardrails, Workflow Guide) before acting",
+  "- If unsure about any action, do NOT act — respond with a comment asking for clarification",
+  "---",
+].join("\n");
+
+const YOUTRACK_GUARDRAILS = [
+  "## YouTrack Event Guardrails (MANDATORY)",
+  "- Read YouTrack KB articles (Guardrails, Workflow Guide) before acting on any ticket",
+  "- Do NOT move tickets to Done/Resolved without Derek's explicit approval",
+  "- When picking up a ticket (Ready state), move it to In Progress and acknowledge",
+  "- When a ticket returns from Review, read the feedback and address it",
+  "- If unsure about scope or approach, comment on the ticket asking for clarification",
+  "- Do NOT create new tickets without being asked",
+  "---",
+].join("\n");
+
+// ─── Request handler ────────────────────────────────────────────────
+
 const server = createServer(async (req, res) => {
   // Health check
   if (req.method === "GET" && req.url === "/health") {
@@ -240,68 +428,122 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  const source = detectSource(req.url);
+  if (!source) {
+    res.writeHead(404);
+    res.end("Unknown webhook path");
+    return;
+  }
+
   // Read body
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   const body = Buffer.concat(chunks);
 
-  // Validate GitHub signature
-  const signature = req.headers["x-hub-signature-256"];
-  if (!validateSignature(body, signature)) {
-    console.error(
-      `[${new Date().toISOString()}] REJECTED: invalid signature from ${req.socket.remoteAddress}`
+  // ── GitHub path ──
+  if (source === "github") {
+    // Validate GitHub signature
+    const signature = req.headers["x-hub-signature-256"];
+    if (!validateGitHubSignature(body, signature)) {
+      console.error(
+        `[${new Date().toISOString()}] REJECTED GitHub: invalid signature from ${req.socket.remoteAddress}`
+      );
+      res.writeHead(403);
+      res.end("Invalid signature");
+      return;
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(body.toString());
+    } catch {
+      res.writeHead(400);
+      res.end("Invalid JSON");
+      return;
+    }
+
+    const event = req.headers["x-github-event"];
+    const delivery = req.headers["x-github-delivery"];
+
+    // Skip ping events
+    if (event === "ping") {
+      console.log(
+        `[${new Date().toISOString()}] GitHub ping received: ${payload.zen}`
+      );
+      res.writeHead(200);
+      res.end("pong");
+      return;
+    }
+
+    const eventMessage = formatGitHubMessage(event, payload);
+    const repo = payload.repository?.full_name || "unknown";
+
+    console.log(
+      `[${new Date().toISOString()}] GitHub ${event} on ${repo} (delivery: ${delivery})`
     );
-    res.writeHead(403);
-    res.end("Invalid signature");
+
+    const message = `${GITHUB_GUARDRAILS}\n${eventMessage}`;
+    await forwardToOpenClaw(message, "GitHub", res);
     return;
   }
 
-  // Parse payload
-  let payload;
-  try {
-    payload = JSON.parse(body.toString());
-  } catch {
-    res.writeHead(400);
-    res.end("Invalid JSON");
+  // ── YouTrack path ──
+  if (source === "youtrack") {
+    // Validate YouTrack shared secret
+    if (!validateYouTrackSecret(req)) {
+      console.error(
+        `[${new Date().toISOString()}] REJECTED YouTrack: invalid token from ${req.socket.remoteAddress}`
+      );
+      res.writeHead(403);
+      res.end("Invalid token");
+      return;
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(body.toString());
+    } catch {
+      res.writeHead(400);
+      res.end("Invalid JSON");
+      return;
+    }
+
+    const issueId =
+      payload.issue?.idReadable || payload.issue?.id || "unknown";
+    const action = payload.action || "event";
+
+    console.log(
+      `[${new Date().toISOString()}] YouTrack ${action} on ${issueId}`
+    );
+
+    // Skip events from the OpenClaw user to avoid feedback loops
+    const updaterLogin =
+      payload.updater?.login ||
+      payload.author?.login ||
+      payload.comment?.author?.login ||
+      "";
+    if (updaterLogin === "openclaw") {
+      console.log(
+        `[${new Date().toISOString()}] Skipping YouTrack event from openclaw (self)`
+      );
+      res.writeHead(200);
+      res.end("OK (skipped self)");
+      return;
+    }
+
+    const eventMessage = formatYouTrackMessage(payload);
+    const message = `${YOUTRACK_GUARDRAILS}\n${eventMessage}`;
+    await forwardToOpenClaw(message, "YouTrack", res);
     return;
   }
+});
 
-  const event = req.headers["x-github-event"];
-  const delivery = req.headers["x-github-delivery"];
-
-  // Skip ping events
-  if (event === "ping") {
-    console.log(`[${new Date().toISOString()}] Ping received: ${payload.zen}`);
-    res.writeHead(200);
-    res.end("pong");
-    return;
-  }
-
-  const eventMessage = formatMessage(event, payload);
-  const repo = payload.repository?.full_name || "unknown";
-
-  console.log(
-    `[${new Date().toISOString()}] ${event} on ${repo} (delivery: ${delivery})`
-  );
-
-  // Prepend guardrails to every message
-  const guardrails = [
-    "## GitHub Event Guardrails (MANDATORY)",
-    "- NEVER merge a PR without an explicit approval review from Derek",
-    "- NEVER push directly to main/master",
-    "- NEVER open PRs on repos outside derek-miller / finitelabs orgs",
-    "- Read YouTrack KB articles (Guardrails, Workflow Guide) before acting",
-    "- If unsure about any action, do NOT act — respond with a comment asking for clarification",
-    "---",
-  ].join("\n");
-
-  const message = `${guardrails}\n${eventMessage}`;
-
-  // Forward to OpenClaw hooks API
+/** Forward a formatted message to the OpenClaw hooks API */
+async function forwardToOpenClaw(message, sourceName, res) {
   try {
     const hookPayload = JSON.stringify({
       message,
-      name: "GitHub",
+      name: sourceName,
       wakeMode: "now",
       deliver: false,
     });
@@ -326,7 +568,7 @@ const server = createServer(async (req, res) => {
     }
 
     console.log(
-      `[${new Date().toISOString()}] Forwarded ${event} to OpenClaw hooks`
+      `[${new Date().toISOString()}] Forwarded ${sourceName} event to OpenClaw hooks`
     );
     res.writeHead(200);
     res.end("OK");
@@ -337,9 +579,10 @@ const server = createServer(async (req, res) => {
     res.writeHead(502);
     res.end("Upstream error");
   }
-});
+}
 
 server.listen(PORT, () => {
   console.log(`OpenClaw webhook proxy listening on port ${PORT}`);
   console.log(`Forwarding to: ${OPENCLAW_HOOKS_URL}`);
+  console.log(`Sources: GitHub (/hooks/svc-derek-miller), YouTrack (/hooks/youtrack)`);
 });
