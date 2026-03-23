@@ -147,8 +147,54 @@ const OPENCLAW_DELIVER = (process.env.OPENCLAW_DELIVER || "false").toLowerCase()
 const BATCH_WINDOW_MS = parseInt(process.env.BATCH_WINDOW_MS || "10000", 10);
 const MAX_BATCH_SIZE = 50;
 
-/** Map of batchKey → { events: [{eventType, detail, formattedMessage}], timer, guardrails, source } */
+/** Map of batchKey → { events: [{eventType, detail, formattedMessage}], timer, guardrails, source, sessionKey } */
 const pendingBatches = new Map();
+
+// ─── Ticket ID extraction ───────────────────────────────────────────
+
+/** Known project key prefixes for ticket ID extraction */
+const TICKET_ID_PATTERN = /\b([A-Z]{2,10}-\d+)\b/;
+const BRANCH_TICKET_PATTERN = /^agent\/([A-Z]{2,10}-\d+)/;
+
+/**
+ * Extract a YouTrack ticket ID from a GitHub event payload.
+ * Checks branch name first (most reliable), then PR/issue title.
+ * @returns {string|null} Ticket ID like "TPL-2" or null
+ */
+function extractTicketIdFromGitHub(event, payload) {
+  // Try branch name: agent/<TICKET-ID>-description
+  const branch =
+    payload.pull_request?.head?.ref ||
+    (event === "push" ? (payload.ref || "").replace(/^refs\/heads\//, "") : null);
+  if (branch) {
+    const branchMatch = branch.match(BRANCH_TICKET_PATTERN);
+    if (branchMatch) return branchMatch[1];
+  }
+
+  // Try PR title: "TICKET-ID: description" or "TICKET-ID description"
+  const title = payload.pull_request?.title || payload.issue?.title;
+  if (title) {
+    const titleMatch = title.match(TICKET_ID_PATTERN);
+    if (titleMatch) return titleMatch[1];
+  }
+
+  // Try PR body for "Fixes TICKET-ID" / "Closes TICKET-ID" patterns
+  const body = payload.pull_request?.body || payload.issue?.body;
+  if (body) {
+    const fixesMatch = body.match(/(?:fixes|closes|resolves)\s+([A-Z]{2,10}-\d+)/i);
+    if (fixesMatch) return fixesMatch[1];
+  }
+
+  return null;
+}
+
+/**
+ * Extract a YouTrack ticket ID from a YouTrack webhook payload.
+ * @returns {string|null} Ticket ID like "AGENT-32" or null
+ */
+function extractTicketIdFromYouTrack(payload) {
+  return payload.issue?.idReadable || null;
+}
 
 // ─── Load guardrails from mounted files ─────────────────────────────
 
@@ -578,10 +624,12 @@ function getYouTrackEventDetail(payload) {
 }
 
 /** Add an event entry to a pending batch, starting the debounce timer if needed */
-function addToBatch(key, eventEntry, guardrails, source) {
+function addToBatch(key, eventEntry, guardrails, source, sessionKey = null) {
   if (pendingBatches.has(key)) {
     const batch = pendingBatches.get(key);
     batch.events.push(eventEntry);
+    // First non-null sessionKey wins (batch events should share the same ticket)
+    if (sessionKey && !batch.sessionKey) batch.sessionKey = sessionKey;
     logDebug(`Added event to batch ${key} (${batch.events.length} total)`);
     if (batch.events.length >= MAX_BATCH_SIZE) {
       logDebug(`Batch ${key} reached max size (${MAX_BATCH_SIZE}), flushing immediately`);
@@ -592,8 +640,8 @@ function addToBatch(key, eventEntry, guardrails, source) {
       logDebug(`Batch window expired for ${key}, flushing`);
       flushBatch(key);
     }, BATCH_WINDOW_MS);
-    pendingBatches.set(key, { events: [eventEntry], timer, guardrails, source });
-    logDebug(`Started new batch for ${key}`);
+    pendingBatches.set(key, { events: [eventEntry], timer, guardrails, source, sessionKey });
+    logDebug(`Started new batch for ${key}${sessionKey ? ` (session: ${sessionKey})` : ""}`);
   }
 }
 
@@ -604,7 +652,7 @@ async function flushBatch(key) {
   clearTimeout(batch.timer);
   pendingBatches.delete(key);
 
-  const { events, guardrails, source } = batch;
+  const { events, guardrails, source, sessionKey } = batch;
   if (events.length === 0) return;
 
   let message;
@@ -618,8 +666,8 @@ async function flushBatch(key) {
     message = `${guardrails}\n\n${parts.join("\n\n")}`;
   }
 
-  logDebug(`Flushing batch ${key} with ${events.length} event(s)`);
-  await forwardToOpenClaw(message, source);
+  logDebug(`Flushing batch ${key} with ${events.length} event(s)${sessionKey ? ` → session ${sessionKey}` : ""}`);
+  await forwardToOpenClaw(message, source, sessionKey);
 }
 
 /** Flush all pending batches — called on graceful shutdown */
@@ -765,13 +813,20 @@ const server = createServer(async (req, res) => {
     const eventMessage = formatGitHubMessage(event, payload);
     const batchKey = getGitHubBatchKey(event, payload);
 
+    // Extract ticket ID for session routing
+    const ticketId = extractTicketIdFromGitHub(event, payload);
+    const sessionKey = ticketId ? `ticket:${ticketId}` : null;
+    if (ticketId) {
+      logDebug(`GitHub ${event}: extracted ticket ID ${ticketId} → session ${sessionKey}`);
+    }
+
     if (!batchKey) {
       // No batch key (e.g. push) — forward immediately
       logDebug(`GitHub ${event}: no batch key, forwarding immediately`);
       const message = `${GITHUB_GUARDRAILS}\n${eventMessage}`;
       res.writeHead(200);
       res.end("OK");
-      forwardToOpenClaw(message, "GitHub");
+      forwardToOpenClaw(message, "GitHub", sessionKey);
       return;
     }
 
@@ -780,14 +835,14 @@ const server = createServer(async (req, res) => {
 
     if (isImmediateFlushEvent(event, payload)) {
       logDebug(`GitHub ${event} (${detail}): immediate flush trigger`);
-      addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub");
+      addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub", sessionKey);
       res.writeHead(200);
       res.end("OK");
       flushBatch(batchKey);
       return;
     }
 
-    addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub");
+    addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub", sessionKey);
     res.writeHead(200);
     res.end("OK");
     return;
@@ -847,7 +902,15 @@ const server = createServer(async (req, res) => {
     const eventMessage = formatYouTrackMessage(payload);
     const batchKey = `youtrack:${issueId}`;
     const { eventType, detail } = getYouTrackEventDetail(payload);
-    addToBatch(batchKey, { eventType, detail, formattedMessage: eventMessage }, YOUTRACK_GUARDRAILS, "YouTrack");
+
+    // Extract ticket ID for session routing
+    const ticketId = extractTicketIdFromYouTrack(payload);
+    const sessionKey = ticketId ? `ticket:${ticketId}` : null;
+    if (ticketId) {
+      logDebug(`YouTrack ${action}: extracted ticket ID ${ticketId} → session ${sessionKey}`);
+    }
+
+    addToBatch(batchKey, { eventType, detail, formattedMessage: eventMessage }, YOUTRACK_GUARDRAILS, "YouTrack", sessionKey);
     res.writeHead(200);
     res.end("OK");
     return;
@@ -855,14 +918,18 @@ const server = createServer(async (req, res) => {
 });
 
 /** Forward a formatted message to the OpenClaw hooks API */
-async function forwardToOpenClaw(message, sourceName) {
+async function forwardToOpenClaw(message, sourceName, sessionKey = null) {
   try {
-    const hookPayload = JSON.stringify({
+    const hookBody = {
       message,
       name: sourceName,
       wakeMode: OPENCLAW_WAKE_MODE,
       deliver: OPENCLAW_DELIVER,
-    });
+    };
+    if (sessionKey) {
+      hookBody.sessionKey = sessionKey;
+    }
+    const hookPayload = JSON.stringify(hookBody);
 
     logDebug(`Forwarding ${sourceName} message to OpenClaw:\n${message}`);
 
