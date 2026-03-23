@@ -25,13 +25,15 @@
  *   GITHUB_HOOK_PATH         — URL path prefix for GitHub webhooks
  *   GITHUB_WEBHOOK_SECRET    — the webhook secret shared with GitHub
  *   GITHUB_GUARDRAILS_FILE   — path to file containing GitHub guardrails text
- *   GITHUB_IGNORE_USERS      — comma-separated usernames to skip (e.g. bot accounts)
+ *   GITHUB_ALLOW_USERS       — comma-separated usernames to allow (allowlist mode; mutually exclusive with GITHUB_IGNORE_USERS)
+ *   GITHUB_IGNORE_USERS      — comma-separated usernames to skip (ignorelist mode; mutually exclusive with GITHUB_ALLOW_USERS)
  *
  * YouTrack (enabled when YOUTRACK_HOOK_PATH is set):
  *   YOUTRACK_HOOK_PATH       — URL path prefix for YouTrack webhooks
  *   YOUTRACK_WEBHOOK_SECRET  — shared secret for YouTrack webhook validation
  *   YOUTRACK_BASE_URL        — base URL for YouTrack instance
- *   YOUTRACK_IGNORE_USERS    — comma-separated usernames to skip (e.g. bot accounts, self)
+ *   YOUTRACK_ALLOW_USERS     — comma-separated usernames to allow (allowlist mode; mutually exclusive with YOUTRACK_IGNORE_USERS)
+ *   YOUTRACK_IGNORE_USERS    — comma-separated usernames to skip (ignorelist mode; mutually exclusive with YOUTRACK_ALLOW_USERS)
  *   YOUTRACK_GUARDRAILS_FILE — path to file containing YouTrack guardrails text
  */
 
@@ -102,6 +104,10 @@ const OPENCLAW_HOOKS_URL = process.env.OPENCLAW_HOOKS_URL;
 // GitHub config (only when enabled)
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 const GITHUB_HOOK_PATH = process.env.GITHUB_HOOK_PATH || "";
+const GITHUB_ALLOW_USERS = (process.env.GITHUB_ALLOW_USERS || "")
+  .split(",")
+  .map((u) => u.trim().toLowerCase())
+  .filter(Boolean);
 const GITHUB_IGNORE_USERS = (process.env.GITHUB_IGNORE_USERS || "")
   .split(",")
   .map((u) => u.trim().toLowerCase())
@@ -111,10 +117,28 @@ const GITHUB_IGNORE_USERS = (process.env.GITHUB_IGNORE_USERS || "")
 const YOUTRACK_WEBHOOK_SECRET = process.env.YOUTRACK_WEBHOOK_SECRET || "";
 const YOUTRACK_BASE_URL = process.env.YOUTRACK_BASE_URL || "";
 const YOUTRACK_HOOK_PATH = process.env.YOUTRACK_HOOK_PATH || "";
+const YOUTRACK_ALLOW_USERS = (process.env.YOUTRACK_ALLOW_USERS || "")
+  .split(",")
+  .map((u) => u.trim().toLowerCase())
+  .filter(Boolean);
 const YOUTRACK_IGNORE_USERS = (process.env.YOUTRACK_IGNORE_USERS || "")
   .split(",")
   .map((u) => u.trim().toLowerCase())
   .filter(Boolean);
+
+// Validate mutually exclusive allow/ignore lists
+if (GITHUB_ALLOW_USERS.length > 0 && GITHUB_IGNORE_USERS.length > 0) {
+  console.error(
+    "FATAL: GITHUB_ALLOW_USERS and GITHUB_IGNORE_USERS are mutually exclusive. Set only one."
+  );
+  process.exit(1);
+}
+if (YOUTRACK_ALLOW_USERS.length > 0 && YOUTRACK_IGNORE_USERS.length > 0) {
+  console.error(
+    "FATAL: YOUTRACK_ALLOW_USERS and YOUTRACK_IGNORE_USERS are mutually exclusive. Set only one."
+  );
+  process.exit(1);
+}
 
 // ─── Wake/deliver configuration (optional, with defaults) ──────────
 
@@ -607,6 +631,30 @@ async function flushAllBatches() {
   }
 }
 
+// ─── User filtering ─────────────────────────────────────────────────
+
+/**
+ * Determine whether an event from the given actor should be processed.
+ * @param {string|null|undefined} actor - The username/login of the event actor
+ * @param {string[]} allowList - If non-empty, only process actors in this list
+ * @param {string[]} ignoreList - If non-empty, skip actors in this list
+ * @returns {{ process: boolean, reason: string }}
+ */
+function shouldProcessUser(actor, allowList, ignoreList) {
+  if (!actor) return { process: true, reason: "no actor" };
+  const actorLower = actor.toLowerCase();
+  if (allowList.length > 0) {
+    if (!allowList.includes(actorLower)) {
+      return { process: false, reason: "not in allowlist" };
+    }
+    return { process: true, reason: "in allowlist" };
+  }
+  if (ignoreList.length > 0 && ignoreList.includes(actorLower)) {
+    return { process: false, reason: "ignored user" };
+  }
+  return { process: true, reason: "no filter" };
+}
+
 // ─── Request handler ────────────────────────────────────────────────
 
 const server = createServer(async (req, res) => {
@@ -679,36 +727,39 @@ const server = createServer(async (req, res) => {
       `[${new Date().toISOString()}] GitHub ${event} on ${repo} (delivery: ${delivery})`
     );
 
-    // Skip events from ignored users (e.g. bot accounts)
-    if (GITHUB_IGNORE_USERS.length > 0) {
-      let actor = null;
-      switch (event) {
-        case "pull_request_review":
-          actor = payload.review?.user?.login;
-          break;
-        case "pull_request_review_comment":
-        case "issue_comment":
-          actor = payload.comment?.user?.login;
-          break;
-        case "issues":
-        case "pull_request":
-          actor = payload.sender?.login;
-          break;
-        case "push":
-          actor = payload.pusher?.name || payload.sender?.login;
-          break;
-        default:
-          actor = payload.sender?.login;
-          break;
-      }
-      if (actor && GITHUB_IGNORE_USERS.includes(actor.toLowerCase())) {
-        console.log(
-          `[${new Date().toISOString()}] Skipping GitHub event from ${actor} (ignored user)`
-        );
-        res.writeHead(200);
-        res.end("OK (skipped ignored user)");
-        return;
-      }
+    // Filter events by user (allowlist or ignorelist)
+    let actor = null;
+    switch (event) {
+      case "pull_request_review":
+        actor = payload.review?.user?.login;
+        break;
+      case "pull_request_review_comment":
+      case "issue_comment":
+        actor = payload.comment?.user?.login;
+        break;
+      case "issues":
+      case "pull_request":
+        actor = payload.sender?.login;
+        break;
+      case "push":
+        actor = payload.pusher?.name || payload.sender?.login;
+        break;
+      default:
+        actor = payload.sender?.login;
+        break;
+    }
+    const { process: processGitHub, reason: githubReason } = shouldProcessUser(
+      actor,
+      GITHUB_ALLOW_USERS,
+      GITHUB_IGNORE_USERS
+    );
+    if (!processGitHub) {
+      console.log(
+        `[${new Date().toISOString()}] Skipping GitHub event from ${actor || "(no actor)"} (${githubReason})`
+      );
+      res.writeHead(200);
+      res.end(`OK (skipped: ${githubReason})`);
+      return;
     }
 
     const eventMessage = formatGitHubMessage(event, payload);
@@ -773,22 +824,23 @@ const server = createServer(async (req, res) => {
       `[${new Date().toISOString()}] YouTrack ${action} on ${issueId}`
     );
 
-    // Skip events from ignored users (e.g. bot accounts, self)
+    // Filter events by user (allowlist or ignorelist)
     const updaterLogin =
       payload.updater?.login ||
       payload.author?.login ||
       payload.comment?.author?.login ||
-      "";
-    if (
-      YOUTRACK_IGNORE_USERS.length > 0 &&
-      updaterLogin &&
-      YOUTRACK_IGNORE_USERS.includes(updaterLogin.toLowerCase())
-    ) {
+      null;
+    const { process: processYouTrack, reason: youtrackReason } = shouldProcessUser(
+      updaterLogin,
+      YOUTRACK_ALLOW_USERS,
+      YOUTRACK_IGNORE_USERS
+    );
+    if (!processYouTrack) {
       console.log(
-        `[${new Date().toISOString()}] Skipping YouTrack event from ${updaterLogin} (ignored user)`
+        `[${new Date().toISOString()}] Skipping YouTrack event from ${updaterLogin || "(no actor)"} (${youtrackReason})`
       );
       res.writeHead(200);
-      res.end("OK (skipped ignored user)");
+      res.end(`OK (skipped: ${youtrackReason})`);
       return;
     }
 
