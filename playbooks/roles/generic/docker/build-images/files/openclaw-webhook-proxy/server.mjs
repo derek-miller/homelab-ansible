@@ -152,9 +152,18 @@ const pendingBatches = new Map();
 
 // ─── Ticket ID extraction ───────────────────────────────────────────
 
-/** Known project key prefixes for ticket ID extraction */
-const TICKET_ID_PATTERN = /\b([A-Z]{2,10}-\d+)\b/;
-const BRANCH_TICKET_PATTERN = /^agent\/([A-Z]{2,10}-\d+)/;
+/**
+ * Project keys for ticket ID extraction.
+ * Set TICKET_PROJECT_KEYS env var to a comma-separated list of known project keys
+ * (e.g. "AGENT,HL,HC,ESP,MQTT,ESS,TPL,LIB,FL"). If not set, falls back to a
+ * generic pattern matching any uppercase 2-10 char prefix.
+ */
+const TICKET_PROJECT_KEYS = process.env.TICKET_PROJECT_KEYS || "";
+const TICKET_KEY_GROUP = TICKET_PROJECT_KEYS
+  ? `(?:${TICKET_PROJECT_KEYS.split(",").map(k => k.trim()).filter(Boolean).join("|")})`
+  : "[A-Z]{2,10}";
+const TICKET_ID_PATTERN = new RegExp(`\\b(${TICKET_KEY_GROUP}-\\d+)\\b`);
+const BRANCH_TICKET_PATTERN = new RegExp(`^agent/(${TICKET_KEY_GROUP}-\\d+)`);
 
 /**
  * Extract a YouTrack ticket ID from a GitHub event payload.
@@ -181,7 +190,7 @@ function extractTicketIdFromGitHub(event, payload) {
   // Try PR body for "Fixes TICKET-ID" / "Closes TICKET-ID" patterns
   const body = payload.pull_request?.body || payload.issue?.body;
   if (body) {
-    const fixesMatch = body.match(/(?:fixes|closes|resolves)\s+([A-Z]{2,10}-\d+)/i);
+    const fixesMatch = body.match(new RegExp(`(?:fixes|closes|resolves)\\s+(${TICKET_KEY_GROUP}-\\d+)`, "i"));
     if (fixesMatch) return fixesMatch[1];
   }
 
