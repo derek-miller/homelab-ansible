@@ -146,6 +146,7 @@ const OPENCLAW_WAKE_MODE = process.env.OPENCLAW_WAKE_MODE || "now";
 const OPENCLAW_DELIVER = (process.env.OPENCLAW_DELIVER || "false").toLowerCase() === "true";
 const BATCH_WINDOW_MS = parseInt(process.env.BATCH_WINDOW_MS || "10000", 10);
 const MAX_BATCH_SIZE = 50;
+const TICKET_SESSION_PREFIX = "ticket:";
 
 /** Map of batchKey → { events: [{eventType, detail, formattedMessage}], timer, guardrails, source } */
 const pendingBatches = new Map();
@@ -578,10 +579,12 @@ function getYouTrackEventDetail(payload) {
 }
 
 /** Add an event entry to a pending batch, starting the debounce timer if needed */
-function addToBatch(key, eventEntry, guardrails, source) {
+function addToBatch(key, eventEntry, guardrails, source, ticketId = null) {
   if (pendingBatches.has(key)) {
     const batch = pendingBatches.get(key);
     batch.events.push(eventEntry);
+    // Capture ticketId if not already set on the batch
+    if (!batch.ticketId && ticketId) batch.ticketId = ticketId;
     logDebug(`Added event to batch ${key} (${batch.events.length} total)`);
     if (batch.events.length >= MAX_BATCH_SIZE) {
       logDebug(`Batch ${key} reached max size (${MAX_BATCH_SIZE}), flushing immediately`);
@@ -592,7 +595,7 @@ function addToBatch(key, eventEntry, guardrails, source) {
       logDebug(`Batch window expired for ${key}, flushing`);
       flushBatch(key);
     }, BATCH_WINDOW_MS);
-    pendingBatches.set(key, { events: [eventEntry], timer, guardrails, source });
+    pendingBatches.set(key, { events: [eventEntry], timer, guardrails, source, ticketId });
     logDebug(`Started new batch for ${key}`);
   }
 }
@@ -604,7 +607,7 @@ async function flushBatch(key) {
   clearTimeout(batch.timer);
   pendingBatches.delete(key);
 
-  const { events, guardrails, source } = batch;
+  const { events, guardrails, source, ticketId } = batch;
   if (events.length === 0) return;
 
   let message;
@@ -618,8 +621,9 @@ async function flushBatch(key) {
     message = `${guardrails}\n\n${parts.join("\n\n")}`;
   }
 
-  logDebug(`Flushing batch ${key} with ${events.length} event(s)`);
-  await forwardToOpenClaw(message, source);
+  const sessionKey = ticketId ? `${TICKET_SESSION_PREFIX}${ticketId}` : null;
+  logDebug(`Flushing batch ${key} with ${events.length} event(s)${sessionKey ? ` (sessionKey: ${sessionKey})` : ""}`);
+  await forwardToOpenClaw(message, source, sessionKey);
 }
 
 /** Flush all pending batches — called on graceful shutdown */
@@ -629,6 +633,56 @@ async function flushAllBatches() {
     console.log(`[${new Date().toISOString()}] Flushing ${keys.length} pending batch(es) before shutdown`);
     await Promise.all(keys.map((k) => flushBatch(k)));
   }
+}
+
+// ─── Ticket ID extraction ────────────────────────────────────────────
+
+const TICKET_ID_RE = /^([A-Z]{1,5}-\d+)/;
+
+/**
+ * Extract a YouTrack ticket ID (e.g. AGENT-32, TPL-2) from a webhook payload.
+ * @param {"github"|"youtrack"} source
+ * @param {string} event - GitHub event name (ignored for youtrack)
+ * @param {object} payload
+ * @returns {string|null}
+ */
+function extractTicketId(source, event, payload) {
+  if (source === "youtrack") {
+    return payload.issue?.idReadable || null;
+  }
+
+  if (source === "github") {
+    // Try branch name first
+    const branchRef =
+      payload.pull_request?.head?.ref || payload.ref || "";
+    // Branch format: agent/<TICKET-ID>-<rest>  OR refs/heads/agent/<TICKET-ID>-<rest>
+    const branchName = branchRef.startsWith("refs/heads/")
+      ? branchRef.slice("refs/heads/".length)
+      : branchRef;
+    if (branchName.startsWith("agent/")) {
+      const afterAgent = branchName.slice("agent/".length);
+      const m = TICKET_ID_RE.exec(afterAgent);
+      if (m) return m[1];
+    }
+
+    // Try PR title
+    const prTitle = payload.pull_request?.title || "";
+    if (prTitle) {
+      const m = TICKET_ID_RE.exec(prTitle);
+      if (m) return m[1];
+    }
+
+    // Try issue title
+    const issueTitle = payload.issue?.title || "";
+    if (issueTitle) {
+      const m = TICKET_ID_RE.exec(issueTitle);
+      if (m) return m[1];
+    }
+
+    return null;
+  }
+
+  return null;
 }
 
 // ─── User filtering ─────────────────────────────────────────────────
@@ -762,6 +816,7 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    const ticketId = extractTicketId("github", event, payload);
     const eventMessage = formatGitHubMessage(event, payload);
     const batchKey = getGitHubBatchKey(event, payload);
 
@@ -769,9 +824,10 @@ const server = createServer(async (req, res) => {
       // No batch key (e.g. push) — forward immediately
       logDebug(`GitHub ${event}: no batch key, forwarding immediately`);
       const message = `${GITHUB_GUARDRAILS}\n${eventMessage}`;
+      const sessionKey = ticketId ? `${TICKET_SESSION_PREFIX}${ticketId}` : null;
       res.writeHead(200);
       res.end("OK");
-      forwardToOpenClaw(message, "GitHub");
+      forwardToOpenClaw(message, "GitHub", sessionKey);
       return;
     }
 
@@ -780,14 +836,14 @@ const server = createServer(async (req, res) => {
 
     if (isImmediateFlushEvent(event, payload)) {
       logDebug(`GitHub ${event} (${detail}): immediate flush trigger`);
-      addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub");
+      addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub", ticketId);
       res.writeHead(200);
       res.end("OK");
       flushBatch(batchKey);
       return;
     }
 
-    addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub");
+    addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub", ticketId);
     res.writeHead(200);
     res.end("OK");
     return;
@@ -844,10 +900,11 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    const ticketId = extractTicketId("youtrack", action, payload);
     const eventMessage = formatYouTrackMessage(payload);
     const batchKey = `youtrack:${issueId}`;
     const { eventType, detail } = getYouTrackEventDetail(payload);
-    addToBatch(batchKey, { eventType, detail, formattedMessage: eventMessage }, YOUTRACK_GUARDRAILS, "YouTrack");
+    addToBatch(batchKey, { eventType, detail, formattedMessage: eventMessage }, YOUTRACK_GUARDRAILS, "YouTrack", ticketId);
     res.writeHead(200);
     res.end("OK");
     return;
@@ -855,13 +912,14 @@ const server = createServer(async (req, res) => {
 });
 
 /** Forward a formatted message to the OpenClaw hooks API */
-async function forwardToOpenClaw(message, sourceName) {
+async function forwardToOpenClaw(message, sourceName, sessionKey = null) {
   try {
     const hookPayload = JSON.stringify({
       message,
       name: sourceName,
       wakeMode: OPENCLAW_WAKE_MODE,
       deliver: OPENCLAW_DELIVER,
+      ...(sessionKey ? { sessionKey } : {}),
     });
 
     logDebug(`Forwarding ${sourceName} message to OpenClaw:\n${message}`);
