@@ -163,7 +163,6 @@ const TICKET_KEY_GROUP = TICKET_PROJECT_KEYS
   ? `(?:${TICKET_PROJECT_KEYS.split(",").map(k => k.trim()).filter(Boolean).join("|")})`
   : "[A-Z]{2,10}";
 const TICKET_ID_PATTERN = new RegExp(`\\b(${TICKET_KEY_GROUP}-\\d+)\\b`);
-const BRANCH_TICKET_PATTERN = new RegExp(`^agent/(${TICKET_KEY_GROUP}-\\d+)`);
 
 /**
  * Extract a YouTrack ticket ID from a GitHub event payload.
@@ -171,12 +170,12 @@ const BRANCH_TICKET_PATTERN = new RegExp(`^agent/(${TICKET_KEY_GROUP}-\\d+)`);
  * @returns {string|null} Ticket ID like "TPL-2" or null
  */
 function extractTicketIdFromGitHub(event, payload) {
-  // Try branch name: agent/<TICKET-ID>-description
+  // Try branch name — ticket ID pattern matches any branch naming convention
   const branch =
     payload.pull_request?.head?.ref ||
     (event === "push" ? (payload.ref || "").replace(/^refs\/heads\//, "") : null);
   if (branch) {
-    const branchMatch = branch.match(BRANCH_TICKET_PATTERN);
+    const branchMatch = branch.match(TICKET_ID_PATTERN);
     if (branchMatch) return branchMatch[1];
   }
 
