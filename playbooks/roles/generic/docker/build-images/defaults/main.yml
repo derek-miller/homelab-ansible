@@ -17,4 +17,4 @@ available_docker_images:
     build_files:
       - openclaw-webhook-proxy/server.mjs
     image_name: openclaw-webhook-proxy
-    image_tag: "3.4.0"
+    image_tag: "3.5.0"
