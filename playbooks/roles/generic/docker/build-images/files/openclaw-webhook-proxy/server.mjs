@@ -177,7 +177,8 @@ function extractTicketIdFromGitHub(event, payload) {
   const branch =
     payload.pull_request?.head?.ref ||
     (event === "push" ? (payload.ref || "").replace(/^refs\/heads\//, "") : null) ||
-    (event === "check_run" ? payload.check_run?.check_suite?.head_branch : null);
+    (event === "check_run" ? payload.check_run?.check_suite?.head_branch : null) ||
+    (event === "check_suite" ? payload.check_suite?.head_branch : null);
   if (branch) {
     const branchMatch = branch.match(BRANCH_TICKET_PATTERN);
     if (branchMatch) return branchMatch[1];
@@ -186,6 +187,17 @@ function extractTicketIdFromGitHub(event, payload) {
   // For check_run events, try associated pull requests' head branches
   if (event === "check_run" && payload.check_run?.pull_requests) {
     for (const pr of payload.check_run.pull_requests) {
+      const prBranch = pr.head?.ref;
+      if (prBranch) {
+        const prMatch = prBranch.match(BRANCH_TICKET_PATTERN);
+        if (prMatch) return prMatch[1];
+      }
+    }
+  }
+
+  // For check_suite events, try associated pull requests' head branches
+  if (event === "check_suite" && payload.check_suite?.pull_requests) {
+    for (const pr of payload.check_suite.pull_requests) {
       const prBranch = pr.head?.ref;
       if (prBranch) {
         const prMatch = prBranch.match(BRANCH_TICKET_PATTERN);
@@ -207,6 +219,15 @@ function extractTicketIdFromGitHub(event, payload) {
     // GitHub doesn't include the full commit message in check_run, but the
     // check_suite head_commit message may be available
     const headCommitMsg = payload.check_run?.check_suite?.head_commit?.message;
+    if (headCommitMsg) {
+      const commitMatch = headCommitMsg.match(TICKET_ID_PATTERN);
+      if (commitMatch) return commitMatch[1];
+    }
+  }
+
+  // For check_suite events, try the head commit message
+  if (event === "check_suite") {
+    const headCommitMsg = payload.check_suite?.head_commit?.message;
     if (headCommitMsg) {
       const commitMatch = headCommitMsg.match(TICKET_ID_PATTERN);
       if (commitMatch) return commitMatch[1];
@@ -461,6 +482,49 @@ function formatGitHubMessage(event, payload) {
       return lines.filter(Boolean).join("\n");
     }
 
+    case "check_suite": {
+      const checkSuite = payload.check_suite;
+      const action = payload.action; // completed, requested, rerequested
+      const conclusion = checkSuite.conclusion; // success, failure, neutral, cancelled, timed_out, action_required, stale, startup_failure, null
+      const status = checkSuite.status; // queued, in_progress, completed
+      const headSha = checkSuite.head_sha?.slice(0, 7) || "unknown";
+      const branch = checkSuite.head_branch || "unknown";
+      const htmlUrl = checkSuite.url;
+      const app = checkSuite.app?.name || "unknown";
+
+      // Identify associated PRs
+      const associatedPRs = (checkSuite.pull_requests || [])
+        .map((pr) => `#${pr.number} (${pr.head?.ref || "?"})`)
+        .join(", ");
+
+      // Determine if this is a default branch build (post-merge)
+      const defaultBranch = payload.repository?.default_branch || "main";
+      const isDefaultBranch = branch === defaultBranch;
+
+      const lines = [
+        `GitHub Check Suite [${action}] on ${repo}: "${app}"`,
+        `Status: ${status}${conclusion ? ` / ${conclusion}` : ""}`,
+        `Branch: ${branch}${isDefaultBranch ? " (default)" : ""}`,
+        `Commit: ${headSha}`,
+      ];
+
+      if (associatedPRs) {
+        lines.push(`Associated PRs: ${associatedPRs}`);
+      }
+
+      // Include head commit message for context
+      const headCommitMsg = checkSuite.head_commit?.message;
+      if (headCommitMsg) {
+        lines.push(`Commit message: ${headCommitMsg.split("\n")[0]}`);
+      }
+
+      if (htmlUrl) {
+        lines.push(`URL: ${htmlUrl}`);
+      }
+
+      return lines.filter(Boolean).join("\n");
+    }
+
     case "push": {
       const ref = payload.ref || "";
       // Extract branch name from refs/heads/branch-name
@@ -676,6 +740,8 @@ function getGitHubBatchKey(event, payload) {
     case "check_run":
       // No batching for check_run — forward immediately so the agent can
       // react to CI failures as fast as possible
+      return null;
+    case "check_suite":
       return null;
     default:
       return null; // push and unknown events: forward immediately
@@ -894,6 +960,27 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    // Filter check_suite events: only forward failures, skip success/neutral/skipped
+    if (event === "check_suite") {
+      const action = payload.action;
+      const conclusion = payload.check_suite?.conclusion;
+      if (action === "completed") {
+        const dominated = ["success", "neutral", "skipped"];
+        if (dominated.includes(conclusion)) {
+          logDebug(`Skipping check_suite with conclusion=${conclusion} (not a failure)`);
+          res.writeHead(200);
+          res.end(`OK (skipped: check_suite ${conclusion})`);
+          return;
+        }
+      } else if (action === "requested") {
+        // Skip requested (initial trigger when code is pushed)
+        logDebug(`Skipping check_suite action=${action} (not completed)`);
+        res.writeHead(200);
+        res.end(`OK (skipped: check_suite ${action})`);
+        return;
+      }
+    }
+
     // Filter events by user (allowlist or ignorelist)
     // Note: check_run events bypass user filtering — they are system events
     // triggered by CI, not by a specific user action
@@ -915,6 +1002,10 @@ const server = createServer(async (req, res) => {
         break;
       case "check_run":
         // Check runs are system events; skip user filtering
+        actor = null;
+        break;
+      case "check_suite":
+        // Check suites are system events; skip user filtering
         actor = null;
         break;
       default:
