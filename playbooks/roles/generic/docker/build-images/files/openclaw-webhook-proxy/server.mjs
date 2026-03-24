@@ -167,7 +167,8 @@ const BRANCH_TICKET_PATTERN = new RegExp(`(?:^|/)(${TICKET_KEY_GROUP}-\\d+)\\b`)
 
 /**
  * Extract a YouTrack ticket ID from a GitHub event payload.
- * Checks branch name first (most reliable), then PR/issue title.
+ * Checks branch name first (most reliable), then PR/issue title, then body.
+ * For check_run events, also checks associated pull_requests and commit messages.
  * @returns {string|null} Ticket ID like "TPL-2" or null
  */
 function extractTicketIdFromGitHub(event, payload) {
@@ -175,10 +176,34 @@ function extractTicketIdFromGitHub(event, payload) {
   // (e.g. "AGENT-32-foo", "agent/AGENT-32-foo", "feature/AGENT-32-foo")
   const branch =
     payload.pull_request?.head?.ref ||
-    (event === "push" ? (payload.ref || "").replace(/^refs\/heads\//, "") : null);
+    (event === "push" ? (payload.ref || "").replace(/^refs\/heads\//, "") : null) ||
+    (event === "check_run" ? payload.check_run?.check_suite?.head_branch : null) ||
+    (event === "check_suite" ? payload.check_suite?.head_branch : null);
   if (branch) {
     const branchMatch = branch.match(BRANCH_TICKET_PATTERN);
     if (branchMatch) return branchMatch[1];
+  }
+
+  // For check_run events, try associated pull requests' head branches
+  if (event === "check_run" && payload.check_run?.pull_requests) {
+    for (const pr of payload.check_run.pull_requests) {
+      const prBranch = pr.head?.ref;
+      if (prBranch) {
+        const prMatch = prBranch.match(BRANCH_TICKET_PATTERN);
+        if (prMatch) return prMatch[1];
+      }
+    }
+  }
+
+  // For check_suite events, try associated pull requests' head branches
+  if (event === "check_suite" && payload.check_suite?.pull_requests) {
+    for (const pr of payload.check_suite.pull_requests) {
+      const prBranch = pr.head?.ref;
+      if (prBranch) {
+        const prMatch = prBranch.match(BRANCH_TICKET_PATTERN);
+        if (prMatch) return prMatch[1];
+      }
+    }
   }
 
   // Try PR title: "TICKET-ID: description" or "TICKET-ID description"
@@ -186,6 +211,27 @@ function extractTicketIdFromGitHub(event, payload) {
   if (title) {
     const titleMatch = title.match(TICKET_ID_PATTERN);
     if (titleMatch) return titleMatch[1];
+  }
+
+  // For check_run on default branch (post-merge), try the commit message
+  if (event === "check_run") {
+    const commitMsg = payload.check_run?.output?.title || payload.check_run?.head_sha;
+    // GitHub doesn't include the full commit message in check_run, but the
+    // check_suite head_commit message may be available
+    const headCommitMsg = payload.check_run?.check_suite?.head_commit?.message;
+    if (headCommitMsg) {
+      const commitMatch = headCommitMsg.match(TICKET_ID_PATTERN);
+      if (commitMatch) return commitMatch[1];
+    }
+  }
+
+  // For check_suite events, try the head commit message
+  if (event === "check_suite") {
+    const headCommitMsg = payload.check_suite?.head_commit?.message;
+    if (headCommitMsg) {
+      const commitMatch = headCommitMsg.match(TICKET_ID_PATTERN);
+      if (commitMatch) return commitMatch[1];
+    }
   }
 
   // Try PR body for "Fixes TICKET-ID" / "Closes TICKET-ID" patterns
@@ -375,6 +421,107 @@ function formatGitHubMessage(event, payload) {
       }
 
       lines.push(`URL: ${pr.html_url}`);
+      return lines.filter(Boolean).join("\n");
+    }
+
+    case "check_run": {
+      const checkRun = payload.check_run;
+      const action = payload.action; // created, completed, rerequested, requested_action
+      const conclusion = checkRun.conclusion; // success, failure, neutral, cancelled, timed_out, action_required, skipped, stale, null
+      const status = checkRun.status; // queued, in_progress, completed
+      const checkName = checkRun.name;
+      const headSha = checkRun.head_sha?.slice(0, 7) || "unknown";
+      const branch = checkRun.check_suite?.head_branch || "unknown";
+      const htmlUrl = checkRun.html_url;
+
+      // Identify associated PRs
+      const associatedPRs = (checkRun.pull_requests || [])
+        .map((pr) => `#${pr.number} (${pr.head?.ref || "?"})`)
+        .join(", ");
+
+      // Determine if this is a default branch build (post-merge)
+      const defaultBranch = payload.repository?.default_branch || "main";
+      const isDefaultBranch = branch === defaultBranch;
+
+      const lines = [
+        `GitHub Check Run [${action}] on ${repo}: "${checkName}"`,
+        `Status: ${status}${conclusion ? ` / ${conclusion}` : ""}`,
+        `Branch: ${branch}${isDefaultBranch ? " (default)" : ""}`,
+        `Commit: ${headSha}`,
+      ];
+
+      if (associatedPRs) {
+        lines.push(`Associated PRs: ${associatedPRs}`);
+      }
+
+      // Include head commit message for context (especially useful for default branch)
+      const headCommitMsg = checkRun.check_suite?.head_commit?.message;
+      if (headCommitMsg) {
+        lines.push(`Commit message: ${headCommitMsg.split("\n")[0]}`);
+      }
+
+      // Include output summary/text if available (contains failure details)
+      if (checkRun.output) {
+        if (checkRun.output.title && checkRun.output.title !== checkName) {
+          lines.push(`Output title: ${checkRun.output.title}`);
+        }
+        if (checkRun.output.summary) {
+          lines.push(`Output summary:\n${checkRun.output.summary}`);
+        }
+        // output.text can be very long; truncate for the message
+        if (checkRun.output.text) {
+          const text = checkRun.output.text;
+          lines.push(`Output text:\n${text.length > 2000 ? text.slice(0, 2000) + "\n... (truncated)" : text}`);
+        }
+      }
+
+      if (htmlUrl) {
+        lines.push(`URL: ${htmlUrl}`);
+      }
+
+      return lines.filter(Boolean).join("\n");
+    }
+
+    case "check_suite": {
+      const checkSuite = payload.check_suite;
+      const action = payload.action; // completed, requested, rerequested
+      const conclusion = checkSuite.conclusion; // success, failure, neutral, cancelled, timed_out, action_required, stale, startup_failure, null
+      const status = checkSuite.status; // queued, in_progress, completed
+      const headSha = checkSuite.head_sha?.slice(0, 7) || "unknown";
+      const branch = checkSuite.head_branch || "unknown";
+      const htmlUrl = checkSuite.url;
+      const app = checkSuite.app?.name || "unknown";
+
+      // Identify associated PRs
+      const associatedPRs = (checkSuite.pull_requests || [])
+        .map((pr) => `#${pr.number} (${pr.head?.ref || "?"})`)
+        .join(", ");
+
+      // Determine if this is a default branch build (post-merge)
+      const defaultBranch = payload.repository?.default_branch || "main";
+      const isDefaultBranch = branch === defaultBranch;
+
+      const lines = [
+        `GitHub Check Suite [${action}] on ${repo}: "${app}"`,
+        `Status: ${status}${conclusion ? ` / ${conclusion}` : ""}`,
+        `Branch: ${branch}${isDefaultBranch ? " (default)" : ""}`,
+        `Commit: ${headSha}`,
+      ];
+
+      if (associatedPRs) {
+        lines.push(`Associated PRs: ${associatedPRs}`);
+      }
+
+      // Include head commit message for context
+      const headCommitMsg = checkSuite.head_commit?.message;
+      if (headCommitMsg) {
+        lines.push(`Commit message: ${headCommitMsg.split("\n")[0]}`);
+      }
+
+      if (htmlUrl) {
+        lines.push(`URL: ${htmlUrl}`);
+      }
+
       return lines.filter(Boolean).join("\n");
     }
 
@@ -590,6 +737,12 @@ function getGitHubBatchKey(event, payload) {
     case "issue_comment":
     case "issues":
       return `github:${repo}:${payload.issue?.number}`;
+    case "check_run":
+      // No batching for check_run — forward immediately so the agent can
+      // react to CI failures as fast as possible
+      return null;
+    case "check_suite":
+      return null;
     default:
       return null; // push and unknown events: forward immediately
   }
@@ -785,7 +938,52 @@ const server = createServer(async (req, res) => {
       `[${new Date().toISOString()}] GitHub ${event} on ${repo} (delivery: ${delivery})`
     );
 
+    // Filter check_run events: only forward failures/errors, skip success/neutral/skipped
+    if (event === "check_run") {
+      const action = payload.action;
+      const conclusion = payload.check_run?.conclusion;
+      // Only care about completed check runs that failed
+      if (action === "completed") {
+        const dominated = ["success", "neutral", "skipped"];
+        if (dominated.includes(conclusion)) {
+          logDebug(`Skipping check_run with conclusion=${conclusion} (not a failure)`);
+          res.writeHead(200);
+          res.end(`OK (skipped: check_run ${conclusion})`);
+          return;
+        }
+      } else if (action === "created" || action === "rerequested") {
+        // Skip non-completed check runs (queued, in_progress)
+        logDebug(`Skipping check_run action=${action} (not completed)`);
+        res.writeHead(200);
+        res.end(`OK (skipped: check_run ${action})`);
+        return;
+      }
+    }
+
+    // Filter check_suite events: only forward failures, skip success/neutral/skipped
+    if (event === "check_suite") {
+      const action = payload.action;
+      const conclusion = payload.check_suite?.conclusion;
+      if (action === "completed") {
+        const dominated = ["success", "neutral", "skipped"];
+        if (dominated.includes(conclusion)) {
+          logDebug(`Skipping check_suite with conclusion=${conclusion} (not a failure)`);
+          res.writeHead(200);
+          res.end(`OK (skipped: check_suite ${conclusion})`);
+          return;
+        }
+      } else if (action === "requested") {
+        // Skip requested (initial trigger when code is pushed)
+        logDebug(`Skipping check_suite action=${action} (not completed)`);
+        res.writeHead(200);
+        res.end(`OK (skipped: check_suite ${action})`);
+        return;
+      }
+    }
+
     // Filter events by user (allowlist or ignorelist)
+    // Note: check_run events bypass user filtering — they are system events
+    // triggered by CI, not by a specific user action
     let actor = null;
     switch (event) {
       case "pull_request_review":
@@ -801,6 +999,14 @@ const server = createServer(async (req, res) => {
         break;
       case "push":
         actor = payload.pusher?.name || payload.sender?.login;
+        break;
+      case "check_run":
+        // Check runs are system events; skip user filtering
+        actor = null;
+        break;
+      case "check_suite":
+        // Check suites are system events; skip user filtering
+        actor = null;
         break;
       default:
         actor = payload.sender?.login;
