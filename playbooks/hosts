@@ -22,7 +22,7 @@ gianos-raspi1
 #harlan-raspi1
 mertins-raspi1
 quinn-raspi1
-rackmini1
+rackmini1-vm
 rackpi[1:5]
 raspi1
 
@@ -34,7 +34,7 @@ gianos-raspi1  cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"
 #harlan-raspi1  cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 mertins-raspi1 cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 quinn-raspi1   cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
-rackmini1      cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container", "Public"]'
+rackmini1-vm      cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container", "Public"]'
 rackpi1        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container"]'
 rackpi2        cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
 rackpi3        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Public"]'
@@ -47,12 +47,12 @@ gianos-raspi1
 #harlan-raspi1
 mertins-raspi1
 quinn-raspi1
-rackmini1
+rackmini1-vm
 rackpi[1:5]
 raspi1
 
 [docker-build-images]
-rackmini1 docker_images_to_build=sourcebot
+rackmini1-vm docker_images_to_build=sourcebot
 rackpi1   docker_images_to_build=openclaw-webhook-proxy
 rackpi5   docker_images_to_build=youtrack
 
@@ -60,14 +60,16 @@ rackpi5   docker_images_to_build=youtrack
 rackpi1 docker_stack_name=rackpis
 
 [docker_swarm_worker]
-rackmini1
+rackmini1-vm
 rackpi[2:5]
 
 [project-files]
-rackmini1
+rackmini1-vm
 rackpi1
 rackpi4
 raspi1
+
+[ser2net]
 
 [network-ups-tools]
 rackpi2

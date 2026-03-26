@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Ansible-managed homelab infrastructure. Docker Swarm cluster (rackpi1 manager + rackmini1/rackpi2-5 workers) running on Raspberry Pi and Mac Mini nodes. Single main playbook (`playbooks/default.yml`) with tag-based execution.
+Ansible-managed homelab infrastructure. Docker Swarm cluster (rackpi1 manager + rackmini1-vm/rackpi2-5 workers) running on Raspberry Pi and Mac Mini nodes. Single main playbook (`playbooks/default.yml`) with tag-based execution.
 
 ## Common Commands
 
@@ -51,5 +51,5 @@ make bootstrap hosts=<host> user=<user>
 - **Docker Compose** services for individual hosts are in their respective `host_vars/{hostname}/vault.yml` as `docker_compose_definition`.
 - **Vault encryption** is enforced by a pre-commit hook (`hooks/pre-commit` → `make vault-check`). The `.vault_pass` file in the repo root (git-ignored) holds the encryption key.
 - **Variable layering**: Role defaults → group_vars → host_vars. Vault variables are referenced indirectly (e.g., `docker_stack_definition: "{{ vault_docker_stack_definition }}"`).
-- Services on the swarm use placement constraints like `node.hostname == rackmini1` to pin to specific nodes.
+- Services on the swarm use placement constraints like `node.hostname == rackmini1-vm` to pin to specific nodes.
 - Traefik labels on swarm services handle routing, OAuth middleware, and TLS.
