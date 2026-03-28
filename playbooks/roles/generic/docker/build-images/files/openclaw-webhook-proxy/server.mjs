@@ -938,19 +938,19 @@ const server = createServer(async (req, res) => {
       `[${new Date().toISOString()}] GitHub ${event} on ${repo} (delivery: ${delivery})`
     );
 
-    // Filter check_run events: only forward failures/errors, skip success/neutral/skipped
+    // Filter check_run events: only forward completed runs, skip neutral/skipped
     if (event === "check_run") {
       const action = payload.action;
       const conclusion = payload.check_run?.conclusion;
-      // Only care about completed check runs that failed
       if (action === "completed") {
-        const dominated = ["success", "neutral", "skipped"];
-        if (dominated.includes(conclusion)) {
-          logDebug(`Skipping check_run with conclusion=${conclusion} (not a failure)`);
+        const skip = ["neutral", "skipped"];
+        if (skip.includes(conclusion)) {
+          logDebug(`Skipping check_run with conclusion=${conclusion} (noise)`);
           res.writeHead(200);
           res.end(`OK (skipped: check_run ${conclusion})`);
           return;
         }
+        // Forward both success and failure conclusions
       } else if (action === "created" || action === "rerequested") {
         // Skip non-completed check runs (queued, in_progress)
         logDebug(`Skipping check_run action=${action} (not completed)`);
@@ -960,18 +960,19 @@ const server = createServer(async (req, res) => {
       }
     }
 
-    // Filter check_suite events: only forward failures, skip success/neutral/skipped
+    // Filter check_suite events: only forward completed suites, skip neutral/skipped
     if (event === "check_suite") {
       const action = payload.action;
       const conclusion = payload.check_suite?.conclusion;
       if (action === "completed") {
-        const dominated = ["success", "neutral", "skipped"];
-        if (dominated.includes(conclusion)) {
-          logDebug(`Skipping check_suite with conclusion=${conclusion} (not a failure)`);
+        const skip = ["neutral", "skipped"];
+        if (skip.includes(conclusion)) {
+          logDebug(`Skipping check_suite with conclusion=${conclusion} (noise)`);
           res.writeHead(200);
           res.end(`OK (skipped: check_suite ${conclusion})`);
           return;
         }
+        // Forward both success and failure conclusions
       } else if (action === "requested") {
         // Skip requested (initial trigger when code is pushed)
         logDebug(`Skipping check_suite action=${action} (not completed)`);
