@@ -1,0 +1,79 @@
+---
+- name: verify backup directory exists
+  stat:
+    path: "{{ docker_restore_volumes_backup_dir }}"
+  register: backup_dir_stat
+
+- name: fail if backup directory does not exist
+  fail:
+    msg: >-
+      Backup directory {{ docker_restore_volumes_backup_dir }} does not exist.
+      Ensure the CIFS share is mounted and backups are present.
+  when: not backup_dir_stat.stat.exists
+
+- name: find latest backup archive
+  find:
+    paths: "{{ docker_restore_volumes_backup_dir }}"
+    patterns: "backup-*.tar.gz"
+    file_type: file
+  register: backup_files
+
+- name: fail if no backup archives found
+  fail:
+    msg: "No backup archives found in {{ docker_restore_volumes_backup_dir }}."
+  when: backup_files.matched == 0
+
+- name: select latest backup archive
+  set_fact:
+    docker_restore_latest_backup: "{{ (backup_files.files | sort(attribute='path') | last).path }}"
+
+- name: display selected backup archive
+  debug:
+    msg: "Restoring from: {{ docker_restore_latest_backup }}"
+
+- name: list volume directories in archive
+  command: "tar -tzf {{ docker_restore_latest_backup }}"
+  changed_when: false
+  check_mode: false
+  register: archive_contents
+
+- name: extract unique volume names from archive
+  set_fact:
+    docker_restore_volume_names: >-
+      {{ archive_contents.stdout_lines
+         | map('regex_search', '^/?backup/([^/]+)/', '\1')
+         | select('ne', None)
+         | map('first')
+         | unique
+         | list }}
+
+- name: determine volume name prefix (swarm hosts)
+  set_fact:
+    docker_restore_volume_prefix: >-
+      {{ hostvars[groups['docker_swarm_manager'][0]].docker_stack_name
+         | default(groups['docker_swarm_manager'][0]) }}
+  when: "'docker_swarm_manager' in group_names or 'docker_swarm_worker' in group_names"
+
+- name: determine volume name prefix (compose hosts)
+  set_fact:
+    docker_restore_volume_prefix: "{{ docker_compose_project_name | default(inventory_hostname) }}"
+  when: "'docker_swarm_manager' not in group_names and 'docker_swarm_worker' not in group_names"
+
+- name: display volumes to restore
+  debug:
+    msg: >-
+      Found {{ docker_restore_volume_names | length }} volume(s):
+      {{ docker_restore_volume_names | join(', ') }}.
+      Prefix: {{ docker_restore_volume_prefix }}
+
+- name: restore each volume
+  include_tasks: restore_volume.yml
+  loop: "{{ docker_restore_volume_names }}"
+  loop_control:
+    loop_var: volume_name
+
+- name: remind user to remove restore flag
+  debug:
+    msg: >-
+      Volume restore complete. Remove docker_restore_volumes=yes
+      from {{ inventory_hostname }} to prevent re-restoring on subsequent runs.

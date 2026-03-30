@@ -1,0 +1,61 @@
+---
+- name: "{{ volume_name }} | set full volume name"
+  set_fact:
+    full_volume_name: "{{ docker_restore_volume_prefix }}_{{ volume_name }}"
+
+- name: "{{ volume_name }} | check if docker volume exists"
+  command: "docker volume inspect {{ full_volume_name }}"
+  register: volume_inspect
+  failed_when: false
+  changed_when: false
+  check_mode: false
+
+- name: "{{ volume_name }} | check if volume has data"
+  command: >-
+    docker run --rm
+    -v {{ full_volume_name }}:/volume:ro
+    alpine
+    sh -c 'ls -A /volume | head -1'
+  register: volume_contents
+  changed_when: false
+  check_mode: false
+  when: volume_inspect.rc == 0
+
+- name: "{{ volume_name }} | skip restore (volume has data)"
+  debug:
+    msg: >-
+      Skipping {{ full_volume_name }}: volume already has data.
+      Set docker_restore_volumes_force=yes to overwrite.
+  when:
+    - volume_inspect.rc == 0
+    - volume_contents.stdout | default('') | length > 0
+    - not (docker_restore_volumes_force | bool)
+
+- name: "{{ volume_name }} | show restore command"
+  debug:
+    msg: >-
+      Will run: docker run --rm
+      -v {{ docker_restore_latest_backup }}:/archive/backup.tar.gz:ro
+      -v {{ full_volume_name }}:/restore
+      alpine sh -c 'tar -xzf /archive/backup.tar.gz --strip-components=2 -C /restore backup/{{ volume_name }}/'
+  when:
+    - ansible_check_mode
+    - volume_inspect.rc != 0
+      or volume_contents.stdout | default('') | length == 0
+      or (docker_restore_volumes_force | bool)
+
+- name: "{{ volume_name }} | create docker volume"
+  command: "docker volume create {{ full_volume_name }}"
+  when: volume_inspect.rc != 0
+
+- name: "{{ volume_name }} | restore volume data from backup"
+  command: >-
+    docker run --rm
+    -v {{ docker_restore_latest_backup }}:/archive/backup.tar.gz:ro
+    -v {{ full_volume_name }}:/restore
+    alpine
+    sh -c 'tar -xzf /archive/backup.tar.gz --strip-components=2 -C /restore backup/{{ volume_name }}/'
+  when: >-
+    volume_inspect.rc != 0
+    or volume_contents.stdout | default('') | length == 0
+    or (docker_restore_volumes_force | bool)

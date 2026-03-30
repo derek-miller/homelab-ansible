@@ -151,6 +151,14 @@
     - docker
     - docker-swarm
 
+- hosts: docker
+  roles:
+    - role: generic/docker/restore-volumes
+      when: docker_restore_volumes | default(false) | bool
+  tags:
+    - docker
+    - docker-restore-volumes
+
 - hosts: docker-build-images
   roles:
     - role: generic/docker/build-images
@@ -252,6 +260,7 @@
         networks: yes
         volumes: yes
         builder_cache: yes
+        timeout: 300
   tags:
     - docker
     - docker-prune
