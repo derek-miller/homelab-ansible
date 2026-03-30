@@ -3,5 +3,6 @@
 docker[tls]
 docker-compose
 pycparser<3.0  # Python 3.9 compat
+requests<2.33  # Python 3.9 compat
 pyyaml
 jsondiff

@@ -6,9 +6,9 @@
 #
 --index-url https://pypi.python.org/simple
 
-ansible==13.4.0
+ansible==13.5.0
     # via -r requirements.in
-ansible-core==2.20.3
+ansible-core==2.20.4
     # via ansible
 bcrypt==5.0.0
     # via paramiko
@@ -20,7 +20,7 @@ cffi==2.0.0
     # via
     #   cryptography
     #   pynacl
-chardet==7.1.0
+chardet==7.4.0.post2
     # via -r requirements.in
 charset-normalizer==3.4.6
     # via
@@ -35,7 +35,6 @@ cryptography==46.0.6
     #   -r requirements.in
     #   ansible-core
     #   paramiko
-    #   secretstorage
 dnspython==2.8.0
     # via -r requirements.in
 idna==3.11
@@ -44,14 +43,10 @@ invoke==2.2.1
     # via paramiko
 jaraco-classes==3.4.0
     # via keyring
-jaraco-context==6.1.1
+jaraco-context==6.1.2
     # via keyring
 jaraco-functools==4.4.0
     # via keyring
-jeepney==0.9.0
-    # via
-    #   keyring
-    #   secretstorage
 jinja2==3.1.6
     # via
     #   -r requirements.in
@@ -94,8 +89,6 @@ requests[security]==2.33.0
     # via -r requirements.in
 resolvelib==1.2.1
     # via ansible-core
-secretstorage==3.5.0
-    # via keyring
 semantic-version==2.10.0
     # via -r requirements.in
 urllib3==2.6.3
