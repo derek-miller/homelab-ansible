@@ -24,10 +24,10 @@ distro==1.9.0
     # via docker-compose
 docker[ssh,tls]==7.1.0
     # via
-    #   -r requirements.in
+    #   -r playbooks/roles/ansible/remote/files/requirements.in
     #   docker-compose
 docker-compose==1.29.2
-    # via -r requirements.in
+    # via -r playbooks/roles/ansible/remote/files/requirements.in
 dockerpty==0.4.1
     # via docker-compose
 docopt==0.6.2
@@ -37,14 +37,14 @@ idna==3.11
 invoke==2.2.1
     # via paramiko
 jsondiff==2.2.1
-    # via -r requirements.in
+    # via -r playbooks/roles/ansible/remote/files/requirements.in
 jsonschema==3.2.0
     # via docker-compose
 paramiko==4.0.0
     # via docker
 pycparser==2.23
     # via
-    #   -r requirements.in
+    #   -r playbooks/roles/ansible/remote/files/requirements.in
     #   cffi
 pynacl==1.6.2
     # via paramiko
@@ -54,11 +54,12 @@ python-dotenv==0.21.1
     # via docker-compose
 pyyaml==5.4.1
     # via
-    #   -r requirements.in
+    #   -r playbooks/roles/ansible/remote/files/requirements.in
     #   docker-compose
     #   jsondiff
-requests==2.33.0
+requests==2.32.5
     # via
+    #   -r playbooks/roles/ansible/remote/files/requirements.in
     #   docker
     #   docker-compose
 six==1.17.0
