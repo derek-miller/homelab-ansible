@@ -22,11 +22,11 @@ cffi==2.0.0
     #   pynacl
 chardet==7.4.0.post2
     # via -r requirements.in
-charset-normalizer==3.4.6
+charset-normalizer==3.4.7
     # via
     #   python-debian
     #   requests
-click==8.3.1
+click==8.3.2
     # via
     #   -r requirements.in
     #   black
@@ -39,7 +39,7 @@ dnspython==2.8.0
     # via -r requirements.in
 idna==3.11
     # via requests
-invoke==2.2.1
+invoke==3.0.2
     # via paramiko
 jaraco-classes==3.4.0
     # via keyring
@@ -55,7 +55,7 @@ keyring==25.7.0
     # via -r requirements.in
 markupsafe==3.0.3
     # via jinja2
-more-itertools==10.8.0
+more-itertools==11.0.1
     # via
     #   jaraco-classes
     #   jaraco-functools
@@ -85,7 +85,7 @@ pyyaml==6.0.3
     # via
     #   -r requirements.in
     #   ansible-core
-requests[security]==2.33.0
+requests[security]==2.33.1
     # via -r requirements.in
 resolvelib==1.2.1
     # via ansible-core

@@ -59,3 +59,12 @@
     volume_inspect.rc != 0
     or volume_contents.stdout | default('') | length == 0
     or (docker_restore_volumes_force | bool)
+  register: restore_result
+
+- name: "{{ volume_name }} | fix volume root ownership to match contents"
+  command: >-
+    docker run --rm
+    -v {{ full_volume_name }}:/volume
+    alpine
+    sh -c 'entry=$(ls -A /volume | head -1); if [ -n "$entry" ]; then owner=$(stat -c "%u:%g" "/volume/$entry"); chown "$owner" /volume; fi'
+  when: restore_result is changed

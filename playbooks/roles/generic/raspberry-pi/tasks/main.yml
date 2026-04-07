@@ -156,19 +156,51 @@
   when: raspberry_pi_cmdline_extra_params is defined
   register: _raspberry_pi_cmdline_changed
 
-- name: configure swap size
+- name: check if dphys-swapfile config exists
+  stat:
+    path: /etc/dphys-swapfile
+  register: _dphys_swapfile
+
+- name: configure swap size (dphys-swapfile)
   lineinfile:
     dest: /etc/dphys-swapfile
     regexp: "^#?CONF_SWAPSIZE="
     line: "CONF_SWAPSIZE={{ raspberry_pi_swap_size_mb|int }}"
     insertafter: EOF
-    create: false # file should exist
+    create: false
     state: present
-  when: raspberry_pi_swap_size_mb is defined
+  when: raspberry_pi_swap_size_mb is defined and _dphys_swapfile.stat.exists
   register: _raspberry_pi_swap_changed
+
+- name: ensure rpi-swap drop-in directory exists
+  file:
+    path: /etc/rpi/swap.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: raspberry_pi_swap_size_mb is defined and not _dphys_swapfile.stat.exists
+
+- name: configure swap (rpi-swap/zram)
+  copy:
+    dest: /etc/rpi/swap.conf.d/90-ansible.conf
+    content: |
+      [Main]
+      Mechanism={{ 'none' if raspberry_pi_swap_size_mb|int == 0 else 'auto' }}
+      {% if raspberry_pi_swap_size_mb|int > 0 %}
+
+      [Zram]
+      FixedSizeMiB={{ raspberry_pi_swap_size_mb|int }}
+      {% endif %}
+    owner: root
+    group: root
+    mode: '0644'
+  when: raspberry_pi_swap_size_mb is defined and not _dphys_swapfile.stat.exists
+  register: _raspberry_pi_swap_changed_rpi
 
 - name: reboot to apply changes
   ansible.builtin.reboot:
   when: >
     (_raspberry_pi_cmdline_changed is defined and _raspberry_pi_cmdline_changed.changed) or
-    (_raspberry_pi_swap_changed is defined and _raspberry_pi_swap_changed.changed)
+    (_raspberry_pi_swap_changed is defined and _raspberry_pi_swap_changed.changed) or
+    (_raspberry_pi_swap_changed_rpi is defined and _raspberry_pi_swap_changed_rpi.changed)

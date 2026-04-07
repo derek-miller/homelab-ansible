@@ -144,6 +144,23 @@
   tags:
     - docker
 
+- hosts: docker
+  tasks:
+    - name: log in to Docker Hub
+      community.docker.docker_login:
+        username: "{{ docker_hub_username }}"
+        password: "{{ docker_hub_password }}"
+      when: docker_hub_username is defined and docker_hub_password is defined
+    - name: log out of Docker Hub
+      community.docker.docker_login:
+        state: absent
+      when: docker_hub_username is not defined or docker_hub_password is not defined
+  tags:
+    - docker
+    - docker-swarm
+    - docker-compose
+    - docker-build-images
+
 - hosts: docker_swarm_manager:docker_swarm_worker
   roles:
     - role: galaxy/docker-swarm
@@ -152,9 +169,23 @@
     - docker-swarm
 
 - hosts: docker
+  pre_tasks:
+    - name: drain node before volume restore
+      command: "docker node update --availability drain {{ inventory_hostname }}"
+      delegate_to: "{{ groups['docker_swarm_manager'][0] }}"
+      when:
+        - docker_restore_volumes | default(false) | bool
+        - "'docker_swarm_manager' in group_names or 'docker_swarm_worker' in group_names"
   roles:
     - role: generic/docker/restore-volumes
       when: docker_restore_volumes | default(false) | bool
+  post_tasks:
+    - name: activate node after volume restore
+      command: "docker node update --availability active {{ inventory_hostname }}"
+      delegate_to: "{{ groups['docker_swarm_manager'][0] }}"
+      when:
+        - docker_restore_volumes | default(false) | bool
+        - "'docker_swarm_manager' in group_names or 'docker_swarm_worker' in group_names"
   tags:
     - docker
     - docker-restore-volumes
@@ -185,22 +216,6 @@
 
 - hosts: docker
   tasks:
-    - name: log in to Docker Hub
-      community.docker.docker_login:
-        username: "{{ docker_hub_username }}"
-        password: "{{ docker_hub_password }}"
-      when: docker_hub_username is defined and docker_hub_password is defined
-      tags:
-        - docker
-        - docker-compose
-    - name: log out of Docker Hub
-      community.docker.docker_login:
-        state: absent
-      when: docker_hub_username is not defined or docker_hub_password is not defined
-      tags:
-        - docker
-        - docker-compose
-
     - name: create docker containers
       when: docker_compose_definition is defined
       block:

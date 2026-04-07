@@ -16,7 +16,7 @@ cffi==2.0.0
     # via
     #   cryptography
     #   pynacl
-charset-normalizer==3.4.6
+charset-normalizer==3.4.7
     # via requests
 cryptography==46.0.6
     # via paramiko
@@ -34,7 +34,7 @@ docopt==0.6.2
     # via docker-compose
 idna==3.11
     # via requests
-invoke==2.2.1
+invoke==3.0.2
     # via paramiko
 jsondiff==2.2.1
     # via -r playbooks/roles/ansible/remote/files/requirements.in

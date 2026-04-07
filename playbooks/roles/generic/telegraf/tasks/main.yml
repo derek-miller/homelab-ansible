@@ -13,16 +13,42 @@
     - "'not find' not in service_result.msg"
   when: telegraf_state == 'absent'
 
-- name: add/remove influxdata-archive-keyring package
-  apt:
-    name: influxdata-archive-keyring
-    state: "{{ telegraf_state }}"
+- name: check if influxdata GPG key exists
+  stat:
+    path: /usr/share/keyrings/influxdata-archive.gpg
+  register: _influxdata_gpg_key
+
+- name: download influxdata GPG key
+  get_url:
+    url: https://repos.influxdata.com/influxdata-archive.key
+    dest: /tmp/influxdata-archive.key
+    mode: '0644'
+  when: telegraf_state == 'present' and not _influxdata_gpg_key.stat.exists
+
+- name: dearmor and install influxdata GPG key
+  shell: cat /tmp/influxdata-archive.key | gpg --yes --dearmor -o /usr/share/keyrings/influxdata-archive.gpg
+  when: telegraf_state == 'present' and not _influxdata_gpg_key.stat.exists
+
+- name: remove influxdata GPG key
+  file:
+    path: /usr/share/keyrings/influxdata-archive.gpg
+    state: absent
+  when: telegraf_state == 'absent'
+
+- name: remove conflicting influxdata source files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/apt/sources.list.d/influxdata.sources
+    - /etc/apt/keyrings/influxdata-archive.gpg
 
 - name: add/remove influxdb repository
   apt_repository:
     repo: 'deb [signed-by=/usr/share/keyrings/influxdata-archive.gpg] https://repos.influxdata.com/debian stable main'
     filename: influxdata
     state: "{{ telegraf_state }}"
+    update_cache: yes
 
 - name: install telegraf dependencies
   apt:
