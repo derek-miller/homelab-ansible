@@ -645,6 +645,8 @@ function formatYouTrackMessage(payload) {
   const issueId = issue?.idReadable || issue?.id || "unknown";
   const summary = issue?.summary || "(no summary)";
   const action = payload.action || "updated";
+  const reporterLogin = issue?.reporter?.login || payload.reporter?.login || null;
+  const reporterName = issue?.reporter?.name || payload.reporter?.name || reporterLogin;
   const updater =
     payload.updater?.name ||
     payload.updater?.login ||
@@ -710,6 +712,10 @@ function formatYouTrackMessage(payload) {
     `YouTrack ${eventType} — ${issueId}: "${summary}"`,
     `Updated by: ${updater}`,
   ];
+
+  if (reporterName) {
+    lines.push(`Reporter: ${reporterName}`);
+  }
 
   if (fieldChanges) {
     lines.push(`\nField changes:\n${fieldChanges}`);
