@@ -4,7 +4,7 @@ gianos-raspi1
 mertins-raspi1
 quinn-raspi1
 rackpi[1:5]
-#raspi1
+raspi1
 
 [uctronics-lcd]
 rackpi[1:5]
@@ -15,7 +15,7 @@ gianos-raspi1
 mertins-raspi1
 quinn-raspi1
 rackpi[1:5]
-#raspi1
+raspi1
 
 [tailscale]
 gianos-raspi1
@@ -24,7 +24,7 @@ mertins-raspi1
 quinn-raspi1
 rackmini1-vm
 rackpi[1:5]
-#raspi1
+raspi1
 
 [tailscale:vars]
 create_cloudflare_ipv4_dns_record=yes
@@ -40,7 +40,7 @@ rackpi2        cifs_shares_host_config=unas         cifs_share_names='["Backups"
 rackpi3        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Public"]'
 rackpi4        cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
 rackpi5        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container", "Public"]'
-#raspi1         cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
+raspi1         cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 
 [docker]
 gianos-raspi1
@@ -49,7 +49,7 @@ mertins-raspi1
 quinn-raspi1
 rackmini1-vm
 rackpi[1:5]
-#raspi1
+raspi1
 
 [docker-build-images]
 rackmini1-vm docker_images_to_build=sourcebot
@@ -67,13 +67,13 @@ rackpi[2:5]
 rackmini1-vm
 rackpi1
 rackpi4
-#raspi1
+raspi1
 
 [ser2net]
 
 [network-ups-tools]
 rackpi2
-#raspi1
+raspi1
 
 [sysdweb]
 rackpi[1:5]
