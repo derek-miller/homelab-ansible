@@ -1,6 +1,6 @@
 [raspberry-pi]
 gianos-raspi1
-#harlan-raspi1
+harlan-raspi1
 mertins-raspi1
 quinn-raspi1
 rackpi[1:5]
@@ -11,7 +11,7 @@ rackpi[1:5]
 
 [x11vnc]
 gianos-raspi1
-#harlan-raspi1
+harlan-raspi1
 mertins-raspi1
 quinn-raspi1
 rackpi[1:5]
@@ -19,7 +19,7 @@ raspi1
 
 [tailscale]
 gianos-raspi1
-#harlan-raspi1
+harlan-raspi1
 mertins-raspi1
 quinn-raspi1
 rackmini1-vm

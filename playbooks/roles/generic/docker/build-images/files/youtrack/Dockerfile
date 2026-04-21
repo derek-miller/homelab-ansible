@@ -3,7 +3,7 @@
 # ARMv8.2-a (Graviton 2+). This image repackages YouTrack on an Ubuntu base
 # with Eclipse Temurin JDK 21, which supports ARMv8.0.
 
-FROM jetbrains/youtrack:2025.3.131383 AS source
+FROM jetbrains/youtrack:2026.1.12458 AS source
 
 FROM eclipse-temurin:21-jdk-noble
 

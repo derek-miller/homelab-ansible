@@ -2,16 +2,16 @@
 available_docker_images:
   sourcebot:
     repo: https://github.com/sourcebot-dev/sourcebot.git
-    version: v4.15.6
+    version: v4.16.12
     patches:
       - sourcebot/increase-heap.patch
       - sourcebot/vault-entitlements.patch
     image_name: sourcebot
-    image_tag: v4.15.6-patched
+    image_tag: v4.16.12-patched
   youtrack:
     dockerfile: youtrack/Dockerfile
     image_name: youtrack
-    image_tag: 2025.3.131383-arm64-3
+    image_tag: 2026.1.12458-arm64
   openclaw-webhook-proxy:
     dockerfile: openclaw-webhook-proxy/Dockerfile
     build_files:
