@@ -2,75 +2,10 @@
     that: telegraf_state in ('present', 'absent')
     quiet: yes
 
-- name: stop and disable telegraf service
-  service:
-    name: telegraf
-    state: stopped
-    enabled: no
-  register: service_result
-  failed_when:
-    - service_result|failed
-    - "'not find' not in service_result.msg"
-  when: telegraf_state == 'absent'
-
-- name: check if influxdata GPG key exists
-  stat:
-    path: /usr/share/keyrings/influxdata-archive.gpg
-  register: _influxdata_gpg_key
-
-- name: download influxdata GPG key
-  get_url:
-    url: https://repos.influxdata.com/influxdata-archive.key
-    dest: /tmp/influxdata-archive.key
-    mode: '0644'
-  when: telegraf_state == 'present' and not _influxdata_gpg_key.stat.exists
-
-- name: dearmor and install influxdata GPG key
-  shell: cat /tmp/influxdata-archive.key | gpg --yes --dearmor -o /usr/share/keyrings/influxdata-archive.gpg
-  when: telegraf_state == 'present' and not _influxdata_gpg_key.stat.exists
-
-- name: remove influxdata GPG key
-  file:
-    path: /usr/share/keyrings/influxdata-archive.gpg
-    state: absent
-  when: telegraf_state == 'absent'
-
-- name: remove conflicting influxdata source files
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/apt/sources.list.d/influxdata.sources
-    - /etc/apt/keyrings/influxdata-archive.gpg
-
-- name: add/remove influxdb repository
-  apt_repository:
-    repo: 'deb [signed-by=/usr/share/keyrings/influxdata-archive.gpg] https://repos.influxdata.com/debian stable main'
-    filename: influxdata
-    state: "{{ telegraf_state }}"
-    update_cache: yes
-
-- name: install telegraf dependencies
-  apt:
-    name: "{{ telegraf_apt_dependencies }}"
-    state: latest
-  when: telegraf_state == 'present'
-  notify: restart telegraf
-
-- name: install telegraf
-  apt:
-    name: telegraf
-    state: latest
-  when: telegraf_state == 'present'
-  notify: restart telegraf
-
-- name: uninstall telegraf
-  apt:
-    name: telegraf
-    state: absent
-  when: telegraf_state == 'absent'
-
 - include_tasks: present.yml
   when: telegraf_state == 'present'
+
+- include_tasks: absent.yml
+  when: telegraf_state == 'absent'
 
 - meta: flush_handlers

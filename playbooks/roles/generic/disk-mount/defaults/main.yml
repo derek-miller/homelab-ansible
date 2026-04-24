@@ -1,0 +1,12 @@
+---
+disk_mount_state: present
+
+# List of disk mounts to configure via /etc/fstab. Each entry:
+#   src:     device identifier (UUID=..., LABEL=..., or /dev/...)
+#   path:    mount point (auto-created by ansible.posix.mount if missing)
+#   fstype:  filesystem type (e.g. exfat, ext4, ntfs)
+#   opts:    mount options; defaults to "defaults,nofail". For non-POSIX
+#            filesystems (exfat/ntfs), set uid=/gid=/fmask=/dmask= here
+#            to control post-mount ownership — the underlying mount-point
+#            dir can't be chowned on those FSes after they're mounted.
+disk_mounts: []

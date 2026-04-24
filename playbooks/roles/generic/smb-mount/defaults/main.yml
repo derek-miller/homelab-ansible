@@ -1,0 +1,42 @@
+smb_mount_state: present
+
+# Name of the autofs map file installed under /etc. Override per-host if
+# you need to manage multiple disjoint SMB share sets via separate maps.
+smb_mount_map_name: smb
+
+# Full path of the autofs map file. Derived from smb_mount_map_name.
+smb_mount_map_path: "/etc/auto_{{ smb_mount_map_name }}"
+
+# mount_smbfs options passed via autofs.
+#   noowners — ignore the uid/gid the SMB server reports; files appear
+#              owned by the accessing process. Without this, if unas
+#              exports a share root as root:wheel 700, the Mac user can't
+#              read it (even though SMB session authenticated as them).
+#   soft     — return errors instead of hanging when the server is
+#              unreachable. Prevents a dead unas from wedging processes.
+#   rw       — read/write
+#   nosuid   — defense-in-depth on a network share
+smb_mount_options: "noowners,soft,rw,nosuid"
+
+# Timeout (seconds) for autofs idle-unmount of a share. After this much
+# inactivity automountd unmounts; the next access re-triggers a fresh
+# mount, which is how recovery from a wedged SMB session happens.
+smb_mount_idle_timeout: 600
+
+# Caller must set:
+#   smb_mounts:
+#     - server: "<ip>"
+#       username: "..."
+#       password: "..."
+#       shares:
+#         - name: MyShare
+#           mount_point: /mnt/MyShare
+#         - name: MyOtherShare
+#           mount_point: /some/other/path
+# in host_vars/<host>/vault.yml. Each share has its own mount_point —
+# /Volumes is owned by macOS DiskArbitration and refuses autofs triggers,
+# so most callers will use /mnt/<share> (which also requires /mnt to be
+# declared in mac_synthetic_links; see generic/common role).
+#
+# Mounts trigger on first access to mount_point; idle-unmount after
+# smb_mount_idle_timeout seconds.

@@ -1,0 +1,58 @@
+# brew install telegraf drops the LaunchAgent plist at
+# ~/<mac_user>/Library/LaunchAgents/homebrew.mxcl.telegraf.plist and wires
+# its ProgramArguments to the config paths exposed by telegraf_conf /
+# telegraf_conf_dir in macos group_vars (must match /opt/homebrew/etc/).
+- name: verify telegraf LaunchAgent plist is installed
+  stat:
+    path: "/Users/{{ mac_user | mandatory }}/Library/LaunchAgents/homebrew.mxcl.telegraf.plist"
+  register: _telegraf_plist_stat
+  failed_when: not _telegraf_plist_stat.stat.exists
+  changed_when: false
+
+# brew's plist only sets HOME in EnvironmentVariables — PATH defaults to
+# /usr/bin:/bin:/usr/sbin:/sbin, but launchd's LimitLoadToSessionType in
+# this plist drops /usr/sbin. `inputs.ntpq` then can't find ntpq (which
+# lives at /usr/sbin/ntpq on macOS). Force a full PATH via PlistBuddy so
+# ntpq and other /usr/sbin tools resolve. Task is re-run on every
+# `brew reinstall telegraf` since brew regenerates the plist.
+- name: probe current PATH in telegraf LaunchAgent plist
+  command: >-
+    /usr/libexec/PlistBuddy -c "Print :EnvironmentVariables:PATH"
+    /Users/{{ mac_user | mandatory }}/Library/LaunchAgents/homebrew.mxcl.telegraf.plist
+  register: _telegraf_plist_path
+  changed_when: false
+  failed_when: false
+
+- name: set PATH in telegraf LaunchAgent plist
+  # Add-or-set via Delete+Add — PlistBuddy has no upsert.
+  shell: |
+    plist=/Users/{{ mac_user | mandatory }}/Library/LaunchAgents/homebrew.mxcl.telegraf.plist
+    /usr/libexec/PlistBuddy -c "Delete :EnvironmentVariables:PATH" "$plist" 2>/dev/null || true
+    /usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:PATH string '{{ telegraf_darwin_path }}'" "$plist"
+  when: _telegraf_plist_path.stdout | trim != telegraf_darwin_path
+  notify: restart telegraf
+
+# launchd doesn't auto-reload a plist on config changes; it re-reads on
+# load. Check whether it's bootstrapped in the user session — if absent,
+# bootstrap via launchctl (don't use `brew services start` — it falls
+# into user/<uid> instead of gui/<uid> when invoked via ansible sudo
+# and fails with EIO). Accept user/ OR gui/ domains as "loaded".
+- name: look up mac_user uid
+  command: "id -u {{ mac_user | mandatory }}"
+  register: _telegraf_user_uid
+  changed_when: false
+
+- name: check whether telegraf LaunchAgent is loaded
+  shell: >-
+    launchctl print user/{{ _telegraf_user_uid.stdout }}/homebrew.mxcl.telegraf >/dev/null 2>&1 ||
+    launchctl print gui/{{ _telegraf_user_uid.stdout }}/homebrew.mxcl.telegraf >/dev/null 2>&1
+  register: _telegraf_loaded
+  changed_when: false
+  failed_when: false
+
+- name: bootstrap telegraf LaunchAgent into gui/<uid>
+  command: >-
+    launchctl bootstrap gui/{{ _telegraf_user_uid.stdout }}
+    /Users/{{ mac_user | mandatory }}/Library/LaunchAgents/homebrew.mxcl.telegraf.plist
+  when: _telegraf_loaded.rc != 0
+  changed_when: true

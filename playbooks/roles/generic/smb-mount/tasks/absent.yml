@@ -1,0 +1,35 @@
+# Tear down autofs config. The /etc/auto_master line removal needs the
+# same GUI-Terminal-only approach as installation; the role detects and
+# prompts for it.
+
+- name: remove autofs SMB map file
+  file:
+    path: "{{ smb_mount_map_path }}"
+    state: absent
+  notify: reload autofs
+
+- name: probe /etc/auto_master for stale map entry
+  command: "grep -qE '^/-[[:space:]]+{{ smb_mount_map_path | basename }}$' /etc/auto_master"
+  register: _automaster_probe
+  changed_when: false
+  failed_when: false
+
+- name: prompt user to remove map line from /etc/auto_master via GUI Terminal
+  pause:
+    seconds: 600
+    prompt: |
+
+      =====================================================================
+      MANUAL STEP REQUIRED — remove autofs map line from /etc/auto_master
+      =====================================================================
+
+      sshd's sandbox profile on macOS blocks writes to /etc/auto_master.
+      In a Terminal.app window on the Mac (NOT over SSH), paste:
+
+        sudo /usr/bin/sed -i '' "/^\/-[[:space:]]\\{1,\\}{{ smb_mount_map_path | basename }}$/d" /etc/auto_master
+
+      Then press Enter here to continue. Timing out after 10 minutes.
+  when: _automaster_probe.rc == 0
+
+- name: flush handlers
+  meta: flush_handlers

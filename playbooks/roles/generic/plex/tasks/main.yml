@@ -1,0 +1,12 @@
+- assert:
+    that:
+      - ansible_os_family == 'Darwin'
+      - plex_state in ('present', 'absent')
+    fail_msg: "generic/plex only supports macOS hosts (got {{ ansible_os_family }})"
+    quiet: yes
+
+- include_tasks: present.yml
+  when: plex_state == 'present'
+
+- include_tasks: absent.yml
+  when: plex_state == 'absent'

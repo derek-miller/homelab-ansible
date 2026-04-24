@@ -1,0 +1,6 @@
+# Linux path: delegate to the artis3n.tailscale.machine collection role, which
+# handles Debian/RHEL/Arch/SUSE. The collection is installed via
+# playbooks/collections/requirements.yml.
+- name: install and configure tailscale (artis3n)
+  include_role:
+    name: artis3n.tailscale.machine

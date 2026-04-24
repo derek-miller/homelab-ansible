@@ -1,0 +1,39 @@
+# Existing install is from plex.tv .pkg. The homebrew_cask module installs
+# `plex-media-server` cask which is a wrapper around the same installer.
+# Library and config (~/Library/Application Support/Plex Media Server/)
+# persist across the switch because Plex stores them independently of the
+# .app bundle.
+- name: switch become_user to mac_user
+  set_fact:
+    ansible_become_user: "{{ mac_user | mandatory }}"
+
+- block:
+    - name: install Plex Media Server via homebrew cask
+      community.general.homebrew_cask:
+        name: "{{ plex_cask_name }}"
+        state: "{{ plex_cask_state }}"
+  always:
+    - name: restore become_user to root
+      set_fact:
+        ansible_become_user: root
+
+- name: verify Plex LaunchAgent is registered
+  stat:
+    path: "{{ plex_launchagent }}"
+  register: _plex_agent_stat
+  changed_when: false
+
+- name: note Plex first-run steps
+  # Plex's own "Open at Login" menu item (the macOS Login Item mechanism)
+  # handles auto-start — it's settable only through the Plex menu bar,
+  # since the underlying LSSharedFileList modification requires Automation
+  # TCC which can't be granted programmatically. First-run is a human
+  # step: launch Plex.app once via VNC/console, tick Open at Login in the
+  # menu bar, and claim the server at https://app.plex.tv/.
+  debug:
+    msg: >-
+      Plex LaunchAgent not yet registered — first-run step required on
+      this host. Launch Plex.app via VNC/console once, tick "Open at
+      Login" in the menu bar icon, then claim the server at
+      https://app.plex.tv/. Subsequent logins will auto-start Plex.
+  when: not _plex_agent_stat.stat.exists

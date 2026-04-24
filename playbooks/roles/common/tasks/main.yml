@@ -25,11 +25,12 @@
     state: absent
   when: sudoers|default([])|length == 0
 
-- name: update time zone database
+- name: update time zone database (apt)
   apt:
     name: tzdata
     state: latest
   notify: restart cron
+  when: ansible_os_family == 'Debian'
 
 - name: set time zone
   timezone:
@@ -43,10 +44,110 @@
   register: result
   until: result is succeeded
   changed_when: false
+  when: ansible_os_family == 'Debian'
 
-- name: install common packages
+- name: install common packages (apt)
   apt:
     name: "{{ common_pkgs.apt }}"
     state: present
+  when: ansible_os_family == 'Debian'
+
+- name: synthesize root-level mount dirs (Darwin)
+  # macOS's sealed system volume is read-only at /, so root-level paths like
+  # /mnt have to be declared in /etc/synthetic.conf. We use the SYMLINK form
+  # ("name\tpath") because autofs and diskutil resolve mountpoints via
+  # realpath: a bare-token synthetic dir at /mnt vs the underlying
+  # /System/Volumes/Data/mnt are different inodes — autofs ends up mounting
+  # at the latter while users / roles reference the former. With a symlink,
+  # /mnt resolves to the same inode autofs mounted on.
+  #
+  # Opt-in per host: set mac_synthetic_links in host_vars to a dict of
+  # {link-name: target-path}, e.g. {mnt: /System/Volumes/Data/mnt}.
+  # Defaults to empty (no synthetic links managed).
+  when:
+    - ansible_os_family == 'Darwin'
+    - mac_synthetic_links | default({}) is truthy
+  vars:
+    _links: "{{ mac_synthetic_links }}"
+  block:
+    - name: ensure synthetic-link target dirs exist
+      file:
+        path: "{{ item.value }}"
+        state: directory
+        owner: root
+        group: wheel
+        mode: '0755'
+      loop: "{{ _links | dict2items }}"
+      loop_control:
+        label: "{{ item.value }}"
+
+    - name: render /etc/synthetic.conf
+      copy:
+        content: "{% for name, target in _links.items() %}{{ name }}\t{{ target }}\n{% endfor %}"
+        dest: /etc/synthetic.conf
+        owner: root
+        group: wheel
+        mode: '0644'
+      register: _synthetic_conf
+
+    - name: probe whether each synthetic link is in place
+      stat:
+        path: "/{{ item.key }}"
+      register: _synthetic_probe
+      loop: "{{ _links | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: pause for reboot to materialize synthetic links
+      # apfs.util -t stitches new synthetic entries but does not convert an
+      # already-stitched empty dir into a symlink. The actual transition
+      # only happens at boot.
+      pause:
+        seconds: 600
+        prompt: |
+
+          ====================================================================
+          MANUAL STEP REQUIRED — reboot to apply /etc/synthetic.conf
+          ====================================================================
+
+          /etc/synthetic.conf needs the following root-level symlinks:
+          {% for r in _synthetic_probe.results %}
+            /{{ r.item.key }} -> {{ r.item.value }}{% if not (r.stat.islnk | default(false)) %}   (currently NOT a symlink){% elif r.stat.lnk_target | default('') != r.item.value %}   (current target {{ r.stat.lnk_target }}){% endif %}
+
+          {% endfor %}
+          synthetic.conf changes only apply at boot.  On the Mac, run:
+
+            sudo /sbin/shutdown -r now
+
+          then press Enter here to continue. Timing out after 10 minutes.
+      vars:
+        _needs_reboot: "{{ _synthetic_probe.results | rejectattr('stat.islnk', 'defined') | list | length > 0
+                          or _synthetic_probe.results
+                             | selectattr('stat.islnk', 'defined')
+                             | rejectattr('stat.islnk')
+                             | list | length > 0
+                          or _synthetic_probe.results
+                             | selectattr('stat.lnk_target', 'defined')
+                             | rejectattr('stat.lnk_target', 'in', _links.values())
+                             | list | length > 0 }}"
+      when: _needs_reboot | bool
+
+- name: install common packages (homebrew)
+  when: ansible_os_family == 'Darwin'
+  # The connection role set_facts ansible_become_user=root as a host fact.
+  # set_fact has higher precedence than task/block vars, so to run brew as
+  # a non-root user we swap the fact before and after the brew invocation.
+  # Homebrew refuses to run as root.
+  block:
+    - name: switch become_user to mac_user
+      set_fact:
+        ansible_become_user: "{{ mac_user | mandatory }}"
+    - community.general.homebrew:
+        name: "{{ common_pkgs.homebrew }}"
+        state: present
+  always:
+    - name: restore become_user to root
+      set_fact:
+        ansible_become_user: root
 
 - meta: flush_handlers

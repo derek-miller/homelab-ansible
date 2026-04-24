@@ -1,0 +1,9 @@
+- assert:
+    that: tailscale_state in ('present', 'absent')
+    quiet: yes
+
+- include_tasks: present.yml
+  when: tailscale_state == 'present'
+
+- include_tasks: absent.yml
+  when: tailscale_state == 'absent'

@@ -1,0 +1,98 @@
+# ---- Node.js install (first-time bootstrap only) -----------------------
+# Homebridge's wiki "Option 2" native install uses the official nodejs.org
+# .pkg which lands under /usr/local/. We match that convention. If Node.js
+# is already present we don't touch it — upgrades are manual so users can
+# time them with Homebridge's compatibility matrix.
+- name: check whether Node.js is installed
+  stat:
+    path: "{{ homebridge_node_bin }}"
+  register: _hb_node_stat
+
+- name: download Node.js installer (first-time bootstrap)
+  get_url:
+    url: "{{ homebridge_node_pkg_url }}"
+    dest: "/tmp/node-{{ homebridge_node_version }}.pkg"
+    mode: '0644'
+  when: not _hb_node_stat.stat.exists
+
+- name: install Node.js from .pkg
+  command: "/usr/sbin/installer -pkg /tmp/node-{{ homebridge_node_version }}.pkg -target /"
+  when: not _hb_node_stat.stat.exists
+  register: _hb_node_install
+  changed_when: "'successful' in (_hb_node_install.stdout | default('')) | lower"
+
+- name: clean up Node.js installer
+  file:
+    path: "/tmp/node-{{ homebridge_node_version }}.pkg"
+    state: absent
+  when: not _hb_node_stat.stat.exists
+
+- name: verify Node.js is now present
+  stat:
+    path: "{{ homebridge_node_bin }}"
+  register: _hb_node_stat_post
+  failed_when: not _hb_node_stat_post.stat.exists
+
+- name: verify npm is present (bundled with Node.js)
+  stat:
+    path: "{{ homebridge_npm_bin }}"
+  register: _hb_npm_stat
+  failed_when: not _hb_npm_stat.stat.exists
+
+# ---- homebridge npm packages ------------------------------------------
+# community.general.npm shells out to `npm`, whose shebang is `#!/usr/bin/env
+# node`. node lives at /usr/local/bin which isn't on root's default PATH,
+# so we prepend it via environment + path parameter.
+- name: install/upgrade homebridge npm packages
+  community.general.npm:
+    name: "{{ item }}"
+    global: true
+    state: "{{ homebridge_pkg_state }}"
+    executable: "{{ homebridge_npm_bin }}"
+    unsafe_perm: true
+    path: "{{ homebridge_node_bin | dirname }}"
+  loop: "{{ homebridge_packages }}"
+  environment:
+    PATH: "{{ homebridge_node_bin | dirname }}:{{ ansible_env.PATH }}"
+  notify: homebridge changed
+
+# ---- hb-service LaunchDaemon ------------------------------------------
+- name: check whether hb-service LaunchDaemon is installed
+  stat:
+    path: "{{ homebridge_launchdaemon }}"
+  register: _hb_daemon_stat
+
+# `hb-service install` wires up the LaunchDaemon at homebridge_launchdaemon.
+# It shells out to /usr/local/bin/node (not on root's default PATH), so
+# prepend the npm prefix explicitly. Idempotent: only invoked when the
+# plist is missing — re-running hb-service install regenerates the plist
+# + restarts, which we don't want on every ansible run.
+- name: install hb-service LaunchDaemon (first-time bootstrap)
+  command: >-
+    {{ homebridge_hbservice_bin }} install
+    --user {{ homebridge_user }}
+    --port {{ homebridge_ui_port }}
+    -S {{ homebridge_service_name }}
+    {% if homebridge_plugin_path is truthy %}-P {{ homebridge_plugin_path | quote }}{% endif %}
+    {% if homebridge_user_storage_path is truthy %}-U {{ homebridge_user_storage_path | quote }}{% endif %}
+  environment:
+    PATH: "/usr/local/bin:/opt/homebrew/bin:{{ ansible_env.PATH | default('/usr/bin:/bin:/usr/sbin:/sbin') }}"
+  when: not _hb_daemon_stat.stat.exists
+  register: _hb_install
+  changed_when: "'Homebridge setup complete' in (_hb_install.stdout | default(''))"
+
+# ---- Node.js upgrades via hb-service -----------------------------------
+# After the initial .pkg bootstrap, hb-service owns Node.js lifecycle so
+# it stays within Homebridge's supported range. Empty homebridge_node_version
+# lets hb-service pick the latest recommended LTS; a pinned version forces
+# an exact upgrade or downgrade. Idempotent: stdout reports "already
+# up-to-date" when the target already matches.
+- name: keep Node.js at the Homebridge-managed version
+  command: >-
+    {{ homebridge_hbservice_bin }} update-node
+    {% if homebridge_node_version is truthy %}{{ homebridge_node_version }}{% endif %}
+  environment:
+    PATH: "/usr/local/bin:/opt/homebrew/bin:{{ ansible_env.PATH | default('/usr/bin:/bin:/usr/sbin:/sbin') }}"
+  register: _hb_update_node
+  changed_when: "'Installing Node.js' in (_hb_update_node.stdout | default(''))"
+  notify: homebridge changed

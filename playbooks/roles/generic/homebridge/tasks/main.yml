@@ -1,0 +1,12 @@
+- assert:
+    that:
+      - ansible_os_family == 'Darwin'
+      - homebridge_state in ('present', 'absent')
+    fail_msg: "generic/homebridge only supports macOS hosts (got {{ ansible_os_family }})"
+    quiet: yes
+
+- include_tasks: present.yml
+  when: homebridge_state == 'present'
+
+- include_tasks: absent.yml
+  when: homebridge_state == 'absent'

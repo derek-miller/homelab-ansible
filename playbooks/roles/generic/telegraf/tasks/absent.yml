@@ -1,0 +1,16 @@
+# Telegraf absent — fully reverse what present.yml installed:
+#   - stop + disable service (systemd / launchd)
+#   - remove config file + conf.d dir
+#   - uninstall the package (apt / brew)
+#   - remove repo GPG key + apt source (Debian)
+
+- include_tasks: absent-debian.yml
+  when: ansible_os_family != 'Darwin'
+
+- include_tasks: absent-darwin.yml
+  when: ansible_os_family == 'Darwin'
+
+- name: remove rendered telegraf config
+  file:
+    path: "{{ telegraf_conf }}"
+    state: absent

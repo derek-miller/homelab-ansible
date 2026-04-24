@@ -22,7 +22,7 @@ gianos-raspi1
 harlan-raspi1
 mertins-raspi1
 quinn-raspi1
-rackmini1-vm
+rackmini1
 rackpi[1:5]
 raspi1
 
@@ -31,10 +31,8 @@ create_cloudflare_ipv4_dns_record=yes
 
 [cifs-shares]
 gianos-raspi1  cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
-#harlan-raspi1  cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 mertins-raspi1 cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 quinn-raspi1   cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
-rackmini1-vm      cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container", "Public"]'
 rackpi1        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container"]'
 rackpi2        cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
 rackpi3        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Public"]'
@@ -44,30 +42,29 @@ raspi1         cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"
 
 [docker]
 gianos-raspi1
-#harlan-raspi1
 mertins-raspi1
 quinn-raspi1
-rackmini1-vm
 rackpi[1:5]
 raspi1
 
 [docker-build-images]
-rackmini1-vm docker_images_to_build=sourcebot
-rackpi1   docker_images_to_build=openclaw-webhook-proxy
-rackpi5   docker_images_to_build=youtrack
+rackpi1 docker_images_to_build=openclaw-webhook-proxy
+rackpi4 docker_images_to_build=sourcebot
+rackpi5 docker_images_to_build=youtrack
 
 [docker_swarm_manager]
 rackpi1 docker_stack_name=rackpis
 
 [docker_swarm_worker]
-rackmini1-vm
 rackpi[2:5]
 
 [project-files]
-rackmini1-vm
 rackpi1
 rackpi4
 raspi1
+
+[disk-mounts]
+rackpi4
 
 [ser2net]
 
@@ -80,3 +77,15 @@ rackpi[1:5]
 
 [tplink-plug-stats]
 rackpi2
+
+[macos]
+rackmini1
+
+[smb-shares]
+rackmini1
+
+[homebridge]
+rackmini1
+
+[plex]
+rackmini1

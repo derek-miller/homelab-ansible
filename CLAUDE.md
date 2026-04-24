@@ -4,7 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Ansible-managed homelab infrastructure. Docker Swarm cluster (rackpi1 manager + rackmini1-vm/rackpi2-5 workers) running on Raspberry Pi and Mac Mini nodes. Single main playbook (`playbooks/default.yml`) with tag-based execution.
+Ansible-managed homelab infrastructure. Docker Swarm cluster (rackpi1 manager + rackpi2-5 workers, all ARM64 Raspberry Pi 5s) running user-facing services (sourcebot, youtrack, home assistant, arr stack, etc.). A Mac mini (`rackmini1`) runs native-only services outside the swarm (Plex, Homebridge, Tailscale, SMB mounts). Single main playbook (`playbooks/default.yml`) with tag-based execution.
+
+## macOS hosts — required manual steps at bootstrap
+
+macOS has a small number of operations that cannot be scripted without GUI interaction, because sshd's sandbox profile and TCC (Transparency, Consent & Control) grants are settable only through the GUI. The playbook DETECTS when these are missing and halts with an interactive `pause:` prompt + 10-minute timeout and explicit recovery instructions — rather than silently half-working. Expected manual steps at first-time bootstrap of a Mac host:
+
+- **Register autofs SMB map in `/etc/auto_master`** — sshd's sandbox blocks writing to `/etc/auto_master` (system-file-write-xattrs restriction), so one line has to be appended from a GUI Terminal session: `sudo bash -c 'printf "/-\tauto_smb\n" >> /etc/auto_master'`. Detected by `generic/smb-mount` role on first run and will pause with instructions.
+- **Plex "Open at Login"** — the Plex menu-bar app registers its own LaunchAgent via LSSharedFileList, which can't be flipped without Automation TCC (which in turn can't be granted programmatically). After `generic/plex` installs the cask, the operator must launch Plex once via VNC/console and tick "Open at Login" in the menu bar. The role prints instructions if the LaunchAgent isn't registered yet.
+- **FileVault login on reboot** — after a power cycle the Mac sits at the login screen until a human logs in; user LaunchAgents only run after login. No workaround; design-accepted.
 
 ## Common Commands
 
@@ -51,5 +59,6 @@ make bootstrap hosts=<host> user=<user>
 - **Docker Compose** services for individual hosts are in their respective `host_vars/{hostname}/vault.yml` as `docker_compose_definition`.
 - **Vault encryption** is enforced by a pre-commit hook (`hooks/pre-commit` → `make vault-check`). The `.vault_pass` file in the repo root (git-ignored) holds the encryption key.
 - **Variable layering**: Role defaults → group_vars → host_vars. Vault variables are referenced indirectly (e.g., `docker_stack_definition: "{{ vault_docker_stack_definition }}"`).
-- Services on the swarm use placement constraints like `node.hostname == rackmini1-vm` to pin to specific nodes.
+- Services on the swarm use placement constraints like `node.hostname == rackpi4` to pin to specific nodes.
+- Roles that install something follow a `present.yml` / `absent.yml` split routed from `tasks/main.yml` via a `<role>_state` variable — `absent` must fully reverse what `present` did (stop service, remove config, uninstall package, clear repo/keyring).
 - Traefik labels on swarm services handle routing, OAuth middleware, and TLS.

@@ -1,0 +1,17 @@
+# Managed by Ansible — generic/smb-mount role. Do not edit by hand.
+#
+# Autofs direct map. Each line is
+#   <mountpoint> -fstype=smbfs,<opts> ://<user>:<pass>@<server>/<share>
+# automountd reads this on `automount -vc` and on boot. Mounts trigger on
+# first access; idle-unmount after the timeout configured in
+# /etc/auto_master; the next access after a wedge re-establishes a fresh
+# mount.
+#
+# Plaintext credentials below — file is mode 0600 root:wheel. Anyone with
+# root on this host can read these credentials; for a homelab NAS share
+# that's the accepted tradeoff.
+{% for mount in smb_mounts %}
+{% for share in mount.shares %}
+{{ share.mount_point }} -fstype=smbfs,{{ smb_mount_options }} ://{{ mount.username }}:{{ mount.password | urlencode }}@{{ mount.server }}/{{ share.name }}
+{% endfor %}
+{% endfor %}

@@ -1,0 +1,84 @@
+- assert:
+    that:
+      - smb_mounts is defined
+      - smb_mounts | map(attribute='shares') | flatten
+          | rejectattr('mount_point', 'defined') | list | length == 0
+    fail_msg: >-
+      smb_mounts must be defined with each share entry as
+      {name: <share>, mount_point: <path>}. See role defaults.
+    quiet: yes
+
+# ---- ensure mount_point parents exist ----------------------------------
+# autofs creates the leaf trigger at mount_point itself, but NOT any
+# intermediate path components. e.g. for /mnt/foo/Backups, autofs makes
+# /mnt/foo/Backups (the trigger) but needs /mnt/foo to pre-exist. /mnt is
+# typically provided by the common role's mac_synthetic_links; anything
+# deeper is this role's responsibility.
+- name: ensure mount_point parent dirs exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: wheel
+    mode: '0755'
+  loop: "{{ smb_mounts | map(attribute='shares') | flatten
+            | map(attribute='mount_point') | map('dirname') | unique | list }}"
+
+# ---- autofs map --------------------------------------------------------
+- name: install autofs SMB direct map
+  template:
+    src: auto_smb.j2
+    dest: "{{ smb_mount_map_path }}"
+    owner: root
+    group: wheel
+    mode: '0600'
+  notify: reload autofs
+
+# ---- /etc/auto_master entry --------------------------------------------
+# /etc/auto_master is writable by root from a GUI session (Terminal.app)
+# but NOT from sshd-spawned processes (sshd's sandbox profile blocks it).
+# Detect whether the line we need is already present; if not, pause with
+# instructions for the one-time GUI Terminal command, then re-verify.
+- name: probe /etc/auto_master for our map entry
+  command: "grep -qE '^/-[[:space:]]+{{ smb_mount_map_path | basename }}$' /etc/auto_master"
+  register: _automaster_probe
+  changed_when: false
+  failed_when: false
+
+- name: prompt user to add map line to /etc/auto_master from GUI Terminal
+  pause:
+    seconds: 600
+    prompt: |
+
+      =====================================================================
+      MANUAL STEP REQUIRED — register autofs map in /etc/auto_master
+      =====================================================================
+
+      sshd's sandbox profile on macOS blocks writes to /etc/auto_master,
+      so this single line has to be added by you from a Terminal.app
+      window on the Mac (NOT over SSH). One-time per host.
+
+      Open Terminal.app on the Mac (Console session or VNC) and paste:
+
+        sudo bash -c 'printf "/-\t%s\n" "{{ smb_mount_map_path | basename }}" >> /etc/auto_master'
+
+      Then press Enter here to continue (the role will reload autofs and
+      verify). Timing out after 10 minutes.
+  when: _automaster_probe.rc != 0
+
+- name: re-probe /etc/auto_master after manual step
+  command: "grep -qE '^/-[[:space:]]+{{ smb_mount_map_path | basename }}$' /etc/auto_master"
+  register: _automaster_recheck
+  changed_when: false
+  failed_when: _automaster_recheck.rc != 0
+  when: _automaster_probe.rc != 0
+
+# Reload autofs immediately so the just-installed map is picked up.
+- name: flush handlers
+  meta: flush_handlers
+
+# Note: we deliberately do NOT verify-by-ls here. macOS TCC blocks SSH-
+# spawned shells from reading any SMB-backed mount regardless of path
+# ("Operation not permitted"), even though the mount itself is healthy
+# and readable from Finder and GUI Terminal. Downstream consumers (Plex,
+# Homebridge, etc.) verify accessibility in their own contexts.

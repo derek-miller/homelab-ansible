@@ -1,0 +1,23 @@
+# Homebrew refuses to run as root; swap ansible_become_user (host fact set
+# by the connection role) around brew operations. See common role for the
+# same pattern and rationale.
+- name: switch become_user to mac_user
+  set_fact:
+    ansible_become_user: "{{ mac_user | mandatory }}"
+
+- block:
+    - name: install telegraf via homebrew
+      community.general.homebrew:
+        name: telegraf
+        state: present
+      notify: restart telegraf
+  always:
+    - name: restore become_user to root
+      set_fact:
+        ansible_become_user: root
+
+- name: ensure telegraf conf directory exists
+  file:
+    path: "{{ telegraf_conf_dir }}"
+    state: directory
+    mode: '0755'

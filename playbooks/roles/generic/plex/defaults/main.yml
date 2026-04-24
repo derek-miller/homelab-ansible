@@ -1,0 +1,30 @@
+plex_state: present
+
+# `present` adopts the existing install without forcing a version; `latest`
+# lets `brew upgrade --cask plex-media-server` pick up newer releases. Flip
+# to `latest` after verifying the first cask-managed install leaves the
+# existing library intact.
+plex_cask_state: present
+
+# The cask name as of 2026. Brew periodically renames casks; verify via
+# `brew search plex-media-server`.
+plex_cask_name: plex-media-server
+
+# The LaunchAgent plist path Plex itself registers on first launch (after
+# GUI login). Plex stores its runtime settings here; we only STAT it to
+# know whether the user has done the initial server claim yet. Auto-start
+# at login is handled by Plex's own menu-bar "Open at Login" toggle — a
+# one-time manual step after install.
+plex_launchagent: "/Users/{{ mac_user | mandatory }}/Library/LaunchAgents/com.plexapp.plexmediaserver.plist"
+
+# When plex_state=absent, should state/cache/prefs/logs be deleted?
+#
+#   false (default): conservative teardown — remove the .app, LaunchAgent,
+#                    and transcoder preference, but leave the library
+#                    database, server identity (Plex claim token), watch
+#                    history, metadata, and caches intact so a subsequent
+#                    plex_state=present re-deploy brings everything back.
+#   true:            scorched-earth — also wipe Application Support,
+#                    Caches, Preferences plist, Logs, and the transcoder
+#                    temp dir. Use when decommissioning the host entirely.
+plex_wipe_state: false

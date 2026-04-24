@@ -1,0 +1,29 @@
+- name: stop and disable telegraf service
+  service:
+    name: telegraf
+    state: stopped
+    enabled: no
+  failed_when: false
+
+- name: uninstall telegraf
+  apt:
+    name: telegraf
+    state: absent
+    purge: yes
+
+- name: remove influxdb apt repository
+  apt_repository:
+    repo: 'deb [signed-by=/usr/share/keyrings/influxdata-archive.gpg] https://repos.influxdata.com/debian stable main'
+    filename: influxdata
+    state: absent
+    update_cache: yes
+
+- name: remove influxdata GPG key
+  file:
+    path: /usr/share/keyrings/influxdata-archive.gpg
+    state: absent
+
+- name: remove telegraf conf directory
+  file:
+    path: "{{ telegraf_conf_dir }}"
+    state: absent
