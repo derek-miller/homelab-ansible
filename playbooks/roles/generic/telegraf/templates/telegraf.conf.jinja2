@@ -16,10 +16,10 @@
 
 # Global tags can be specified here in key="value" format.
 [global_tags]
-  # dc = "us-east-1" # will tag all metrics with dc=us-east-1
-  # rack = "1a"
-  ## Environment variables can be used as tags, and throughout the config file
-  # user = "$USER"
+  # Tag every metric with the host OS family so Grafana dashboards can
+  # filter panels that only make sense on one platform (e.g. Linux-only
+  # kernel/interrupt inputs, macOS-only thermal counters).
+  os = "{{ ansible_os_family | lower }}"
 
 
 # Configuration for telegraf agent
@@ -1479,9 +1479,11 @@
   # name_templates = ["$ID_FS_LABEL","$DM_VG_NAME/$DM_LV_NAME"]
 
 
-# Get kernel statistics from /proc/stat
+{% if ansible_os_family != 'Darwin' %}
+# Get kernel statistics from /proc/stat (Linux only)
 [[inputs.kernel]]
   # no configuration
+{% endif %}
 
 
 # Read metrics about memory usage
@@ -2445,7 +2447,9 @@
   collect_memstats = true
 
 
+{% if ansible_os_family != 'Darwin' %}
 # This plugin gathers interrupts data from /proc/interrupts and /proc/softirqs.
+# (Linux only)
 [[inputs.interrupts]]
   ## When set to true, cpu metrics are tagged with the cpu.  Otherwise cpu is
   ## stored as a field.
@@ -2458,6 +2462,7 @@
   ## To filter which IRQs to collect, make use of tagpass / tagdrop, i.e.
   # [inputs.interrupts.tagdrop]
   #   irq = [ "NET_RX", "TASKLET" ]
+{% endif %}
 
 
 # # Read metrics from the bare metal servers via IPMI
@@ -2713,9 +2718,11 @@
 #   # insecure_skip_verify = false
 
 
-# Get kernel statistics from /proc/vmstat
+{% if ansible_os_family != 'Darwin' %}
+# Get kernel statistics from /proc/vmstat (Linux only)
 [[inputs.kernel_vmstat]]
   # no configuration
+{% endif %}
 
 
 # # Read status information from one or more Kibana servers
@@ -2800,9 +2807,11 @@
 #   servers = ["127.0.0.1:4020"]
 
 
-# Provides Linux sysctl fs metrics
+{% if ansible_os_family != 'Darwin' %}
+# Provides Linux sysctl fs metrics (Linux only)
 [[inputs.linux_sysctl_fs]]
   # no configuration
+{% endif %}
 
 
 # # Read metrics from local Lustre service on OST, MDS
@@ -3187,7 +3196,8 @@
 #   # insecure_skip_verify = false
 
 
-# Collect kernel snmp counters and network interface statistics
+{% if ansible_os_family != 'Darwin' %}
+# Collect kernel snmp counters and network interface statistics (Linux only)
 [[inputs.nstat]]
   ## file paths for proc files. If empty default paths will be used:
   ##    /proc/net/netstat, /proc/net/snmp, /proc/net/snmp6
@@ -3197,6 +3207,7 @@
   proc_net_snmp6 = "/proc/net/snmp6"
   ## dump metrics with 0 values too
   dump_zeros       = true
+{% endif %}
 
 
 # Get standard NTP query metrics, requires ntpq executable.
@@ -3520,7 +3531,8 @@
 #   # version = "39.0"
 
 
-# Monitor sensors, requires lm-sensors package
+{% if ansible_os_family != 'Darwin' %}
+# Monitor sensors, requires lm-sensors package (Linux only)
 [[inputs.sensors]]
   ## Remove numbers from field names.
   ## If true, a field name like 'temp1_input' will be changed to 'temp_input'.
@@ -3528,6 +3540,7 @@
 
   ## Timeout is the maximum amount of time that the sensors command can run.
   # timeout = "5s"
+{% endif %}
 
 
 # # Read metrics from storage devices supporting S.M.A.R.T.

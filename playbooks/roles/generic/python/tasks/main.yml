@@ -2,40 +2,56 @@
     that: python_state == 'present'
     quiet: yes
 
-- name: install pip3
-  apt:
-    name: python3-pip
-    state: latest
+- name: set up pip3 and virtualenv (apt-based)
+  when: ansible_os_family == 'Debian'
+  block:
+    - name: install pip3
+      apt:
+        name: python3-pip
+        state: latest
 
-- name: check if pip3 needs upgrade before using disable-pip-version-check flag
-  command: pip3 --version
-  register: pip_no_disable_pip_version_check
-  changed_when: (pip_no_disable_pip_version_check.stdout | regex_replace('^pip ([^ ]+).*$', '\\1')) is version_compare('6.0', '<')
+    - name: probe pip3 presence (always passes --disable-pip-version-check below)
+      # pip gained --disable-pip-version-check in 6.0 (released 2015). Every
+      # host in this inventory runs pip far newer than that, so there's no
+      # point in gating the flag on a version comparison — `changed=false`
+      # here makes the downstream extra_args expression unconditionally
+      # emit --disable-pip-version-check.
+      command: pip3 --version
+      register: pip_no_disable_pip_version_check
+      changed_when: false
 
-- name: check if pip3 needs break-system-packages flag
-  command: pip3 install --help
-  register: pip_break_system_packages_check
+    - name: check if pip3 needs break-system-packages flag
+      command: pip3 install --help
+      register: pip_break_system_packages_check
+      changed_when: false
+
+    - name: set pip_break_system_packages var
+      set_fact:
+        pip_break_system_packages: "{{ ' --break-system-packages ' in pip_break_system_packages_check.stdout }}"
+
+    - name: upgrade/downgrade setuptools and pip
+      pip:
+        name:
+          - setuptools{{ setuptools_version_spec }}
+          - pip{{ pip_version_spec }}
+        executable: pip3
+        extra_args: "{{ '--break-system-packages' if pip_break_system_packages else '' }} {{ '' if pip_no_disable_pip_version_check is changed else '--disable-pip-version-check' }}"
+        state: latest
+      when: >-
+        not (ansible_distribution == 'Ubuntu' and ansible_distribution_major_version | int >= 24)
+        and not (ansible_distribution == 'Debian' and ansible_distribution_major_version | int >= 12)
+
+    - name: install/upgrade virtualenv
+      pip:
+        name: virtualenv{{ virtualenv_version_spec }}
+        executable: pip3
+        extra_args: "{{ '--break-system-packages' if pip_break_system_packages else '' }} --disable-pip-version-check"
+        state: latest
+
+- name: verify python3 available on macOS
+  # macOS ships python3 + ensurepip via Xcode Command Line Tools. `python3 -m venv`
+  # is built-in (3.4+), so the `virtualenv` package isn't required — the
+  # generic/virtualenv role passes virtualenv_command: `python3 -m venv` on Darwin.
+  command: /usr/bin/python3 --version
   changed_when: false
-
-- name: set pip_break_system_packages var
-  set_fact:
-    pip_break_system_packages: "{{ ' --break-system-packages ' in pip_break_system_packages_check.stdout }}"
-
-- name: upgrade/downgrade setuptools and pip
-  pip:
-    name:
-      - setuptools{{ setuptools_version_spec }}
-      - pip{{ pip_version_spec }}
-    executable: pip3
-    extra_args: "{{ '--break-system-packages' if pip_break_system_packages else '' }} {{ '' if pip_no_disable_pip_version_check is changed else '--disable-pip-version-check' }}"
-    state: latest
-  when: >-
-    not (ansible_distribution == 'Ubuntu' and ansible_distribution_major_version | int >= 24)
-    and not (ansible_distribution == 'Debian' and ansible_distribution_major_version | int >= 12)
-
-- name: install/upgrade virtualenv
-  pip:
-    name: virtualenv{{ virtualenv_version_spec }}
-    executable: pip3
-    extra_args: "{{ '--break-system-packages' if pip_break_system_packages else '' }} --disable-pip-version-check"
-    state: latest
+  when: ansible_os_family == 'Darwin'

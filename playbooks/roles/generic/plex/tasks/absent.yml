@@ -1,0 +1,49 @@
+# Plex absent — reverse what present.yml installed. Always removes the
+# cask, LaunchAgent, and transcoder preference. Whether library state is
+# also wiped depends on plex_wipe_state (default: false, preserve data).
+
+- name: quit Plex Media Server
+  command: osascript -e 'tell application "Plex Media Server" to quit'
+  failed_when: false
+  changed_when: true
+
+- name: unload Plex user LaunchAgent
+  shell: |
+    uid=$(id -u {{ mac_user | mandatory }})
+    launchctl bootout gui/${uid}/com.plexapp.plexmediaserver 2>/dev/null || true
+  changed_when: true
+
+- name: remove Plex LaunchAgent plist
+  file:
+    path: "{{ plex_launchagent }}"
+    state: absent
+
+- name: switch become_user to mac_user (brew + osx_defaults + user-scope files)
+  set_fact:
+    ansible_become_user: "{{ mac_user | mandatory }}"
+
+- block:
+    - name: brew uninstall Plex Media Server cask
+      community.general.homebrew_cask:
+        name: "{{ plex_cask_name }}"
+        state: absent
+
+    - name: wipe Plex state/cache/prefs/logs (plex_wipe_state=true only)
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        # Library DB, plugins, server identity, metadata
+        - "/Users/{{ mac_user | mandatory }}/Library/Application Support/Plex Media Server"
+        # Standalone metadata caches
+        - "/Users/{{ mac_user | mandatory }}/Library/Caches/PlexMediaServer"
+        - "/Users/{{ mac_user | mandatory }}/Library/Caches/com.plexapp.plexmediaserver"
+        # Preferences plist (tokens, per-user settings)
+        - "/Users/{{ mac_user | mandatory }}/Library/Preferences/com.plexapp.plexmediaserver.plist"
+        # Logs
+        - "/Users/{{ mac_user | mandatory }}/Library/Logs/Plex Media Server"
+      when: plex_wipe_state | bool
+  always:
+    - name: restore become_user to root
+      set_fact:
+        ansible_become_user: root

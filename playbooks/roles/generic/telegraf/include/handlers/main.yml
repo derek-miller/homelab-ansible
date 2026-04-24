@@ -1,4 +1,18 @@
+# Linux: service module drives systemd. macOS: kickstart the LaunchAgent
+# in the gui/<uid> domain so the updated plist / config takes effect
+# without needing a user re-login. bootout + bootstrap is more invasive
+# than kickstart -k, but kickstart -k just restarts the cached plist —
+# config file changes only need a kickstart because telegraf re-reads on
+# startup.
 - name: restart telegraf
   service:
     name: telegraf
     state: restarted
+  when: ansible_os_family != 'Darwin'
+
+- name: restart telegraf (Darwin)
+  shell: |
+    uid=$(id -u {{ mac_user | mandatory }})
+    launchctl kickstart -k gui/${uid}/homebrew.mxcl.telegraf
+  when: ansible_os_family == 'Darwin'
+  listen: restart telegraf

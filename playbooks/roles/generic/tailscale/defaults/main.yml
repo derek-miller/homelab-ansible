@@ -1,0 +1,11 @@
+tailscale_state: present
+
+# Extra args passed to `tailscale up` on Darwin. Linux uses the artis3n role
+# which has its own tailscale_args var — this is only honored on Darwin.
+tailscale_darwin_up_args:
+  - --accept-routes
+
+# Caller must set `tailscale_authkey` (per host or group) for fresh Darwin
+# installs. This is the same var the artis3n.tailscale.machine Linux role
+# uses, so a single authkey in group_vars/tailscale/vars.yml covers both.
+# Unused if tailscale is already running on the host.

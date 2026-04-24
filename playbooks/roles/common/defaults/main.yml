@@ -18,3 +18,12 @@ common_pkgs:
     - tmux
     - unzip
     - vim
+  homebrew:
+    # macOS ships vim, curl, git, unzip, tmux — only install tools that add
+    # value over the defaults or match what Linux hosts use.
+    - cmake
+    - htop
+    - jq
+    - mosh
+    - pigz
+    - wget

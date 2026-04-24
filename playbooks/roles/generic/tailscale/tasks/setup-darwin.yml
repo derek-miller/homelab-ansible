@@ -1,0 +1,187 @@
+# Darwin path: install the Homebrew formula (NOT the cask) — the formula gives
+# us the `tailscaled` CLI daemon that runs as a system LaunchDaemon, no GUI
+# session required. Authenticates with a pre-generated authkey from
+# https://login.tailscale.com/admin/settings/keys.
+#
+# Detects existing Tailscale via a CGNAT IPv4 (100.64.0.0/10) on any interface
+# — works regardless of install method (App Store app is sandboxed and doesn't
+# expose a working CLI, so CLI-based detection is unreliable).
+#
+# Transition from an App Store install: set `tailscale_uninstall_appstore: true`
+# on the host; the role then quits Tailscale.app, removes it, and fresh-installs
+# the brew formula + authenticates via authkey.
+
+- name: detect App Store / cask Tailscale
+  stat:
+    path: /Applications/Tailscale.app
+  register: _tailscale_app_stat
+
+- name: set tailscale_already_running fact (CGNAT IP presence)
+  set_fact:
+    tailscale_already_running: >-
+      {{ ansible_all_ipv4_addresses
+         | select('match', '^100\\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\\.')
+         | list | length > 0 }}
+
+# ---- uninstall App Store / cask Tailscale (opt-in) --------------------------
+- name: uninstall App Store Tailscale
+  when:
+    - tailscale_uninstall_appstore | default(false) | bool
+    - _tailscale_app_stat.stat.exists
+  block:
+    - name: quit Tailscale.app
+      command: osascript -e 'tell application "Tailscale" to quit'
+      failed_when: false
+      changed_when: true
+
+    - name: remove /Applications/Tailscale.app
+      file:
+        path: /Applications/Tailscale.app
+        state: absent
+
+    - name: remove Tailscale user container
+      file:
+        path: "/Users/{{ mac_user | mandatory }}/Library/Containers/io.tailscale.ipn.macos"
+        state: absent
+
+    # The system extension at /Library/SystemExtensions/... is reference-counted
+    # against its owning .app bundle. Removing the .app causes macOS to
+    # garbage-collect the SE on next reboot. No explicit uninstall needed.
+    - name: re-gather network facts after app uninstall
+      setup:
+        gather_subset:
+          - network
+
+    - name: refresh tailscale_already_running after uninstall
+      set_fact:
+        tailscale_already_running: >-
+          {{ ansible_all_ipv4_addresses
+             | select('match', '^100\\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\\.')
+             | list | length > 0 }}
+
+# ---- install brew formula + launch daemon (fresh host) ----------------------
+- name: install tailscale via homebrew
+  when: not tailscale_already_running
+  block:
+    - name: switch become_user to mac_user
+      set_fact:
+        ansible_become_user: "{{ mac_user | mandatory }}"
+
+    - block:
+        - name: install tailscale (CLI/daemon formula)
+          community.general.homebrew:
+            name: tailscale
+            state: present
+      always:
+        - name: restore become_user to root
+          set_fact:
+            ansible_become_user: root
+
+    # Bypass `sudo brew services start` — it fails because brew refuses to
+    # fetch formula.jws.json as root (and HOMEBREW_NO_AUTO_UPDATE doesn't
+    # cover that path). Copy the brew-provided plist to /Library/LaunchDaemons
+    # with root:wheel ownership (required by launchd for system daemons; a
+    # symlink into the brew prefix fails with "Bootstrap failed: 5: I/O error"
+    # because the target is owned by the brew user).
+    - name: install tailscaled plist as root-owned LaunchDaemon
+      copy:
+        src: "{{ homebrew_prefix }}/opt/tailscale/homebrew.mxcl.tailscale.plist"
+        remote_src: true
+        dest: /Library/LaunchDaemons/homebrew.mxcl.tailscale.plist
+        owner: root
+        group: wheel
+        mode: '0644'
+
+    - name: check if tailscaled LaunchDaemon is already loaded
+      command: launchctl print system/homebrew.mxcl.tailscale
+      register: _ts_already_loaded
+      changed_when: false
+      failed_when: false
+
+    - name: bootstrap tailscaled LaunchDaemon
+      command: launchctl bootstrap system /Library/LaunchDaemons/homebrew.mxcl.tailscale.plist
+      when: _ts_already_loaded.rc != 0
+      register: _ts_bootstrap
+      changed_when: true
+
+    - name: wait for tailscaled to be ready
+      command: "{{ homebrew_prefix }}/bin/tailscale status --json"
+      register: _tailscale_wait
+      retries: 15
+      delay: 2
+      until: _tailscale_wait.rc == 0
+      changed_when: false
+
+    - name: assert authkey provided
+      assert:
+        that: tailscale_authkey is defined and tailscale_authkey | length > 0
+        fail_msg: "Fresh Darwin tailscale install requires tailscale_authkey (generate one at https://login.tailscale.com/admin/settings/keys)"
+        quiet: yes
+
+    - name: build advertise-tags argument
+      # OAuth-style authkeys (tskey-client-*) require --advertise-tags
+      # matching a tag permitted in the tailnet ACL. For ordinary authkeys
+      # tailscale_tags is empty so nothing is emitted.
+      set_fact:
+        _tailscale_tags_arg: >-
+          {% if tailscale_tags | default([]) | length > 0 %}
+          --advertise-tags={{ tailscale_tags | map('regex_replace', '^', 'tag:') | join(',') }}
+          {% endif %}
+
+    - name: build authkey string (OAuth adds ephemeral/preauthorized query params)
+      # OAuth client secrets (tskey-client-*) derive an authkey at Tailscale's
+      # token-exchange endpoint. The ephemeral/preauthorized properties of the
+      # resulting node come from query parameters appended to the secret — NOT
+      # from `tailscale up` flags. Tailscale defaults ephemeral=true for OAuth,
+      # so we must pass ephemeral=false explicitly to register a permanent
+      # node. Matches artis3n.tailscale.machine's install.yml behavior so
+      # Linux and Darwin hosts register identically.
+      set_fact:
+        _tailscale_authkey_string: >-
+          {% if tailscale_authkey.startswith('tskey-client-') %}
+          {{ tailscale_authkey }}?ephemeral={{ tailscale_oauth_ephemeral | default(true) | bool }}&preauthorized={{ tailscale_oauth_preauthorized | default(false) | bool }}
+          {% else %}
+          {{ tailscale_authkey }}
+          {% endif %}
+      no_log: true
+
+    - name: check tailscale auth state
+      command: "{{ homebrew_prefix }}/bin/tailscale status --json"
+      register: _tailscale_status_check
+      changed_when: false
+      failed_when: false
+
+    - name: authenticate tailscale with authkey
+      command: >-
+        {{ homebrew_prefix }}/bin/tailscale up
+        --authkey={{ _tailscale_authkey_string | trim }}
+        {{ _tailscale_tags_arg | trim }}
+        {{ tailscale_args | default(tailscale_darwin_up_args | join(' ')) }}
+      register: _tailscale_up
+      changed_when: true
+      no_log: true
+      when: >-
+        _tailscale_status_check.rc != 0
+        or (_tailscale_status_check.stdout | from_json).BackendState != 'Running'
+
+    - name: wait for tailscale to assign a CGNAT IP
+      # `tailscale up` returns before the interface is fully up; poll the CLI
+      # until an IPv4 address is assigned so downstream `tailscale ip` calls
+      # succeed deterministically.
+      command: "{{ homebrew_prefix }}/bin/tailscale ip -4"
+      register: _tailscale_ip_wait
+      retries: 15
+      delay: 2
+      until: _tailscale_ip_wait.rc == 0 and _tailscale_ip_wait.stdout | length > 0
+      changed_when: false
+
+# Symlink the brew-installed CLI into /usr/local/bin so downstream tasks
+# (default.yml's `command: tailscale ip`) resolve it on PATH — matches how
+# Linux distros put /usr/bin/tailscale on disk via apt.
+- name: symlink tailscale CLI to /usr/local/bin
+  file:
+    src: "{{ homebrew_prefix }}/bin/tailscale"
+    dest: /usr/local/bin/tailscale
+    state: link
+    force: yes
+  when: tailscale_state == 'present'

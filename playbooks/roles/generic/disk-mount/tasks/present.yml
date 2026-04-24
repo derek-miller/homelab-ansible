@@ -1,0 +1,48 @@
+# ansible.posix.mount below creates the mount-point dir on first use
+# (root:root:0755 default) — no separate mkdir task needed. This also
+# sidesteps a chown failure on already-mounted non-POSIX filesystems
+# like exfat/ntfs, which reject file:owner/group.
+
+# If another subsystem (e.g. udisks2's GUI auto-mount) has the device
+# mounted at a different path, our fstab entry would be ignored until
+# the next reboot. Unmount the device from any stale location first so
+# the ansible.posix.mount below can land it at the canonical path.
+- name: discover currently-mounted paths for managed devices
+  shell: |
+    set -eu
+    src={{ item.src | quote }}
+    case "$src" in
+      UUID=*)  dev="$(blkid -U "${src#UUID=}" 2>/dev/null || true)" ;;
+      LABEL=*) dev="$(blkid -L "${src#LABEL=}" 2>/dev/null || true)" ;;
+      *)       dev="$src" ;;
+    esac
+    [ -n "$dev" ] || exit 0
+    /bin/findmnt -n -o TARGET --source "$dev" 2>/dev/null || true
+  register: _disk_mount_current
+  changed_when: false
+  loop: "{{ disk_mounts }}"
+  loop_control:
+    label: "{{ item.src }}"
+
+- name: unmount device from stale location
+  # shell (not command) so paths with spaces like "/media/pi/Extreme Pro"
+  # survive as a single argument via quote filter.
+  shell: "/usr/bin/umount {{ item.stdout | trim | quote }}"
+  when:
+    - item.stdout is defined
+    - item.stdout | trim | length > 0
+    - (item.stdout | trim) != item.item.path
+  loop: "{{ _disk_mount_current.results }}"
+  loop_control:
+    label: "{{ item.item.src }} (from {{ item.stdout | default('') | trim }})"
+
+- name: configure persistent fstab mount
+  ansible.posix.mount:
+    src: "{{ item.src }}"
+    path: "{{ item.path }}"
+    fstype: "{{ item.fstype }}"
+    opts: "{{ item.opts | default('defaults,nofail') }}"
+    state: mounted
+  loop: "{{ disk_mounts }}"
+  loop_control:
+    label: "{{ item.path }}"

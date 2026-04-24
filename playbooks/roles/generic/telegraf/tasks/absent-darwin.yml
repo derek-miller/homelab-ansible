@@ -1,0 +1,33 @@
+# Darwin teardown: unload the brew-installed LaunchAgent, remove the plist,
+# brew uninstall the formula.
+
+- name: look up mac_user uid
+  command: "id -u {{ mac_user | mandatory }}"
+  register: _telegraf_user_uid
+  changed_when: false
+  failed_when: false
+
+- name: bootout telegraf LaunchAgent (user domain)
+  command: "launchctl bootout gui/{{ _telegraf_user_uid.stdout }}/homebrew.mxcl.telegraf"
+  when: _telegraf_user_uid.stdout | default('') | length > 0
+  failed_when: false
+  changed_when: true
+
+- name: remove telegraf LaunchAgent plist
+  file:
+    path: "/Users/{{ mac_user | mandatory }}/Library/LaunchAgents/homebrew.mxcl.telegraf.plist"
+    state: absent
+
+- name: switch become_user to mac_user (brew refuses root)
+  set_fact:
+    ansible_become_user: "{{ mac_user | mandatory }}"
+
+- block:
+    - name: brew uninstall telegraf
+      community.general.homebrew:
+        name: telegraf
+        state: absent
+  always:
+    - name: restore become_user to root
+      set_fact:
+        ansible_become_user: root

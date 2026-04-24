@@ -2,3 +2,4 @@
   service:
     name: cron
     state: restarted
+  when: ansible_service_mgr == 'systemd'

@@ -39,13 +39,34 @@
 
 - name: extract unique volume names from archive
   set_fact:
-    docker_restore_volume_names: >-
+    _docker_restore_archive_volumes: >-
       {{ archive_contents.stdout_lines
          | map('regex_search', '^/?backup/([^/]+)/', '\1')
          | select('ne', None)
          | map('first')
          | unique
          | list }}
+
+# When docker_restore_volumes_only is set, restrict the restore to just
+# those volumes AND fail loudly if any requested name isn't in the
+# archive — silently skipping a missing volume would leave the operator
+# thinking their data was restored.
+- name: narrow restore to docker_restore_volumes_only (if set)
+  set_fact:
+    docker_restore_volume_names: >-
+      {{ _docker_restore_archive_volumes
+         if (docker_restore_volumes_only | length == 0)
+         else (docker_restore_volumes_only | intersect(_docker_restore_archive_volumes)) }}
+
+- name: fail if any requested volume is missing from archive
+  fail:
+    msg: >-
+      docker_restore_volumes_only lists volumes not present in the archive:
+      {{ docker_restore_volumes_only | difference(_docker_restore_archive_volumes) | join(', ') }}.
+      Archive contains: {{ _docker_restore_archive_volumes | join(', ') }}.
+  when:
+    - docker_restore_volumes_only | length > 0
+    - (docker_restore_volumes_only | difference(_docker_restore_archive_volumes)) | length > 0
 
 - name: determine volume name prefix (swarm hosts)
   set_fact:

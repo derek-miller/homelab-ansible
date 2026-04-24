@@ -1,0 +1,14 @@
+- assert:
+    that:
+      - ansible_os_family == 'Darwin'
+      - smb_mount_state in ('present', 'absent')
+    fail_msg: "generic/smb-mount only supports macOS hosts (got {{ ansible_os_family }})"
+    quiet: yes
+
+- name: include present tasks
+  include_tasks: present.yml
+  when: smb_mount_state == 'present'
+
+- name: include absent tasks
+  include_tasks: absent.yml
+  when: smb_mount_state == 'absent'

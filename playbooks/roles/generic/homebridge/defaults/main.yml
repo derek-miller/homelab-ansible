@@ -1,0 +1,64 @@
+homebridge_state: present
+
+# Path to the Node.js install. Homebridge's wiki-recommended "Option 2"
+# native install uses the official nodejs.org .pkg installer which lands
+# under /usr/local. The role will download + install that .pkg on
+# bootstrap if Node.js is missing; existing installs are left alone.
+homebridge_node_bin: /usr/local/bin/node
+homebridge_npm_bin: /usr/local/bin/npm
+homebridge_hbservice_bin: /usr/local/bin/hb-service
+
+# Node.js version to install from nodejs.org on a fresh host (when no
+# Node.js binary is present at homebridge_node_bin). Used ONLY for the
+# first-time bootstrap .pkg download — once hb-service is installed,
+# ongoing Node.js upgrades are managed via `hb-service update-node`.
+homebridge_node_bootstrap_version: "22.11.0"
+homebridge_node_pkg_url: >-
+  https://nodejs.org/dist/v{{ homebridge_node_bootstrap_version }}/node-v{{ homebridge_node_bootstrap_version }}.pkg
+
+# Target Node.js version for `hb-service update-node`, run on every
+# playbook run after hb-service is installed. Empty (default) lets
+# hb-service pick the latest Homebridge-recommended LTS. Set to a
+# specific version (e.g. "22.11.0") to pin.
+homebridge_node_version: ""
+
+# The npm -g packages to keep at the latest version. `homebridge` is the
+# server itself; `homebridge-config-ui-x` provides the web UI. Plugins are
+# extensible — append to this list to bring more under management.
+homebridge_pkg_state: latest
+homebridge_packages:
+  - homebridge
+  - homebridge-config-ui-x
+
+# ---- `hb-service install` flags ---------------------------------------
+# Fed into `hb-service install` on first-time bootstrap only (`when the
+# LaunchDaemon plist is absent). Reinstalling hb-service on a host that
+# already has it would regenerate the plist + restart the service, which
+# we don't want on every ansible run.
+
+# --user — POSIX account the LaunchDaemon runs as. Also the owner of
+# ~/.homebridge/ (config.json, plugin state, HomeKit persist dirs).
+# Defaults to the primary Mac admin user.
+homebridge_user: "{{ mac_user | mandatory }}"
+
+# --port — TCP port the Homebridge Config UI binds to. Default 8581
+# matches the hb-service upstream default; override per-host to put the
+# UI on an alternate port (e.g. 443 if you terminate TLS at Homebridge
+# directly using certs referenced in config.json).
+homebridge_ui_port: 8581
+
+# -S, --service-name — LaunchDaemon label written to
+# /Library/LaunchDaemons/<name>.plist. Default matches the stock hb-service
+# convention. Change only if running multiple Homebridge instances.
+homebridge_service_name: com.homebridge.server
+
+# -P, --plugin-path — directory where Homebridge looks for plugins.
+# Leave unset to use hb-service's default (/usr/local/lib/node_modules).
+homebridge_plugin_path: ""
+
+# -U, --user-storage-path — where Homebridge stores runtime state.
+# Leave unset to use hb-service's default (~/.homebridge for the --user).
+homebridge_user_storage_path: ""
+
+# System LaunchDaemon plist, derived from homebridge_service_name.
+homebridge_launchdaemon: "/Library/LaunchDaemons/{{ homebridge_service_name }}.plist"

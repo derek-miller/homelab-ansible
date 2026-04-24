@@ -1,0 +1,40 @@
+---
+# macOS-specific group vars. Applies to any host in the [macos] inventory
+# group. Linux hosts are unaffected.
+
+ansible_python_interpreter: /usr/bin/python3
+
+# Homebrew prefix. Apple Silicon uses /opt/homebrew; Intel Macs use /usr/local.
+# All current macOS hosts are Apple Silicon; override per-host if that changes.
+homebrew_prefix: /opt/homebrew
+
+# NOTE: mac_user (the primary admin/desktop user on a Mac) is per-host —
+# set it in host_vars/<host>/vars.yml. It's used as `become_user` for any
+# operation that must NOT run as root: Homebrew (refuses root), per-user
+# LaunchAgents, Plex / Homebridge config, etc. Must match the owner of
+# {{ homebrew_prefix }}.
+
+# NOTE: additional_env_paths exists in this repo but only updates
+# `ansible_env` (a local representation) — it doesn't change the remote
+# shell's PATH used by `command:` tasks, and sudo's secure_path ignores
+# /etc/paths.d. Individual brew-installed CLIs that need to be callable
+# from tasks without a full path are symlinked into /usr/local/bin by
+# their owning roles (see generic/tailscale/tasks/setup-darwin.yml).
+
+# macOS equivalent of root:root. System files (sudoers, etc.) are owned
+# root:wheel on macOS; root_group is used throughout the shared roles.
+root_group: wheel
+
+# community.general.timezone on macOS uses `systemsetup -settimezone` which
+# accepts names from `systemsetup -listtimezones`. That list has `GMT` but not
+# `Etc/UTC`. GMT is functionally identical to UTC (no DST), so map the
+# Linux-side `Etc/UTC` default to `GMT` here for parity.
+timezone: GMT
+
+# Telegraf paths differ from the Debian defaults (/etc/telegraf/...)
+# because `brew install telegraf` places config directly under
+# $HOMEBREW_PREFIX/etc/ (no telegraf/ subdir), and the brew-installed
+# LaunchAgent's ProgramArguments reference those exact paths. Writing to
+# a different location would produce a silently-inert config.
+telegraf_conf: "{{ homebrew_prefix }}/etc/telegraf.conf"
+telegraf_conf_dir: "{{ homebrew_prefix }}/etc/telegraf.d"

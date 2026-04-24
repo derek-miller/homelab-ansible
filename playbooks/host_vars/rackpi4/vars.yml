@@ -38,6 +38,16 @@ project_files:
     owner: 1883
     group: 1883
     mode: '0700'
+  - src: "plaintext/{{ inventory_hostname }}/var/docker/sourcebot/data/config.json"
+    dest: /var/docker/sourcebot/data/config.json
+
+# SanDisk Extreme Pro USB SSD (exfat, 1TB). Holds the Control4 source
+# repo clones that sourcebot bind-mounts from /mnt/extreme-pro/Source/*.
+disk_mounts:
+  - src: "UUID=68FF-9B83"
+    path: /mnt/extreme-pro
+    fstype: exfat
+    opts: "defaults,uid=1000,gid=0,fmask=0022,dmask=0022,iocharset=utf8,nofail,x-systemd.device-timeout=10s"
 
 raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:

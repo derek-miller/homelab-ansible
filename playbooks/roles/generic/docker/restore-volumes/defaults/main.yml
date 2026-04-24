@@ -2,3 +2,9 @@
 docker_restore_volumes: false
 docker_restore_volumes_force: false
 docker_restore_volumes_backup_dir: "/mnt/Backups/Volumes/{{ inventory_hostname }}"
+# When empty (default), every volume found inside the archive is restored.
+# Set to a list of volume names (without the docker stack/project prefix)
+# to restrict the restore — useful for migrations where only a subset of
+# volumes from the source archive should land on the target host.
+# Example: docker_restore_volumes_only=["sourcebot-data", "sourcebot-redis"]
+docker_restore_volumes_only: []

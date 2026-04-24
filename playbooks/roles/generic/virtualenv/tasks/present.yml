@@ -34,6 +34,7 @@
   pip:
     virtualenv: "{{ virtualenv_path }}"
     virtualenv_site_packages: "{{ virtualenv_site_packages }}"
+    virtualenv_command: "{{ '/usr/bin/python3 -m venv' if ansible_os_family == 'Darwin' else omit }}"
     name: setuptools{{ setuptools_version_spec }}
     extra_args: --upgrade-strategy only-if-needed
     state: latest
@@ -42,6 +43,7 @@
   pip:
     virtualenv: "{{ virtualenv_path }}"
     virtualenv_site_packages: "{{ virtualenv_site_packages }}"
+    virtualenv_command: "{{ '/usr/bin/python3 -m venv' if ansible_os_family == 'Darwin' else omit }}"
     name: pip{{ pip_version_spec }}
     extra_args: --upgrade-strategy only-if-needed
     state: latest

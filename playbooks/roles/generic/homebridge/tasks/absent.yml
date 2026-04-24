@@ -1,0 +1,46 @@
+# Homebridge absent — reverse what present.yml installed:
+#   - hb-service uninstall (stops + removes LaunchDaemon)
+#   - npm uninstall homebridge packages
+#   - (optionally) remove Node.js .pkg-installed binaries
+#
+# Data under /var/lib/homebridge and the user's config.json are NOT
+# removed — plugins, accessories, and pairings are preserved in case the
+# operator is re-deploying.
+
+- name: check whether hb-service is installed
+  stat:
+    path: "{{ homebridge_hbservice_bin }}"
+  register: _hb_svc_stat
+
+- name: hb-service uninstall (removes LaunchDaemon + stops service)
+  command: "{{ homebridge_hbservice_bin }} uninstall"
+  environment:
+    PATH: "/usr/local/bin:/opt/homebrew/bin:{{ ansible_env.PATH | default('/usr/bin:/bin:/usr/sbin:/sbin') }}"
+  when: _hb_svc_stat.stat.exists
+  failed_when: false
+  changed_when: true
+
+- name: remove stale LaunchDaemon plist (if hb-service left it behind)
+  file:
+    path: "{{ homebridge_launchdaemon }}"
+    state: absent
+  become: yes
+
+- name: check whether npm is still present
+  stat:
+    path: "{{ homebridge_npm_bin }}"
+  register: _hb_npm_stat
+
+- name: npm uninstall homebridge packages
+  community.general.npm:
+    name: "{{ item }}"
+    global: true
+    state: absent
+    executable: "{{ homebridge_npm_bin }}"
+    unsafe_perm: true
+    path: "{{ homebridge_node_bin | dirname }}"
+  loop: "{{ homebridge_packages }}"
+  environment:
+    PATH: "{{ homebridge_node_bin | dirname }}:{{ ansible_env.PATH }}"
+  when: _hb_npm_stat.stat.exists
+  failed_when: false

@@ -1,4 +1,4 @@
-- name: install build dependencies
+- name: install build dependencies (Debian)
   apt:
     name:
       - build-essential
@@ -8,6 +8,24 @@
       - python3-dev
       - python3-apt
     state: latest
+  when: ansible_os_family == 'Debian'
+  tags:
+    - base
+
+- name: ensure Xcode Command Line Tools are installed (Darwin)
+  command: xcode-select -p
+  register: xcode_select
+  changed_when: false
+  failed_when: xcode_select.rc not in [0, 2]
+  when: ansible_os_family == 'Darwin'
+  tags:
+    - base
+
+- name: install Xcode Command Line Tools (Darwin)
+  command: xcode-select --install
+  when:
+    - ansible_os_family == 'Darwin'
+    - xcode_select.rc == 2
   tags:
     - base
 
@@ -31,6 +49,7 @@
 - name: install ansible remote dependencies
   pip:
     virtualenv: "{{ ansible_python_virtualenv }}"
+    virtualenv_command: "{{ '/usr/bin/python3 -m venv' if ansible_os_family == 'Darwin' else omit }}"
     requirements: "{{ ansible_python_dir }}/requirements.txt"
     virtualenv_site_packages: yes
     extra_args: --no-build-isolation

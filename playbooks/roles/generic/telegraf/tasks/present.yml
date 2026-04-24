@@ -1,19 +1,23 @@
+# Present path: install, render config, start service.
+
+- include_tasks: setup-debian.yml
+  when: ansible_os_family != 'Darwin'
+
+- include_tasks: setup-darwin.yml
+  when: ansible_os_family == 'Darwin'
+
 - name: config telegraf
   template:
     src: telegraf.conf.jinja2
     dest: "{{ telegraf_conf }}"
-    owner: "{{ root_user|default('root') }}"
-    group: "{{ root_group|default('root') }}"
+    owner: "{{ telegraf_conf_owner|default(root_user|default('root')) }}"
+    group: "{{ telegraf_conf_group|default(root_group|default('root')) }}"
     mode: 0644
     backup: yes
   notify: restart telegraf
 
-- name: enable telegraf
-  service:
-    name: telegraf
-    enabled: yes
+- include_tasks: present-debian.yml
+  when: ansible_os_family != 'Darwin'
 
-- name: start telegraf
-  service:
-    name: telegraf
-    state: started
+- include_tasks: present-darwin.yml
+  when: ansible_os_family == 'Darwin'

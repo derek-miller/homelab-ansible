@@ -49,10 +49,30 @@
 - name: telegraf
   hosts: all
   roles:
-    - generic/telegraf
-    - generic/telegraf-syslog
+    - role: generic/telegraf
+    - role: generic/telegraf-syslog
+      # telegraf-syslog is rsyslog + systemd — skip on macOS.
+      when: ansible_os_family != 'Darwin'
   tags:
     - telegraf
+
+- hosts: smb-shares
+  roles:
+    - role: generic/smb-mount
+  tags:
+    - smb-mount
+
+- hosts: homebridge
+  roles:
+    - role: generic/homebridge
+  tags:
+    - homebridge
+
+- hosts: plex
+  roles:
+    - role: generic/plex
+  tags:
+    - plex
 
 - hosts: raspberry-pi
   roles:
@@ -68,12 +88,17 @@
 
 - hosts: tailscale
   roles:
-    - role: artis3n.tailscale.machine
+    - role: generic/tailscale
   tasks:
     - name: get tailscale ip addresses
       command: tailscale ip
       changed_when: false
       register: tailscale_ip_result
+      # macOS sudo's secure_path doesn't include /usr/local/bin where the
+      # brew-installed tailscale lives (via symlink from the tailscale role);
+      # prepend it so `tailscale` resolves without a full path. No-op on Linux.
+      environment:
+        PATH: "/usr/local/bin:{{ ansible_env.PATH | default('/usr/bin:/bin:/usr/sbin:/sbin') }}"
     - name: set tailscale ip address vars
       set_fact:
         tailscale_ip4_address: "{{ tailscale_ip_result.stdout_lines[0] }}"
@@ -129,6 +154,12 @@
     - role: generic/ser2net
   tags:
     - ser2net
+
+- hosts: disk-mounts
+  roles:
+    - role: generic/disk-mount
+  tags:
+    - disk-mount
 
 - hosts: docker
   roles:
