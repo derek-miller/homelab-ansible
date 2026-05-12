@@ -32,53 +32,75 @@
     owner: root
     group: wheel
     mode: '0600'
-  notify: reload autofs
+  register: _smb_map
 
-# ---- /etc/auto_master entry --------------------------------------------
-# /etc/auto_master is writable by root from a GUI session (Terminal.app)
-# but NOT from sshd-spawned processes (sshd's sandbox profile blocks it).
-# Detect whether the line we need is already present; if not, pause with
-# instructions for the one-time GUI Terminal command, then re-verify.
-- name: probe /etc/auto_master for our map entry
-  command: "grep -qE '^/-[[:space:]]+{{ smb_mount_map_path | basename }}$' /etc/auto_master"
-  register: _automaster_probe
+# ---- /etc/auto_master fixup LaunchDaemon -------------------------------
+# Ansible-over-SSH cannot write /etc/auto_master — sshd's sandbox profile
+# on macOS blocks it. Workaround: a small LaunchDaemon that runs at boot
+# in launchd's process tree (NOT sshd's), appends the direct-map line to
+# /etc/auto_master if missing, and reloads autofs. Same daemon also self-
+# heals after macOS OS updates, which periodically reset /etc/auto_master
+# to the stock system default. Triggering the daemon (via bootstrap or
+# kickstart) drives the write on demand so the role is self-contained.
+- name: ensure /usr/local/sbin exists
+  file:
+    path: /usr/local/sbin
+    state: directory
+    owner: root
+    group: wheel
+    mode: '0755'
+
+- name: install /etc/auto_master fixup script
+  template:
+    src: smb-mount-fixup.sh.j2
+    dest: "{{ smb_mount_fixup_script }}"
+    owner: root
+    group: wheel
+    mode: '0755'
+  register: _fixup_script
+
+- name: install /etc/auto_master fixup LaunchDaemon plist
+  template:
+    src: smb-mount-fixup.plist.j2
+    dest: "{{ smb_mount_fixup_plist }}"
+    owner: root
+    group: wheel
+    mode: '0644'
+  register: _fixup_plist
+
+- name: check if fixup LaunchDaemon is loaded
+  command: "launchctl print system/{{ smb_mount_fixup_label }}"
+  register: _fixup_loaded
   changed_when: false
   failed_when: false
 
-- name: prompt user to add map line to /etc/auto_master from GUI Terminal
-  pause:
-    seconds: 600
-    prompt: |
+- name: bootstrap fixup LaunchDaemon (first-time)
+  # Bootstrap loads the daemon into launchd's system domain and triggers
+  # RunAtLoad — the script fires once, appends the line to /etc/auto_master
+  # if missing, and reloads autofs.
+  command: "launchctl bootstrap system {{ smb_mount_fixup_plist }}"
+  when: _fixup_loaded.rc != 0
+  changed_when: true
+  register: _fixup_bootstrap
 
-      =====================================================================
-      MANUAL STEP REQUIRED — register autofs map in /etc/auto_master
-      =====================================================================
+- name: reload fixup LaunchDaemon (inputs changed)
+  # Plist, script, or map changed — bootout and re-bootstrap so RunAtLoad
+  # fires again under the new config.
+  when:
+    - _fixup_loaded.rc == 0
+    - _fixup_plist is changed or _fixup_script is changed or _smb_map is changed
+  block:
+    - command: "launchctl bootout system/{{ smb_mount_fixup_label }}"
+      changed_when: true
+    - command: "launchctl bootstrap system {{ smb_mount_fixup_plist }}"
+      changed_when: true
 
-      sshd's sandbox profile on macOS blocks writes to /etc/auto_master,
-      so this single line has to be added by you from a Terminal.app
-      window on the Mac (NOT over SSH). One-time per host.
-
-      Open Terminal.app on the Mac (Console session or VNC) and paste:
-
-        sudo bash -c 'printf "/-\t%s\n" "{{ smb_mount_map_path | basename }}" >> /etc/auto_master'
-
-      Then press Enter here to continue (the role will reload autofs and
-      verify). Timing out after 10 minutes.
-  when: _automaster_probe.rc != 0
-
-- name: re-probe /etc/auto_master after manual step
-  command: "grep -qE '^/-[[:space:]]+{{ smb_mount_map_path | basename }}$' /etc/auto_master"
-  register: _automaster_recheck
+- name: verify /etc/auto_master has map entry
+  # Daemon runs async via launchd, so retry briefly while the script
+  # completes its append + automount reload.
+  command: "/usr/bin/grep -qE '^/-[[:space:]]+{{ smb_mount_map_path | basename }}$' /etc/auto_master"
+  register: _automaster_verify
+  retries: 10
+  delay: 1
+  until: _automaster_verify.rc == 0
   changed_when: false
-  failed_when: _automaster_recheck.rc != 0
-  when: _automaster_probe.rc != 0
-
-# Reload autofs immediately so the just-installed map is picked up.
-- name: flush handlers
-  meta: flush_handlers
-
-# Note: we deliberately do NOT verify-by-ls here. macOS TCC blocks SSH-
-# spawned shells from reading any SMB-backed mount regardless of path
-# ("Operation not permitted"), even though the mount itself is healthy
-# and readable from Finder and GUI Terminal. Downstream consumers (Plex,
-# Homebridge, etc.) verify accessibility in their own contexts.

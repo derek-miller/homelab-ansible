@@ -1,0 +1,26 @@
+#!/bin/bash
+# Managed by Ansible — generic/smb-mount role. Do not edit by hand.
+#
+# Reasserts the autofs direct-map entry in /etc/auto_master, then reloads
+# autofs. macOS OS updates periodically reset /etc/auto_master to the
+# stock system default and strip our entry; this script runs at boot
+# under launchd to repair. Launchd's process tree is NOT subject to
+# sshd's sandbox profile, so the /etc/auto_master write that Ansible-
+# over-SSH cannot do works fine from here.
+set -euo pipefail
+
+MAP_NAME='{{ smb_mount_map_path | basename }}'
+AUTO_MASTER=/etc/auto_master
+MAP_LINE=$'/-\t'"$MAP_NAME"
+
+log() { printf '%s %s\n' "$(/bin/date -u +%FT%TZ)" "$*"; }
+
+if /usr/bin/grep -qE "^/-[[:space:]]+${MAP_NAME}$" "$AUTO_MASTER"; then
+    log "auto_master entry for ${MAP_NAME} present"
+else
+    printf '%s\n' "$MAP_LINE" >> "$AUTO_MASTER"
+    log "auto_master entry for ${MAP_NAME} appended"
+fi
+
+log "reloading autofs"
+/usr/sbin/automount -vc
