@@ -68,6 +68,14 @@
     mode: '0644'
   register: _fixup_plist
 
+- name: install newsyslog config for fixup daemon log
+  template:
+    src: newsyslog.conf.j2
+    dest: "{{ smb_mount_fixup_newsyslog_conf }}"
+    owner: root
+    group: wheel
+    mode: '0644'
+
 - name: check if fixup LaunchDaemon is loaded
   command: "launchctl print system/{{ smb_mount_fixup_label }}"
   register: _fixup_loaded

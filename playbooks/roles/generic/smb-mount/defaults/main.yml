@@ -16,6 +16,11 @@ smb_mount_map_path: "/etc/auto_{{ smb_mount_map_name }}"
 smb_mount_fixup_label: local.smb-mount-fixup
 smb_mount_fixup_script: /usr/local/sbin/smb-mount-fixup
 smb_mount_fixup_plist: "/Library/LaunchDaemons/{{ smb_mount_fixup_label }}.plist"
+smb_mount_fixup_log: "/var/log/{{ smb_mount_fixup_label }}.log"
+# Hard cap on the daemon's log via newsyslog (macOS's built-in rotation
+# facility, cron-driven, no extra daemon). Insurance against a runaway
+# logging loop if the daemon ever gets KeepAlive/watchpath added later.
+smb_mount_fixup_newsyslog_conf: "/etc/newsyslog.d/{{ smb_mount_fixup_label }}.conf"
 
 # mount_smbfs options passed via autofs.
 #   noowners — ignore the uid/gid the SMB server reports; files appear

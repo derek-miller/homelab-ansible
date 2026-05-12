@@ -30,6 +30,11 @@
     path: "{{ smb_mount_fixup_script }}"
     state: absent
 
+- name: remove newsyslog config for fixup daemon log
+  file:
+    path: "{{ smb_mount_fixup_newsyslog_conf }}"
+    state: absent
+
 - name: probe /etc/auto_master for stale map entry
   command: "grep -qE '^/-[[:space:]]+{{ smb_mount_map_path | basename }}$' /etc/auto_master"
   register: _automaster_probe
