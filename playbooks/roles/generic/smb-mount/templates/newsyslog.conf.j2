@@ -1,0 +1,7 @@
+# Managed by Ansible — generic/smb-mount role. Do not edit by hand.
+# Caps the LaunchDaemon log (smb-mount-fixup) at 100KB and keeps 3
+# bzip2'd archives. Runs via the system newsyslog cron — no extra
+# daemon. Insurance against a runaway logging loop if the daemon
+# ever gets KeepAlive or a watchpath added.
+# Format: logfilename                          owner:group  mode count size when flags
+{{ smb_mount_fixup_log }} root:wheel 644 3 100 * J
