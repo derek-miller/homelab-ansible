@@ -1,4 +1,9 @@
 # hb-service restart reloads the system LaunchDaemon. Requires sudo.
+# hb-service has a `#!/usr/bin/env node` shebang and node lives outside
+# root's default PATH, so inject the same brew/local bins the present.yml
+# tasks use.
 - name: restart homebridge
   command: "{{ homebridge_hbservice_bin }} restart"
+  environment:
+    PATH: "/usr/local/bin:/opt/homebrew/bin:{{ ansible_env.PATH | default('/usr/bin:/bin:/usr/sbin:/sbin') }}"
   listen: homebridge changed
