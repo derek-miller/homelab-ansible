@@ -8,6 +8,15 @@ ansible_python_interpreter: /usr/bin/python3
 # All current macOS hosts are Apple Silicon; override per-host if that changes.
 homebrew_prefix: /opt/homebrew
 
+# Apple's /usr/bin/python3 is pinned at 3.9 (EOL Oct 2025), which forced
+# `# Python 3.9 compat` caps in the remote requirements. Build the /opt/ansible
+# venv from a Homebrew-managed interpreter instead, so it tracks the same
+# dependency versions as the Linux hosts. generic/python installs the formula;
+# generic/virtualenv and ansible/remote pass `{{ darwin_venv_python }} -m venv`.
+darwin_python_version: "3.13"
+darwin_python_formula: "python@{{ darwin_python_version }}"
+darwin_venv_python: "{{ homebrew_prefix }}/bin/python{{ darwin_python_version }}"
+
 # NOTE: mac_user (the primary admin/desktop user on a Mac) is per-host —
 # set it in host_vars/<host>/vars.yml. It's used as `become_user` for any
 # operation that must NOT run as root: Homebrew (refuses root), per-user

@@ -15,12 +15,21 @@
     mode: '0755'
   when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.repo is not defined
 
+- name: Copy deploy key for {{ image_name }} to remote
+  copy:
+    src: "{{ image_config.ssh_key }}"
+    dest: "/tmp/docker-image-builds/{{ image_name }}-deploy-key"
+    mode: '0600'
+  when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.ssh_key is defined
+
 - name: Clone {{ image_name }} repository
   git:
     repo: "{{ image_config.repo }}"
     dest: "/tmp/docker-image-builds/{{ image_name }}"
     version: "{{ image_config.version }}"
     force: yes
+    key_file: "{{ image_config.ssh_key is defined | ternary('/tmp/docker-image-builds/' + image_name + '-deploy-key', omit) }}"
+    accept_hostkey: yes
   when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.repo is defined
 
 - name: Copy patches for {{ image_name }} to remote
@@ -58,6 +67,13 @@
     tag: "{{ image_config.image_tag }}"
     build:
       path: "/tmp/docker-image-builds/{{ image_name }}"
+      labels: "{{ image_config.labels | default(omit) }}"
     source: build
     force_source: yes
   when: force_rebuild|default(false)|bool or image_info.images|length == 0
+
+- name: Remove deploy key for {{ image_name }} from remote
+  file:
+    path: "/tmp/docker-image-builds/{{ image_name }}-deploy-key"
+    state: absent
+  when: image_config.ssh_key is defined

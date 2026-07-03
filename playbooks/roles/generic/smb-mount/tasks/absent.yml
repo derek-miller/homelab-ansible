@@ -1,62 +1,19 @@
-# Tear down autofs config and the fixup LaunchDaemon. The /etc/auto_master
-# line removal still requires a GUI-Terminal one-liner because sshd's
-# sandbox blocks the write — the daemon that would normally do this on our
-# behalf is being removed here, so we fall back to the manual prompt.
+# Tear down the autofs SMB config. The role runs as root over SSH, which can
+# write /etc/auto_master directly (verified on-host), so the direct-map line
+# is removed here without any manual GUI-Terminal step.
+
+- name: remove auto_smb direct map line from /etc/auto_master
+  lineinfile:
+    path: /etc/auto_master
+    regexp: '^/-[[:space:]]+{{ smb_mount_map_path | basename }}[[:space:]]*$'
+    state: absent
+  notify: reload autofs
 
 - name: remove autofs SMB map file
   file:
     path: "{{ smb_mount_map_path }}"
     state: absent
   notify: reload autofs
-
-- name: check if fixup LaunchDaemon is loaded
-  command: "launchctl print system/{{ smb_mount_fixup_label }}"
-  register: _fixup_loaded
-  changed_when: false
-  failed_when: false
-
-- name: bootout fixup LaunchDaemon
-  command: "launchctl bootout system/{{ smb_mount_fixup_label }}"
-  when: _fixup_loaded.rc == 0
-  changed_when: true
-
-- name: remove fixup LaunchDaemon plist
-  file:
-    path: "{{ smb_mount_fixup_plist }}"
-    state: absent
-
-- name: remove fixup script
-  file:
-    path: "{{ smb_mount_fixup_script }}"
-    state: absent
-
-- name: remove newsyslog config for fixup daemon log
-  file:
-    path: "{{ smb_mount_fixup_newsyslog_conf }}"
-    state: absent
-
-- name: probe /etc/auto_master for stale map entry
-  command: "grep -qE '^/-[[:space:]]+{{ smb_mount_map_path | basename }}$' /etc/auto_master"
-  register: _automaster_probe
-  changed_when: false
-  failed_when: false
-
-- name: prompt user to remove map line from /etc/auto_master via GUI Terminal
-  pause:
-    seconds: 600
-    prompt: |
-
-      =====================================================================
-      MANUAL STEP REQUIRED — remove autofs map line from /etc/auto_master
-      =====================================================================
-
-      sshd's sandbox profile on macOS blocks writes to /etc/auto_master.
-      In a Terminal.app window on the Mac (NOT over SSH), paste:
-
-        sudo /usr/bin/sed -i '' "/^\/-[[:space:]]\\{1,\\}{{ smb_mount_map_path | basename }}$/d" /etc/auto_master
-
-      Then press Enter here to continue. Timing out after 10 minutes.
-  when: _automaster_probe.rc == 0
 
 - name: flush handlers
   meta: flush_handlers

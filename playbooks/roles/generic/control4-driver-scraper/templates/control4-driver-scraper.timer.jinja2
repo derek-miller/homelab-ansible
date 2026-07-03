@@ -1,0 +1,10 @@
+[Unit]
+Description=Schedule {{ control4_driver_scraper_service }} refresh
+
+[Timer]
+OnCalendar={{ control4_driver_scraper_on_calendar }}
+# Fire on next boot if the host was down when the timer should have run.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

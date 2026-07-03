@@ -1,3 +1,25 @@
+# The pip module only builds a venv when one is absent — it won't rebuild an
+# existing venv whose base interpreter changed. On macOS we moved off Apple's
+# system python3 (3.9) to a Homebrew interpreter, so an older venv would keep
+# its stale 3.9 base forever. Detect the mismatch via pyvenv.cfg's `home =`
+# (which points under {{ homebrew_prefix }} only for a Homebrew-built venv) and
+# remove the venv so it's recreated below with the current interpreter.
+- name: check existing venv base interpreter (Darwin)
+  slurp:
+    src: "{{ virtualenv_path }}/pyvenv.cfg"
+  register: virtualenv_pyvenv_cfg
+  failed_when: false
+  when: ansible_os_family == 'Darwin'
+
+- name: remove stale venv built with a different interpreter (Darwin)
+  file:
+    path: "{{ virtualenv_path }}"
+    state: absent
+  when:
+    - ansible_os_family == 'Darwin'
+    - virtualenv_pyvenv_cfg.content is defined
+    - homebrew_prefix not in (virtualenv_pyvenv_cfg.content | b64decode)
+
 - name: create virtualenv dir
   file:
     path: "{{ virtualenv_path }}"
@@ -34,7 +56,7 @@
   pip:
     virtualenv: "{{ virtualenv_path }}"
     virtualenv_site_packages: "{{ virtualenv_site_packages }}"
-    virtualenv_command: "{{ '/usr/bin/python3 -m venv' if ansible_os_family == 'Darwin' else omit }}"
+    virtualenv_command: "{{ ((darwin_venv_python | default('/usr/bin/python3')) ~ ' -m venv') if ansible_os_family == 'Darwin' else omit }}"
     name: setuptools{{ setuptools_version_spec }}
     extra_args: --upgrade-strategy only-if-needed
     state: latest
@@ -43,7 +65,7 @@
   pip:
     virtualenv: "{{ virtualenv_path }}"
     virtualenv_site_packages: "{{ virtualenv_site_packages }}"
-    virtualenv_command: "{{ '/usr/bin/python3 -m venv' if ansible_os_family == 'Darwin' else omit }}"
+    virtualenv_command: "{{ ((darwin_venv_python | default('/usr/bin/python3')) ~ ' -m venv') if ansible_os_family == 'Darwin' else omit }}"
     name: pip{{ pip_version_spec }}
     extra_args: --upgrade-strategy only-if-needed
     state: latest

@@ -32,83 +32,28 @@
     owner: root
     group: wheel
     mode: '0600'
-  register: _smb_map
+  notify: reload autofs
 
-# ---- /etc/auto_master fixup LaunchDaemon -------------------------------
-# Ansible-over-SSH cannot write /etc/auto_master — sshd's sandbox profile
-# on macOS blocks it. Workaround: a small LaunchDaemon that runs at boot
-# in launchd's process tree (NOT sshd's), appends the direct-map line to
-# /etc/auto_master if missing, and reloads autofs. Same daemon also self-
-# heals after macOS OS updates, which periodically reset /etc/auto_master
-# to the stock system default. Triggering the daemon (via bootstrap or
-# kickstart) drives the write on demand so the role is self-contained.
-- name: ensure /usr/local/sbin exists
-  file:
-    path: /usr/local/sbin
-    state: directory
-    owner: root
-    group: wheel
-    mode: '0755'
-
-- name: install /etc/auto_master fixup script
-  template:
-    src: smb-mount-fixup.sh.j2
-    dest: "{{ smb_mount_fixup_script }}"
-    owner: root
-    group: wheel
-    mode: '0755'
-  register: _fixup_script
-
-- name: install /etc/auto_master fixup LaunchDaemon plist
-  template:
-    src: smb-mount-fixup.plist.j2
-    dest: "{{ smb_mount_fixup_plist }}"
+# ---- register the direct map in /etc/auto_master -----------------------
+# autofs only reads the map file when /etc/auto_master carries a direct-map
+# line pointing at it. The role runs as root over SSH (ansible_become_user
+# is root for this host), and that context can write /etc/auto_master
+# directly — verified on-host. (An earlier version used a boot LaunchDaemon
+# to do this write, on the mistaken belief that an SSH/become context could
+# not. The real blocker for the daemon was its own lack of Full Disk Access,
+# not the SSH path; the daemon and its plist/script/newsyslog config have
+# been removed.)
+#
+# NOTE: macOS OS updates reset /etc/auto_master to the stock default and
+# strip this line. Re-running this role restores it, which is already part
+# of bringing a Mac back after an update.
+- name: register auto_smb direct map in /etc/auto_master
+  lineinfile:
+    path: /etc/auto_master
+    regexp: '^/-[[:space:]]+{{ smb_mount_map_path | basename }}[[:space:]]*$'
+    line: "/-\t{{ smb_mount_map_path | basename }}"
+    state: present
     owner: root
     group: wheel
     mode: '0644'
-  register: _fixup_plist
-
-- name: install newsyslog config for fixup daemon log
-  template:
-    src: newsyslog.conf.j2
-    dest: "{{ smb_mount_fixup_newsyslog_conf }}"
-    owner: root
-    group: wheel
-    mode: '0644'
-
-- name: check if fixup LaunchDaemon is loaded
-  command: "launchctl print system/{{ smb_mount_fixup_label }}"
-  register: _fixup_loaded
-  changed_when: false
-  failed_when: false
-
-- name: bootstrap fixup LaunchDaemon (first-time)
-  # Bootstrap loads the daemon into launchd's system domain and triggers
-  # RunAtLoad — the script fires once, appends the line to /etc/auto_master
-  # if missing, and reloads autofs.
-  command: "launchctl bootstrap system {{ smb_mount_fixup_plist }}"
-  when: _fixup_loaded.rc != 0
-  changed_when: true
-  register: _fixup_bootstrap
-
-- name: reload fixup LaunchDaemon (inputs changed)
-  # Plist, script, or map changed — bootout and re-bootstrap so RunAtLoad
-  # fires again under the new config.
-  when:
-    - _fixup_loaded.rc == 0
-    - _fixup_plist is changed or _fixup_script is changed or _smb_map is changed
-  block:
-    - command: "launchctl bootout system/{{ smb_mount_fixup_label }}"
-      changed_when: true
-    - command: "launchctl bootstrap system {{ smb_mount_fixup_plist }}"
-      changed_when: true
-
-- name: verify /etc/auto_master has map entry
-  # Daemon runs async via launchd, so retry briefly while the script
-  # completes its append + automount reload.
-  command: "/usr/bin/grep -qE '^/-[[:space:]]+{{ smb_mount_map_path | basename }}$' /etc/auto_master"
-  register: _automaster_verify
-  retries: 10
-  delay: 1
-  until: _automaster_verify.rc == 0
-  changed_when: false
+  notify: reload autofs

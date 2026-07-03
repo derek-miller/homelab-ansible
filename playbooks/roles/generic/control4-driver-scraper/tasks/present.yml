@@ -1,0 +1,34 @@
+---
+- name: create drivers and sources directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: 0755
+  loop:
+    - "{{ control4_driver_scraper_drivers_dir }}"
+    - "{{ control4_driver_scraper_sources_dir }}"
+
+- name: create {{ control4_driver_scraper_service }} service
+  template:
+    src: control4-driver-scraper.service.jinja2
+    dest: /etc/systemd/system/{{ control4_driver_scraper_service }}.service
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
+    mode: 0644
+  register: control4_driver_scraper_service_unit
+
+- name: create {{ control4_driver_scraper_service }} timer
+  template:
+    src: control4-driver-scraper.timer.jinja2
+    dest: /etc/systemd/system/{{ control4_driver_scraper_service }}.timer
+    owner: "{{ root_user|default('root') }}"
+    group: "{{ root_group|default('root') }}"
+    mode: 0644
+  register: control4_driver_scraper_timer_unit
+
+- name: enable and start {{ control4_driver_scraper_service }} timer
+  systemd:
+    name: "{{ control4_driver_scraper_service }}.timer"
+    enabled: yes
+    state: "{{ (control4_driver_scraper_timer_unit.changed or control4_driver_scraper_service_unit.changed) | ternary('restarted', 'started') }}"
+    daemon_reload: "{{ control4_driver_scraper_timer_unit.changed or control4_driver_scraper_service_unit.changed }}"

@@ -49,7 +49,7 @@
 - name: install ansible remote dependencies
   pip:
     virtualenv: "{{ ansible_python_virtualenv }}"
-    virtualenv_command: "{{ '/usr/bin/python3 -m venv' if ansible_os_family == 'Darwin' else omit }}"
+    virtualenv_command: "{{ ((darwin_venv_python | default('/usr/bin/python3')) ~ ' -m venv') if ansible_os_family == 'Darwin' else omit }}"
     requirements: "{{ ansible_python_dir }}/requirements.txt"
     virtualenv_site_packages: yes
     extra_args: --no-build-isolation

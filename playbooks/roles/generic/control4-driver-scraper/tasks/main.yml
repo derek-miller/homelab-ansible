@@ -1,0 +1,13 @@
+---
+- assert:
+    that:
+      - control4_driver_scraper_state in ('present', 'absent')
+    quiet: yes
+
+- name: include present tasks
+  include_tasks: present.yml
+  when: control4_driver_scraper_state == 'present'
+
+- name: include absent tasks
+  include_tasks: absent.yml
+  when: control4_driver_scraper_state == 'absent'

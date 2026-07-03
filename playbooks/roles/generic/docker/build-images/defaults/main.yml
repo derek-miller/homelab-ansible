@@ -2,12 +2,12 @@
 available_docker_images:
   sourcebot:
     repo: https://github.com/sourcebot-dev/sourcebot.git
-    version: v4.16.12
+    version: v5.0.4
     patches:
       - sourcebot/increase-heap.patch
       - sourcebot/vault-entitlements.patch
     image_name: sourcebot
-    image_tag: v4.16.12-patched
+    image_tag: v5.0.4-patched
   youtrack:
     dockerfile: youtrack/Dockerfile
     image_name: youtrack
@@ -18,3 +18,14 @@ available_docker_images:
       - openclaw-webhook-proxy/server.mjs
     image_name: openclaw-webhook-proxy
     image_tag: "3.7.0"
+  control4-driver-scraper:
+    repo: git@github.com:derek-miller/control4-driver-scraper.git
+    version: master
+    # Read-only deploy key registered on the private GitHub repo.
+    ssh_key: vault/control4-driver-scraper-id_ed25519
+    image_name: control4-driver-scraper
+    image_tag: latest
+    # One-shot job image: no container references it between runs, so it
+    # must be excluded from the docker-prune play's unused-image sweep.
+    labels:
+      homelab.prune.exclude: "true"

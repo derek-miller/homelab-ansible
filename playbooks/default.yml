@@ -303,6 +303,9 @@
         images: yes
         images_filters:
           dangling: "false"
+          # Keep one-shot job images (e.g. control4-driver-scraper) that
+          # have no container referencing them between scheduled runs.
+          "label!": homelab.prune.exclude
         networks: yes
         volumes: yes
         builder_cache: yes
@@ -310,6 +313,12 @@
   tags:
     - docker
     - docker-prune
+
+- hosts: control4-driver-scraper
+  roles:
+    - role: generic/control4-driver-scraper
+  tags:
+    - control4-driver-scraper
 
 - hosts: x11vnc
   roles:

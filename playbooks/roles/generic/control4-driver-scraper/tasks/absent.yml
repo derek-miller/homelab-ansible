@@ -1,0 +1,29 @@
+---
+- name: stop and disable {{ control4_driver_scraper_service }} timer
+  systemd:
+    name: "{{ control4_driver_scraper_service }}.timer"
+    state: stopped
+    enabled: no
+  failed_when: false
+
+- name: stop {{ control4_driver_scraper_service }} service
+  systemd:
+    name: "{{ control4_driver_scraper_service }}.service"
+    state: stopped
+  failed_when: false
+
+- name: delete {{ control4_driver_scraper_service }} units
+  file:
+    path: /etc/systemd/system/{{ control4_driver_scraper_service }}.{{ item }}
+    state: absent
+  loop:
+    - service
+    - timer
+
+- name: reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+# The drivers cache and sources tree are intentionally left in place: the
+# sources dir is sourcebot's index input and deleting it would destroy the
+# accumulated per-driver git history.

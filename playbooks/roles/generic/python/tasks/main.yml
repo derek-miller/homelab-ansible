@@ -48,10 +48,23 @@
         extra_args: "{{ '--break-system-packages' if pip_break_system_packages else '' }} --disable-pip-version-check"
         state: latest
 
-- name: verify python3 available on macOS
-  # macOS ships python3 + ensurepip via Xcode Command Line Tools. `python3 -m venv`
-  # is built-in (3.4+), so the `virtualenv` package isn't required — the
-  # generic/virtualenv role passes virtualenv_command: `python3 -m venv` on Darwin.
-  command: /usr/bin/python3 --version
-  changed_when: false
+- name: install Python via Homebrew (macOS)
+  # Apple's /usr/bin/python3 is pinned at 3.9 (EOL); build the remote venv from a
+  # Homebrew interpreter instead so it tracks the same dependency versions as the
+  # Linux hosts. generic/virtualenv passes `{{ darwin_venv_python }} -m venv`.
   when: ansible_os_family == 'Darwin'
+  # The connection role set_facts ansible_become_user=root as a host fact, and
+  # set_fact outranks block vars, so swap the fact around the brew call (Homebrew
+  # refuses root) and restore it after — same pattern as the common role.
+  block:
+    - name: switch become_user to mac_user
+      set_fact:
+        ansible_become_user: "{{ mac_user | mandatory }}"
+    - name: install Homebrew Python formula
+      community.general.homebrew:
+        name: "{{ darwin_python_formula }}"
+        state: present
+  always:
+    - name: restore become_user to root
+      set_fact:
+        ansible_become_user: root

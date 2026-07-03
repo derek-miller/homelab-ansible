@@ -1,0 +1,20 @@
+[Unit]
+Description=Control4 driver scraper one-shot refresh
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+RequiresMountsFor={{ control4_driver_scraper_drivers_dir }} {{ control4_driver_scraper_sources_dir }}
+
+[Service]
+Type=oneshot
+# A full scrape can run for hours; oneshot units are otherwise subject to
+# the 90s default start timeout.
+TimeoutStartSec=infinity
+SyslogIdentifier={{ control4_driver_scraper_service }}
+ExecStart=/usr/bin/docker run --rm \
+  --name {{ control4_driver_scraper_service }} \
+  --log-driver none \
+  -v {{ control4_driver_scraper_drivers_dir }}:/drivers \
+  -v {{ control4_driver_scraper_sources_dir }}:/sources \
+  {{ control4_driver_scraper_image }}:{{ control4_driver_scraper_image_tag }} \
+  --drivers-dir /drivers --sources-dir /sources

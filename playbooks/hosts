@@ -49,8 +49,11 @@ raspi1
 
 [docker-build-images]
 rackpi1 docker_images_to_build=openclaw-webhook-proxy
-rackpi4 docker_images_to_build=sourcebot
+rackpi4 docker_images_to_build=sourcebot,control4-driver-scraper
 rackpi5 docker_images_to_build=youtrack
+
+[control4-driver-scraper]
+rackpi4
 
 [docker_swarm_manager]
 rackpi1 docker_stack_name=rackpis

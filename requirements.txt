@@ -6,46 +6,44 @@
 #
 --index-url https://pypi.python.org/simple
 
-ansible==13.5.0
+ansible==14.1.0
     # via -r requirements.in
-ansible-core==2.20.4
+ansible-core==2.21.1
     # via ansible
 bcrypt==5.0.0
     # via paramiko
-black==26.3.1
+black==26.5.1
     # via -r requirements.in
-certifi==2026.2.25
+certifi==2026.6.17
     # via requests
 cffi==2.0.0
     # via
     #   cryptography
     #   pynacl
-chardet==7.4.0.post2
+chardet==7.4.3
     # via -r requirements.in
 charset-normalizer==3.4.7
-    # via
-    #   python-debian
-    #   requests
-click==8.3.2
+    # via requests
+click==8.4.2
     # via
     #   -r requirements.in
     #   black
-cryptography==46.0.6
+cryptography==49.0.0
     # via
     #   -r requirements.in
     #   ansible-core
     #   paramiko
 dnspython==2.8.0
     # via -r requirements.in
-idna==3.11
+idna==3.18
     # via requests
-invoke==3.0.2
+invoke==3.0.3
     # via paramiko
 jaraco-classes==3.4.0
     # via keyring
 jaraco-context==6.1.2
     # via keyring
-jaraco-functools==4.4.0
+jaraco-functools==4.5.0
     # via keyring
 jinja2==3.1.6
     # via
@@ -55,29 +53,29 @@ keyring==25.7.0
     # via -r requirements.in
 markupsafe==3.0.3
     # via jinja2
-more-itertools==11.0.1
+more-itertools==11.1.0
     # via
     #   jaraco-classes
     #   jaraco-functools
 mypy-extensions==1.1.0
     # via black
-packaging==26.0
+packaging==26.2
     # via
     #   ansible-core
     #   black
-paramiko==4.0.0
+paramiko==5.0.0
     # via -r requirements.in
 passlib==1.7.4
     # via -r requirements.in
-pathspec==1.0.4
+pathspec==1.1.1
     # via black
-platformdirs==4.9.4
+platformdirs==4.10.0
     # via black
 pycparser==3.0
     # via cffi
 pynacl==1.6.2
     # via paramiko
-python-debian==1.1.0
+python-debian==1.1.1
     # via -r requirements.in
 pytokens==0.4.1
     # via black
@@ -85,13 +83,13 @@ pyyaml==6.0.3
     # via
     #   -r requirements.in
     #   ansible-core
-requests[security]==2.33.1
+requests[security]==2.34.2
     # via -r requirements.in
 resolvelib==1.2.1
     # via ansible-core
 semantic-version==2.10.0
     # via -r requirements.in
-urllib3==2.6.3
+urllib3==2.7.0
     # via requests
 websocket-client==1.9.0
     # via -r requirements.in
