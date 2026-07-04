@@ -7,7 +7,7 @@ available_docker_images:
       - sourcebot/increase-heap.patch
       - sourcebot/vault-entitlements.patch
     image_name: sourcebot
-    image_tag: v5.0.4-patched
+    image_tag: v5.0.4-patched2
   youtrack:
     dockerfile: youtrack/Dockerfile
     image_name: youtrack
