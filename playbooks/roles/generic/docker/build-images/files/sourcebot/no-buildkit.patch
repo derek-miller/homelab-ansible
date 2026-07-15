@@ -1,0 +1,16 @@
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -87,5 +87,5 @@ RUN yarn workspace @sourcebot/web install
+ ENV NEXT_TELEMETRY_DISABLED=1
+
+-RUN --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
++RUN \
+     yarn workspace @sourcebot/web build
+ ENV SKIP_ENV_VALIDATION=0
+@@ -119,5 +119,5 @@ RUN yarn workspace @sourcebot/backend install
+ RUN yarn workspace @sourcebot/backend build
+
+-RUN --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
++RUN \
+     if [ -n "$SENTRY_AUTH_TOKEN" ] && [ -n "$SENTRY_ORG" ] && [ -n "$SENTRY_BACKEND_PROJECT" ] && [ -n "$SENTRY_RELEASE" ]; then \
+     apk add --no-cache curl; \

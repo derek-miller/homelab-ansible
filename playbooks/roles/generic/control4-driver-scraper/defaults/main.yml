@@ -11,8 +11,8 @@ control4_driver_scraper_image_tag: latest
 # tree sourcebot bind-mounts into /repos/* (see vault_docker_stack_definition
 # in host_vars/rackpi1/vault.yml); drivers_dir is a raw-download cache that
 # lets reruns skip drivers whose on-disk version is already current.
-control4_driver_scraper_drivers_dir: /mnt/extreme-pro/Drivers
-control4_driver_scraper_sources_dir: /mnt/extreme-pro/Source
+control4_driver_scraper_drivers_dir: /mnt/data/Drivers
+control4_driver_scraper_sources_dir: /mnt/data/Source
 
 # systemd calendar expression (systemd.time(7)) for the refresh timer.
 # Overlap is impossible by construction: a timer never triggers its unit

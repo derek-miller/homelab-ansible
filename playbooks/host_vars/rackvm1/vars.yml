@@ -1,45 +1,38 @@
 ansible_host: !vault |
   $ANSIBLE_VAULT;1.1;AES256
-  64663833303030376132393838663935343137363534663461353164636161373866323438383263
-  6562663539356636616233633731623831313661343633310a396538393166613538653030373363
-  64613430663033306437613437623465613161303465656538306438643335623362633230356565
-  3564663730386636330a386332613432346535326333643638663264326539393635376338346563
-  64653163626132313038363837393937333661306339353332326665313965383438
+  61373730646331333461636361393731356235336263616262363730316237303739663731393264
+  3561383330356431356332323565653836623937303530650a643137343762613931623331363231
+  35643765373132623336343966346337316664336234353830393634326536333735333233363837
+  3466363236356166650a336563323532636662343034323032343936346433393036313664333835
+  65393535353032663566633532646364633838346665343030313933303435306263
 
 authorized_keys:
   - key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNxxAEcT71BAXlVhmi76gjI26BkXwjAgcLaPLIMI+i8 dmiller
-    user: pi
+    user: debian
     state: present
   - key: ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBPUgzXYNTvTCcUHjzdXvy2LZA6YFZKrHrfsse3ipP2ldbhnmU/Io9I/lUligmdaCFktcxwgzZRYawWJI1IsUnZA= dmiller
-    user: pi
+    user: debian
     state: present
   - key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQChNryHWkasg7O7YLfLSffWjrP+e6eAt5olYIPgBCeqBgPHYK3sJkAo/UHuJ1SQA22qMQlHI/2m2chASZ7tbbkaBEkWlBlbAQpwleuJE0WBN8hJd49dJToW9d6q6hNwq9bmnlA/VTkzsLAqpSEANnO28WMhHI+Upn924L4lC4tVJQmSUPm8ENgU5RVW9EcSkfIBPrIdFW0zqxPEFzZXlaOqxmbOvgS4qWirjHe4PXC1Z8DeYlK9DSTM/KGX0pz8Jgz0shKwxDpdn/j36KP1jlygwrWmnDXuWuMuU44HjMZzA3A9XKuHqiROrv1K0A4M1t5DN/UbWSNQBhQOWdica2Qaek2+dUQ5m5bgYw7sSTW5Oz/jvWU71NdFhmN9eXCJukiN7UwznecnOHf0O/Si5fFf6iJzLjHELi1JKzVLvADyZTlaxmZB82MmveB99eArOUquaeO4rOHugmOVosW/Gg4wj1j19gFy0E+yVuP01tg999YF2ST8l6Z81w2xBrZYKKw+tgQlm/WbxkzRxnumTx7JH/AddFTZvTADQB11DRySmrWBKC4QCGo8+8SdwitHt6WzDZAuOqYPK+mtMtGY3TKGazRRUvCKVTALamJWjbZcizQGj3PqfVr8+wB/+TzsUU9vJPPo9skZrYHwom/3Wu1TlAAaYd8hTriqGK7gzm1CNw== dmiller
-    user: pi
+    user: debian
     state: present
 
 additional_docker_users:
-  - pi
-
-lightdm_autologin_user: pi
-lightdm_xorg_create_video_dummy: yes
+  - debian
 
 sudoers:
-  - user: pi
+  - user: debian
     passwordless: true
 
 project_files:
-  - src: "plaintext/{{ inventory_hostname }}/var/docker/mosquitto/config/mosquitto.conf"
-    dest: /var/docker/mosquitto/config/mosquitto.conf
-    owner: 1883
-    group: 1883
-    mode: '0640'
-  - src: "vault/{{ inventory_hostname }}/var/docker/mosquitto/config/mosquitto.passwd"
-    dest: /var/docker/mosquitto/config/mosquitto.passwd
-    owner: 1883
-    group: 1883
-    mode: '0700'
+  - src: "plaintext/{{ inventory_hostname }}/var/docker/sourcebot/data/config.json"
+    dest: /var/docker/sourcebot/data/config.json
 
-raspberry_pi_wifi_country: US
-raspberry_pi_video_group_users:
-  - pi
-raspberry_pi_swap_size_mb: 0
+# 600G virtio disk on the PVE local-lvm thin pool. Holds the Control4 source
+# repo clones that sourcebot bind-mounts from /mnt/data/Source/* and the
+# scraper's raw-download cache at /mnt/data/Drivers.
+disk_mounts:
+  - src: "UUID=e794e4e4-0b87-4f2d-8882-e7a548c9b1ec"
+    path: /mnt/data
+    fstype: ext4
+    opts: "defaults,nofail,x-systemd.device-timeout=10s"

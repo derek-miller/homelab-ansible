@@ -130,7 +130,11 @@ vault-decrypt:
 
 
 .PHONY: vault-encrypt
-vault-encrypt:
+vault-encrypt: vault-revert-unchanged
+	$(if $(vault_files_decrypted),ansible-vault encrypt -v $(vault_flag) $(vault_files_decrypted))
+
+.PHONY: vault-revert-unchanged
+vault-revert-unchanged:
 	@for file in $(vault_files_decrypted); do \
 		head_tmp=$$(mktemp); \
 		git show HEAD:"$$file" > "$$head_tmp" 2>/dev/null \
@@ -140,7 +144,7 @@ vault-encrypt:
 			echo "Reverting unchanged vault file: $$file"; \
 			git checkout HEAD -- "$$file"; \
 		else \
-			ansible-vault encrypt -v $(vault_flag) "$$file"; \
+			echo "Leaving changed vault file decrypted: $$file"; \
 		fi; \
 		rm -f "$$head_tmp"; \
 	done

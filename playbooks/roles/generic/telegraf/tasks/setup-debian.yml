@@ -10,6 +10,12 @@
     mode: '0644'
   when: not _influxdata_gpg_key.stat.exists
 
+- name: install gnupg for key dearmoring
+  apt:
+    name: gnupg
+    state: present
+  when: not _influxdata_gpg_key.stat.exists
+
 - name: dearmor and install influxdata GPG key
   shell: cat /tmp/influxdata-archive.key | gpg --yes --dearmor -o /usr/share/keyrings/influxdata-archive.gpg
   when: not _influxdata_gpg_key.stat.exists

@@ -7,6 +7,23 @@ smb_mount_map_name: smb
 # Full path of the autofs map file. Derived from smb_mount_map_name.
 smb_mount_map_path: "/etc/auto_{{ smb_mount_map_name }}"
 
+# Registering the direct-map line in /etc/auto_master is a manual,
+# GUI-Terminal-only step. Confirmed on-host across every automatable
+# mechanism: direct SSH write, a boot-time LaunchDaemon (launchd's own
+# process tree, not SSH), and SSH with Full Disk Access explicitly
+# granted to sshd — all fail identically with EPERM. Only an interactive
+# local Terminal.app session succeeds, which points at something tied to
+# live local authentication rather than process identity or connection
+# path — nothing scriptable. The role detects whether the line is
+# present and pauses with the exact command to run locally when it's
+# missing (see present.yml/absent.yml), the same pattern this project
+# uses for Plex's "Open at Login" and other unscriptable macOS steps.
+#
+# macOS OS updates periodically reset /etc/auto_master to the stock
+# system default and strip this line, so this manual step recurs after
+# updates — re-run this role (`make run hosts=<host> tags=smb-mount`)
+# after an update and follow the prompt if it appears.
+
 # mount_smbfs options passed via autofs.
 #   noowners — ignore the uid/gid the SMB server reports; files appear
 #              owned by the accessing process. Without this, if unas

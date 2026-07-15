@@ -25,6 +25,7 @@
             | map(attribute='mount_point') | map('dirname') | unique | list }}"
 
 # ---- autofs map --------------------------------------------------------
+# This part IS writable over SSH — only /etc/auto_master itself is not.
 - name: install autofs SMB direct map
   template:
     src: auto_smb.j2
@@ -34,26 +35,45 @@
     mode: '0600'
   notify: reload autofs
 
-# ---- register the direct map in /etc/auto_master -----------------------
-# autofs only reads the map file when /etc/auto_master carries a direct-map
-# line pointing at it. The role runs as root over SSH (ansible_become_user
-# is root for this host), and that context can write /etc/auto_master
-# directly — verified on-host. (An earlier version used a boot LaunchDaemon
-# to do this write, on the mistaken belief that an SSH/become context could
-# not. The real blocker for the daemon was its own lack of Full Disk Access,
-# not the SSH path; the daemon and its plist/script/newsyslog config have
-# been removed.)
-#
-# NOTE: macOS OS updates reset /etc/auto_master to the stock default and
-# strip this line. Re-running this role restores it, which is already part
-# of bringing a Mac back after an update.
-- name: register auto_smb direct map in /etc/auto_master
-  lineinfile:
-    path: /etc/auto_master
-    regexp: '^/-[[:space:]]+{{ smb_mount_map_path | basename }}[[:space:]]*$'
-    line: "/-\t{{ smb_mount_map_path | basename }}"
-    state: present
-    owner: root
-    group: wheel
-    mode: '0644'
-  notify: reload autofs
+# ---- register the direct map in /etc/auto_master (manual step) ---------
+# See defaults/main.yml: no automatable mechanism can write
+# /etc/auto_master on this host. Detect whether the line is there and
+# pause with the exact command when it's missing, rather than pretending
+# an automated fix is possible.
+- name: probe /etc/auto_master for map entry
+  command: "grep -qE '^/-[[:space:]]+{{ smb_mount_map_path | basename }}$' /etc/auto_master"
+  register: _automaster_probe
+  changed_when: false
+  failed_when: false
+
+- name: prompt user to add map line to /etc/auto_master via GUI Terminal
+  pause:
+    seconds: 600
+    prompt: |
+
+      =====================================================================
+      MANUAL STEP REQUIRED — add autofs map line to /etc/auto_master
+      =====================================================================
+
+      Writing /etc/auto_master fails over SSH on this host (and even from
+      a boot-time LaunchDaemon) — only an interactive local Terminal.app
+      session can do it. In a Terminal.app window on the Mac (NOT over
+      SSH), paste:
+
+        printf '/-\t{{ smb_mount_map_path | basename }}\n' | sudo tee -a /etc/auto_master && sudo /usr/sbin/automount -vc
+
+      Then press Enter here to continue. Timing out after 10 minutes.
+  when: _automaster_probe.rc != 0
+
+- name: reload autofs
+  command: /usr/sbin/automount -vc
+  changed_when: true
+  when: _automaster_probe.rc != 0
+
+- name: verify /etc/auto_master has map entry
+  command: "/usr/bin/grep -qE '^/-[[:space:]]+{{ smb_mount_map_path | basename }}$' /etc/auto_master"
+  register: _automaster_verify
+  retries: 5
+  delay: 1
+  until: _automaster_verify.rc == 0
+  changed_when: false

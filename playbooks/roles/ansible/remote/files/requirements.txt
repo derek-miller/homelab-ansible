@@ -12,17 +12,17 @@ bcrypt==5.0.0
     # via paramiko
 certifi==2026.6.17
     # via requests
-cffi==2.0.0
+cffi==2.1.0
     # via
     #   cryptography
     #   pynacl
-charset-normalizer==3.4.7
+charset-normalizer==3.4.9
     # via requests
 cryptography==49.0.0
     # via paramiko
 distro==1.9.0
     # via docker-compose
-docker[ssh,tls]==7.1.0
+docker[ssh,tls]==7.2.0
     # via
     #   -r playbooks/roles/ansible/remote/files/requirements.in
     #   docker-compose

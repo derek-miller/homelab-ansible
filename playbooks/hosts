@@ -24,6 +24,7 @@ mertins-raspi1
 quinn-raspi1
 rackmini1
 rackpi[1:5]
+rackvm1
 raspi1
 
 [tailscale:vars]
@@ -38,6 +39,7 @@ rackpi2        cifs_shares_host_config=unas         cifs_share_names='["Backups"
 rackpi3        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Public"]'
 rackpi4        cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
 rackpi5        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container", "Public"]'
+rackvm1        cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
 raspi1         cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 
 [docker]
@@ -45,29 +47,32 @@ gianos-raspi1
 mertins-raspi1
 quinn-raspi1
 rackpi[1:5]
+rackvm1
 raspi1
 
 [docker-build-images]
 rackpi1 docker_images_to_build=openclaw-webhook-proxy
-rackpi4 docker_images_to_build=sourcebot,control4-driver-scraper
 rackpi5 docker_images_to_build=youtrack
+rackvm1 docker_images_to_build=sourcebot,control4-driver-scraper
 
 [control4-driver-scraper]
-rackpi4
+rackvm1
 
 [docker_swarm_manager]
 rackpi1 docker_stack_name=rackpis
 
 [docker_swarm_worker]
 rackpi[2:5]
+rackvm1
 
 [project-files]
 rackpi1
 rackpi4
+rackvm1
 raspi1
 
 [disk-mounts]
-rackpi4
+rackvm1
 
 [ser2net]
 
