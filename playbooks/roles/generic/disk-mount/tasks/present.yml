@@ -24,10 +24,22 @@
   loop_control:
     label: "{{ item.src }}"
 
-- name: unmount device from stale location
-  # shell (not command) so paths with spaces like "/media/pi/Extreme Pro"
-  # survive as a single argument via quote filter.
-  shell: "/usr/bin/umount {{ item.stdout | trim | quote }}"
+- name: unmount device from stale location(s)
+  # A device can be mounted at more than one path at once (e.g. a leftover
+  # mount from a previous config plus the canonical one). findmnt prints one
+  # TARGET per line, so iterate and unmount every path that is not the
+  # canonical one — passing the multi-line blob to a single umount would make
+  # it treat the whole thing as one mount point ("no mount point specified").
+  # shell read loop (not command) so paths with spaces like
+  # "/media/pi/Extreme Pro" survive as a single argument per line.
+  shell: |
+    set -eu
+    canonical={{ item.item.path | quote }}
+    printf '%s\n' {{ item.stdout | trim | quote }} | while IFS= read -r target; do
+      [ -n "$target" ] || continue
+      [ "$target" = "$canonical" ] && continue
+      /usr/bin/umount "$target"
+    done
   when:
     - item.stdout is defined
     - item.stdout | trim | length > 0
