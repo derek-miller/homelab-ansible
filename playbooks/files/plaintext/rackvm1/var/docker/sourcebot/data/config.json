@@ -87,6 +87,15 @@
       "token": {
         "env": "GITHUB_FINITELABS_TOKEN"
       }
+    },
+    "github-ckunakdot-homekit": {
+      "type": "github",
+      "repos": [
+        "ckunakdot/Control4-HomeKit-Controller"
+      ],
+      "token": {
+        "env": "GITHUB_PERSONAL_TOKEN"
+      }
     }
   },
   "models": [
