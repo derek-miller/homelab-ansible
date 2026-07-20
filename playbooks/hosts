@@ -86,6 +86,9 @@ rackpi[1:5]
 [tplink-plug-stats]
 rackpi2
 
+[control4-director-stats]
+rackpi2
+
 [macos]
 rackmini1
 

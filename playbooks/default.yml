@@ -320,6 +320,12 @@
   tags:
     - control4-driver-scraper
 
+- hosts: control4-director-stats
+  roles:
+    - role: generic/control4-director-stats
+  tags:
+    - control4-director-stats
+
 - hosts: x11vnc
   roles:
     - role: generic/x11vnc

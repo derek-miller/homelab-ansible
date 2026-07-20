@@ -1,3 +1,4 @@
+#jinja2:trim_blocks:True,lstrip_blocks:True
 [Unit]
 Description=Control4 driver scraper one-shot refresh
 Wants=network-online.target
@@ -14,6 +15,9 @@ SyslogIdentifier={{ control4_driver_scraper_service }}
 ExecStart=/usr/bin/docker run --rm \
   --name {{ control4_driver_scraper_service }} \
   --log-driver none \
+{% if control4_driver_scraper_github_owners %}
+  -e C4_GITHUB_OWNERS={{ control4_driver_scraper_github_owners | join(',') }} \
+{% endif %}
   -v {{ control4_driver_scraper_drivers_dir }}:/drivers \
   -v {{ control4_driver_scraper_sources_dir }}:/sources \
   {{ control4_driver_scraper_image }}:{{ control4_driver_scraper_image_tag }} \

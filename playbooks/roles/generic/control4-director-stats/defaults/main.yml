@@ -1,0 +1,4 @@
+control4_director_stats_state: present
+control4_director_stats_interval_s: 30
+control4_director_stats_timeout_s: 5
+control4_director_stats_controllers: []

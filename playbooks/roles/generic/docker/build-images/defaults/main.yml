@@ -2,7 +2,7 @@
 available_docker_images:
   sourcebot:
     repo: https://github.com/sourcebot-dev/sourcebot.git
-    version: v5.1.1
+    version: v5.1.2
     patches:
       # Strips the Sentry sourcemap-upload secret mounts: RUN --mount requires
       # BuildKit, which the docker_image build path doesn't use, and no Sentry
@@ -10,7 +10,7 @@ available_docker_images:
       - sourcebot/no-buildkit.patch
       - sourcebot/vault-entitlements.patch
     image_name: sourcebot
-    image_tag: v5.1.1-patched1
+    image_tag: v5.1.2-patched1
   youtrack:
     dockerfile: youtrack/Dockerfile
     image_name: youtrack

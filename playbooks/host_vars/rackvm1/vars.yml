@@ -36,3 +36,20 @@ disk_mounts:
     path: /mnt/data
     fstype: ext4
     opts: "defaults,nofail,x-systemd.device-timeout=10s"
+
+# Keep Docker's storage on the 600G /mnt/data disk above, not the 100G root
+# disk. The Sourcebot Control4-driver index (a zoekt shard per indexed repo,
+# ~30k repos) is ~46G on its own and grows several GB/month, which otherwise
+# fills sda1. daemon.json is written verbatim from this dict by galaxy/docker.
+# NOTE: repointing data-root does NOT migrate existing data — /var/lib/docker
+# must be rsynced to /mnt/data/docker before dockerd restarts onto it, or the
+# node comes up with empty volumes. Depends on the /mnt/data mount above.
+docker_daemon_options:
+  data-root: /mnt/data/docker
+
+# GitHub owners the driver scraper scans for committed .c4z/.c4i drivers.
+# Control4-HomeKit-Controller now ships extracted source and is indexed
+# directly by sourcebot, so it's excluded via the scraper's own filtering
+# (only .c4z/.c4i are scraped); the rest of ckunakdot's repos still ship .c4z.
+control4_driver_scraper_github_owners:
+  - ckunakdot

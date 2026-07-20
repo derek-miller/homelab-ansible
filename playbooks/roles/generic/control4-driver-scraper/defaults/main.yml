@@ -3,7 +3,10 @@ control4_driver_scraper_state: present
 
 # Image built locally on the host by generic/docker/build-images (see
 # available_docker_images.control4-driver-scraper). Never pulled from a
-# registry; rebuild with `make run tags=docker-build-images -e force_rebuild=true`.
+# registry; rebuild with:
+#   make run hosts=rackvm1 tags=docker-build-images \
+#     ANSIBLE_FLAGS="-e force_rebuild=true -e docker_images_to_build=control4-driver-scraper"
+# (bare `-e force_rebuild=true` is swallowed by make; it must go via ANSIBLE_FLAGS).
 control4_driver_scraper_image: control4-driver-scraper
 control4_driver_scraper_image_tag: latest
 
@@ -18,5 +21,10 @@ control4_driver_scraper_sources_dir: /mnt/data/Source
 # Overlap is impossible by construction: a timer never triggers its unit
 # while a previous invocation is still running.
 control4_driver_scraper_on_calendar: "*-*-* 05:15:00"
+
+# GitHub owners (users/orgs) whose repos are scanned for committed .c4z/.c4i
+# drivers, passed to the scraper as C4_GITHUB_OWNERS. Empty = the github source
+# is a no-op. Set the actual owners in host_vars (deployment), not here.
+control4_driver_scraper_github_owners: []
 
 control4_driver_scraper_service: control4-driver-scraper

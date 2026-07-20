@@ -49,6 +49,10 @@
       "type": "git",
       "url": "file:///repos/drivercentral-io/*"
     },
+    "github-com-driver-repos": {
+      "type": "git",
+      "url": "file:///repos/github-com/*/*/*"
+    },
     "github-personal": {
       "type": "github",
       "users": [

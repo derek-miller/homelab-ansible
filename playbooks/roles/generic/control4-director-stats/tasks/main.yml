@@ -1,0 +1,10 @@
+- assert:
+    that: control4_director_stats_state in ('present', 'absent')
+    quiet: yes
+
+- include_role:
+    name: generic/telegraf/plugin
+  vars:
+    telegraf_plugin_conf_src: telegraf.conf.jinja2
+    telegraf_plugin_conf: control4-director-stats.conf
+    telegraf_plugin_state: "{{ 'present' if control4_director_stats_state == 'present' and control4_director_stats_controllers|length > 0 else 'absent' }}"

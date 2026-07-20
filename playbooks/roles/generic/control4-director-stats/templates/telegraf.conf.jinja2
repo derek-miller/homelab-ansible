@@ -1,0 +1,16 @@
+{% for controller in control4_director_stats_controllers %}
+# Director itself binds 5020 on 127.0.0.1 only, so it can't be probed from off
+# box — the broker on :443 is the externally observable health surface. Matching
+# the response body is what makes result = "success" meaningful: a 502 from the
+# broker and a Director that answers but isn't connected both fail the probe.
+[[inputs.http_response]]
+  urls = ["https://{{ controller.address }}/api/v1/status"]
+  method = "GET"
+  interval = "{{ control4_director_stats_interval_s|int }}s"
+  response_timeout = "{{ control4_director_stats_timeout_s|int }}s"
+  ## controllers serve their own self-signed cert
+  insecure_skip_verify = true
+  response_string_match = '"director":\s*"connected"'
+  [inputs.http_response.tags]
+    controller = "{{ controller.name }}"
+{% endfor %}

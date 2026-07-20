@@ -20,6 +20,16 @@ authorized_keys:
 additional_docker_users:
   - pi
 
+# influxdb3 opens one fd per snapshot file at startup and dies with EMFILE on the
+# default 1024 soft limit. Must live here: `docker stack deploy` drops a compose
+# `ulimits` key, so the limit only takes effect at the daemon level.
+docker_daemon_options:
+  default-ulimits:
+    nofile:
+      Name: nofile
+      Soft: 65536
+      Hard: 65536
+
 lightdm_autologin_user: pi
 lightdm_xorg_create_video_dummy: yes
 
@@ -54,3 +64,9 @@ tplink_plug_stats_ip_addresses:
   - 192.168.2.7
   - 192.168.2.8
   - 192.168.2.9
+
+control4_director_stats_controllers:
+  - name: ca10
+    address: 192.168.2.117
+  - name: core1
+    address: 192.168.2.92
