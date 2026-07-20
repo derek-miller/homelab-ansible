@@ -25,16 +25,17 @@
     label: "{{ item.src }}"
 
 - name: unmount device from stale location
-  # shell (not command) so paths with spaces like "/media/pi/Extreme Pro"
-  # survive as a single argument via quote filter.
-  shell: "/usr/bin/umount {{ item.stdout | trim | quote }}"
+  # A block device can be mounted at several targets at once (findmnt returns
+  # one line each), so iterate per-target via stdout_lines rather than treating
+  # the whole multi-line stdout as a single path. shell (not command) so paths
+  # with spaces like "/media/pi/Extreme Pro" survive as one argument via quote.
+  shell: "/usr/bin/umount {{ item.1 | trim | quote }}"
   when:
-    - item.stdout is defined
-    - item.stdout | trim | length > 0
-    - (item.stdout | trim) != item.item.path
-  loop: "{{ _disk_mount_current.results }}"
+    - item.1 | trim | length > 0
+    - (item.1 | trim) != item.0.item.path
+  loop: "{{ _disk_mount_current.results | subelements('stdout_lines', skip_missing=true) }}"
   loop_control:
-    label: "{{ item.item.src }} (from {{ item.stdout | default('') | trim }})"
+    label: "{{ item.0.item.src }} (from {{ item.1 | trim }})"
 
 - name: configure persistent fstab mount
   ansible.posix.mount:
