@@ -256,12 +256,23 @@ function extractTicketIdFromGitHub(event, payload) {
  */
 function githubThreadSessionKey(payload) {
   const repo = payload.repository?.full_name;
+  if (!repo) return null;
   const number =
     payload.pull_request?.number ??
     payload.issue?.number ??
     payload.check_run?.pull_requests?.[0]?.number ??
     payload.check_suite?.pull_requests?.[0]?.number;
-  return repo && number != null ? `hook:github:${repo}#${number}` : null;
+  if (number != null) return `hook:github:${repo}#${number}`;
+  // Repo-level fallback for numberless events (post-merge/default-branch CI,
+  // pushes): key on the branch so a repo's per-branch events stay ordered on
+  // one lane while different branches run in parallel. This is the bulk of the
+  // load in repos whose branches don't carry a ticket ID (e.g. CI on `main`).
+  const branch =
+    payload.check_run?.check_suite?.head_branch ??
+    payload.check_suite?.head_branch ??
+    payload.workflow_run?.head_branch ??
+    (typeof payload.ref === "string" ? payload.ref.replace(/^refs\/heads\//, "") : null);
+  return branch ? `hook:github:${repo}@${branch}` : `hook:github:${repo}`;
 }
 
 /**
@@ -1149,11 +1160,14 @@ const server = createServer(async (req, res) => {
     const batchKey = `youtrack:${issueId}`;
     const { eventType, detail } = getYouTrackEventDetail(payload);
 
-    // Extract ticket ID for session routing
+    // Extract ticket ID for session routing; without one, fall back to a
+    // per-issue lane instead of the shared default `hook:ingress` lane.
     const ticketId = extractTicketIdFromYouTrack(payload);
-    const sessionKey = ticketId ? `ticket:${ticketId}` : null;
-    if (ticketId) {
-      logDebug(`YouTrack ${action}: extracted ticket ID ${ticketId} → session ${sessionKey}`);
+    const sessionKey = ticketId
+      ? `ticket:${ticketId}`
+      : (issueId && issueId !== "unknown" ? `hook:youtrack:${issueId}` : null);
+    if (sessionKey) {
+      logDebug(`YouTrack ${action}: routed to session ${sessionKey}`);
     }
 
     addToBatch(batchKey, { eventType, detail, formattedMessage: eventMessage }, YOUTRACK_GUARDRAILS, "YouTrack", sessionKey);
