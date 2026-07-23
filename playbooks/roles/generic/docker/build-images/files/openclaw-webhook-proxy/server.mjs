@@ -245,6 +245,37 @@ function extractTicketIdFromGitHub(event, payload) {
 }
 
 /**
+ * Per-thread session key for GitHub events with no linked ticket. Keeps every
+ * event for one PR/issue on the same OpenClaw lane (so they process in order)
+ * while letting different threads run on parallel lanes. Without this, ticketless
+ * events (notably check_run/check_suite CI bursts) all collapse onto the single
+ * default `hook:ingress` lane and thrash it with lifecycle-claim retries.
+ * Returns null for repo-level events with no PR/issue number (e.g. push), which
+ * fall back to the default lane.
+ * @returns {string|null} Session key like "hook:github:owner/repo#39" or null
+ */
+function githubThreadSessionKey(payload) {
+  const repo = payload.repository?.full_name;
+  if (!repo) return null;
+  const number =
+    payload.pull_request?.number ??
+    payload.issue?.number ??
+    payload.check_run?.pull_requests?.[0]?.number ??
+    payload.check_suite?.pull_requests?.[0]?.number;
+  if (number != null) return `hook:github:${repo}#${number}`;
+  // Repo-level fallback for numberless events (post-merge/default-branch CI,
+  // pushes): key on the branch so a repo's per-branch events stay ordered on
+  // one lane while different branches run in parallel. This is the bulk of the
+  // load in repos whose branches don't carry a ticket ID (e.g. CI on `main`).
+  const branch =
+    payload.check_run?.check_suite?.head_branch ??
+    payload.check_suite?.head_branch ??
+    payload.workflow_run?.head_branch ??
+    (typeof payload.ref === "string" ? payload.ref.replace(/^refs\/heads\//, "") : null);
+  return branch ? `hook:github:${repo}@${branch}` : `hook:github:${repo}`;
+}
+
+/**
  * Extract a YouTrack ticket ID from a YouTrack webhook payload.
  * @returns {string|null} Ticket ID like "AGENT-32" or null
  */
@@ -1036,11 +1067,14 @@ const server = createServer(async (req, res) => {
     const eventMessage = formatGitHubMessage(event, payload);
     const batchKey = getGitHubBatchKey(event, payload);
 
-    // Extract ticket ID for session routing
+    // Extract ticket ID for session routing; without one, fall back to a
+    // per-PR/issue lane instead of the shared default `hook:ingress` lane.
     const ticketId = extractTicketIdFromGitHub(event, payload);
-    const sessionKey = ticketId ? `ticket:${ticketId}` : null;
-    if (ticketId) {
-      logDebug(`GitHub ${event}: extracted ticket ID ${ticketId} → session ${sessionKey}`);
+    const sessionKey = ticketId
+      ? `ticket:${ticketId}`
+      : githubThreadSessionKey(payload);
+    if (sessionKey) {
+      logDebug(`GitHub ${event}: routed to session ${sessionKey}`);
     }
 
     if (!batchKey) {
@@ -1126,11 +1160,14 @@ const server = createServer(async (req, res) => {
     const batchKey = `youtrack:${issueId}`;
     const { eventType, detail } = getYouTrackEventDetail(payload);
 
-    // Extract ticket ID for session routing
+    // Extract ticket ID for session routing; without one, fall back to a
+    // per-issue lane instead of the shared default `hook:ingress` lane.
     const ticketId = extractTicketIdFromYouTrack(payload);
-    const sessionKey = ticketId ? `ticket:${ticketId}` : null;
-    if (ticketId) {
-      logDebug(`YouTrack ${action}: extracted ticket ID ${ticketId} → session ${sessionKey}`);
+    const sessionKey = ticketId
+      ? `ticket:${ticketId}`
+      : (issueId && issueId !== "unknown" ? `hook:youtrack:${issueId}` : null);
+    if (sessionKey) {
+      logDebug(`YouTrack ${action}: routed to session ${sessionKey}`);
     }
 
     addToBatch(batchKey, { eventType, detail, formattedMessage: eventMessage }, YOUTRACK_GUARDRAILS, "YouTrack", sessionKey);
