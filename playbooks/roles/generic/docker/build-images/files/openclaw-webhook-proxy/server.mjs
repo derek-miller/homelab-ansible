@@ -245,6 +245,26 @@ function extractTicketIdFromGitHub(event, payload) {
 }
 
 /**
+ * Per-thread session key for GitHub events with no linked ticket. Keeps every
+ * event for one PR/issue on the same OpenClaw lane (so they process in order)
+ * while letting different threads run on parallel lanes. Without this, ticketless
+ * events (notably check_run/check_suite CI bursts) all collapse onto the single
+ * default `hook:ingress` lane and thrash it with lifecycle-claim retries.
+ * Returns null for repo-level events with no PR/issue number (e.g. push), which
+ * fall back to the default lane.
+ * @returns {string|null} Session key like "hook:github:owner/repo#39" or null
+ */
+function githubThreadSessionKey(payload) {
+  const repo = payload.repository?.full_name;
+  const number =
+    payload.pull_request?.number ??
+    payload.issue?.number ??
+    payload.check_run?.pull_requests?.[0]?.number ??
+    payload.check_suite?.pull_requests?.[0]?.number;
+  return repo && number != null ? `hook:github:${repo}#${number}` : null;
+}
+
+/**
  * Extract a YouTrack ticket ID from a YouTrack webhook payload.
  * @returns {string|null} Ticket ID like "AGENT-32" or null
  */
@@ -1036,11 +1056,14 @@ const server = createServer(async (req, res) => {
     const eventMessage = formatGitHubMessage(event, payload);
     const batchKey = getGitHubBatchKey(event, payload);
 
-    // Extract ticket ID for session routing
+    // Extract ticket ID for session routing; without one, fall back to a
+    // per-PR/issue lane instead of the shared default `hook:ingress` lane.
     const ticketId = extractTicketIdFromGitHub(event, payload);
-    const sessionKey = ticketId ? `ticket:${ticketId}` : null;
-    if (ticketId) {
-      logDebug(`GitHub ${event}: extracted ticket ID ${ticketId} → session ${sessionKey}`);
+    const sessionKey = ticketId
+      ? `ticket:${ticketId}`
+      : githubThreadSessionKey(payload);
+    if (sessionKey) {
+      logDebug(`GitHub ${event}: routed to session ${sessionKey}`);
     }
 
     if (!batchKey) {
