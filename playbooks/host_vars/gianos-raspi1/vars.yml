@@ -95,7 +95,9 @@ sudoers:
   - user: pi
     passwordless: true
 
-tailscale_args: --accept-routes
+# 4via6 site 2: ratgdo garage doors at 10.0.0.6-8, kauf plugs at 10.0.0.40-42
+# (ESPHome API 6053, web UI 80)
+tailscale_host_args: --accept-routes --advertise-routes=fd7a:115c:a1e0:b1a:0:2:a00:6/128,fd7a:115c:a1e0:b1a:0:2:a00:7/128,fd7a:115c:a1e0:b1a:0:2:a00:8/128,fd7a:115c:a1e0:b1a:0:2:a00:28/128,fd7a:115c:a1e0:b1a:0:2:a00:29/128,fd7a:115c:a1e0:b1a:0:2:a00:2a/128
 
 raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:

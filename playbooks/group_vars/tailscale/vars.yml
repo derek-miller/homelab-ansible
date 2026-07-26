@@ -12,3 +12,9 @@ tailscale_oauth_ephemeral: false
 tailscale_oauth_preauthorized: true
 tailscale_tags:
   - ansible
+
+# --accept-dns=false: we don't use MagicDNS, so keep tailscaled out of
+# /etc/resolv.conf. Hosts add their own flags via tailscale_host_args, not by
+# overriding tailscale_args (which would drop the common args).
+tailscale_common_args: --accept-dns=false
+tailscale_args: "{{ (tailscale_common_args ~ ' ' ~ (tailscale_host_args | default(''))) | trim }}"

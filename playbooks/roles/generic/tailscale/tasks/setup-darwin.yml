@@ -156,7 +156,7 @@
         {{ homebrew_prefix }}/bin/tailscale up
         --authkey={{ _tailscale_authkey_string | trim }}
         {{ _tailscale_tags_arg | trim }}
-        {{ tailscale_args | default(tailscale_darwin_up_args | join(' ')) }}
+        {{ tailscale_args }}
       register: _tailscale_up
       changed_when: true
       no_log: true

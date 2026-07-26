@@ -105,7 +105,8 @@ sudoers:
   - user: pi
     passwordless: true
 
-tailscale_args: --accept-routes
+# 4via6 site 3: shelly-plus-1pm-a95924 at 192.168.4.43 (ESPHome API 6053, web UI 80)
+tailscale_host_args: --accept-routes --advertise-routes=fd7a:115c:a1e0:b1a:0:3:c0a8:42b/128
 
 raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:

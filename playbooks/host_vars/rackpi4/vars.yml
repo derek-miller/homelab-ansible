@@ -28,6 +28,11 @@ sudoers:
     passwordless: true
 
 project_files:
+  - src: "plaintext/{{ inventory_hostname }}/var/docker/homeassistant/uv_override.txt"
+    dest: /var/docker/homeassistant/uv_override.txt
+    owner: root
+    group: root
+    mode: '0644'
   - src: "plaintext/{{ inventory_hostname }}/var/docker/mosquitto/config/mosquitto.conf"
     dest: /var/docker/mosquitto/config/mosquitto.conf
     owner: 1883

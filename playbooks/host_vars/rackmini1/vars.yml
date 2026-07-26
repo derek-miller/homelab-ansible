@@ -29,7 +29,7 @@ sudoers:
 # user-facing host (Plex, Homebridge), so keep its clock in local time.
 timezone: America/Chicago
 
-tailscale_args: --accept-routes
+tailscale_host_args: --accept-routes
 
 # /mnt synthetic link — lets the smb-mount role expose unas shares at
 # /mnt/{Backups,Container,Public} (macOS's sealed system volume can't
