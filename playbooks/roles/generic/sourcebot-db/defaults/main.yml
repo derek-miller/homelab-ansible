@@ -1,0 +1,48 @@
+---
+sourcebot_db_state: present
+
+sourcebot_db_container: sourcebot-postgres
+sourcebot_db_user: sourcebot
+sourcebot_db_name: sourcebot
+
+# Stock 0.2/0.1 is far too lax for this table's insert rate.
+sourcebot_db_vacuum_scale_factor: 0.02
+sourcebot_db_analyze_scale_factor: 0.01
+
+sourcebot_db_index: RepoIndexingJob_status_createdAt_idx
+
+# Sourcebot never deletes RepoIndexingJob rows, so pg_cron sweeps them. The
+# orphan reaper is separate because a redis restart strands rows in PENDING that
+# no worker will ever advance to COMPLETED.
+sourcebot_db_retention_jobs:
+  - name: repoindexingjob-reap-orphans
+    schedule: "7 * * * *"
+    sql: >-
+      DELETE FROM "RepoIndexingJob" WHERE id IN (
+      SELECT id FROM "RepoIndexingJob"
+      WHERE status IN ('PENDING', 'IN_PROGRESS')
+      AND "createdAt" < now() - interval '1 day'
+      ORDER BY "createdAt" LIMIT 200000)
+
+  - name: repoindexingjob-trim-completed
+    schedule: "22 * * * *"
+    sql: >-
+      DELETE FROM "RepoIndexingJob" WHERE id IN (
+      SELECT id FROM "RepoIndexingJob"
+      WHERE status = 'COMPLETED'
+      AND "createdAt" < now() - interval '2 days'
+      ORDER BY "createdAt" LIMIT 200000)
+
+  - name: repoindexingjob-trim-failed
+    schedule: "37 4 * * *"
+    sql: >-
+      DELETE FROM "RepoIndexingJob" WHERE id IN (
+      SELECT id FROM "RepoIndexingJob"
+      WHERE status = 'FAILED'
+      AND "createdAt" < now() - interval '30 days'
+      ORDER BY "createdAt" LIMIT 200000)
+
+  - name: cron-trim-run-details
+    schedule: "52 5 * * *"
+    sql: >-
+      DELETE FROM cron.job_run_details WHERE end_time < now() - interval '7 days'

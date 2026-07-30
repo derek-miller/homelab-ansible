@@ -1,0 +1,19 @@
+---
+- assert:
+    that: sourcebot_db_state in ('present', 'absent')
+    quiet: yes
+
+- name: find the sourcebot postgres container
+  shell: |
+    set -o pipefail
+    docker ps --filter "name={{ sourcebot_db_container }}" --filter status=running -q | head -1
+  args:
+    executable: /bin/bash
+  register: sourcebot_db_cid
+  changed_when: false
+
+- include_tasks: present.yml
+  when: sourcebot_db_state == 'present'
+
+- include_tasks: absent.yml
+  when: sourcebot_db_state == 'absent'
