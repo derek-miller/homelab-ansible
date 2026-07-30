@@ -196,6 +196,12 @@
 - hosts: docker_swarm_manager:docker_swarm_worker
   roles:
     - role: galaxy/docker-swarm
+  post_tasks:
+    - name: reconcile swarm node role with group membership
+      community.docker.docker_node:
+        hostname: "{{ inventory_hostname }}"
+        role: "{{ 'manager' if 'docker_swarm_manager' in group_names else 'worker' }}"
+      delegate_to: "{{ docker_swarm_primary_manager_name }}"
   tags:
     - docker
     - docker-swarm

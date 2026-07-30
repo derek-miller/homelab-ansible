@@ -1,0 +1,20 @@
+---
+# Deliberately does not destroy guests — that is `qm destroy --purge`, and an
+# `absent` run should not be able to delete a running workload by accident.
+# Removes only the template and the cached image.
+
+- name: check whether the template exists
+  command: "qm config {{ proxmox_guest_template_vmid }}"
+  register: proxmox_guest_template_check
+  changed_when: false
+  failed_when: false
+  check_mode: no
+
+- name: remove the template
+  command: "qm destroy {{ proxmox_guest_template_vmid }} --purge"
+  when: proxmox_guest_template_check.rc == 0
+
+- name: remove the cached cloud image
+  file:
+    path: "{{ proxmox_guest_image_path }}"
+    state: absent

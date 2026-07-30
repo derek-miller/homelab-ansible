@@ -1,0 +1,24 @@
+---
+- name: require site config
+  assert:
+    that:
+      - vars[item] is defined
+      - vars[item] not in [None, ""]
+    fail_msg: "{{ item }} must be set — see group_vars/proxmox"
+    quiet: yes
+  loop:
+    - proxmox_guest_image_url
+    - proxmox_guest_image_path
+    - proxmox_guest_template_vmid
+    - proxmox_guest_template_name
+    - proxmox_guest_storage
+    - proxmox_guest_template_cores
+    - proxmox_guest_template_memory
+
+- include_tasks: template.yml
+  when: proxmox_guest_scope in ('template', 'all')
+
+- include_tasks: guests.yml
+  when:
+    - proxmox_guest_scope in ('guests', 'all')
+    - proxmox_guests | length > 0

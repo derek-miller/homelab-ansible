@@ -1,0 +1,143 @@
+---
+# Judged from another node: the one restarting cannot answer for itself.
+- name: pick a witness for {{ node }}
+  set_fact:
+    witness: "{{ groups['proxmox'] | reject('eq', node) | first }}"
+
+- name: confirm delegation reaches {{ node }} and not the controller
+  command: hostname
+  register: node_hostname
+  changed_when: false
+  delegate_to: "{{ node }}"
+  failed_when: (node_hostname.stdout | trim) != node
+
+- name: require the cluster quorate before touching {{ node }}
+  command: pvecm status
+  register: quorum_before
+  changed_when: false
+  delegate_to: "{{ witness }}"
+  failed_when: quorum_before.stdout is not search('Quorate:\\s+Yes')
+
+- name: find the HA resources on {{ node }}
+  shell: |
+    set -o pipefail
+    ha-manager status | sed -n "s/^service \([^ ]*\) ({{ node }}, started).*/\1/p"
+  args:
+    executable: /bin/bash
+  register: ha_here
+  changed_when: false
+  delegate_to: "{{ witness }}"
+
+# The cloud-init template is permanently stopped; HA guests are the CRM's.
+- name: note the guests {{ node }} should bring back
+  shell: |
+    set -o pipefail
+    qm list | awk '$3 == "running" { print $1 }'
+  args:
+    executable: /bin/bash
+  register: guests_before
+  changed_when: false
+  delegate_to: "{{ node }}"
+
+- name: set aside the guests to wait for on {{ node }}
+  set_fact:
+    guests_expected: >-
+      {{ guests_before.stdout_lines
+         | difference(ha_here.stdout_lines | map('regex_replace', '^[a-z]+:', '') | list) }}
+
+- name: upgrade {{ node }}
+  apt:
+    update_cache: yes
+    upgrade: full
+  delegate_to: "{{ node }}"
+  when: proxmox_upgrade_enabled | bool
+
+- name: reboot {{ node }}
+  block:
+    - name: tell HA the resources on {{ node }} are intentionally stopped
+      command: "ha-manager set {{ item }} --state stopped"
+      loop: "{{ ha_here.stdout_lines }}"
+      delegate_to: "{{ witness }}"
+      when: proxmox_reboot_ha_mode == 'downtime'
+
+    # Migration runs its own final replication sync.
+    - name: put {{ node }} into HA maintenance
+      command: "ha-manager crm-command node-maintenance enable {{ node }}"
+      delegate_to: "{{ witness }}"
+      when: proxmox_reboot_ha_mode == 'migrate'
+
+    - name: wait for the HA resources to leave {{ node }}
+      command: ha-manager status
+      register: ha_vacated
+      changed_when: false
+      delegate_to: "{{ witness }}"
+      until: "('(' ~ node ~ ', started)') not in ha_vacated.stdout"
+      retries: "{{ (proxmox_reboot_ha_settle_timeout | int / 10) | int }}"
+      delay: 10
+      when: proxmox_reboot_ha_mode == 'migrate' and ha_here.stdout_lines | length > 0
+
+    - name: reboot {{ node }}
+      reboot:
+        reboot_timeout: "{{ proxmox_reboot_timeout }}"
+        msg: rolling reboot from ansible
+      delegate_to: "{{ node }}"
+
+    # pvecm status prints IP addresses, not node names, so there is nothing here
+    # to match {{ node }} against. Ask the node itself whether it is quorate: only
+    # one partition of the cluster can be, so the witness check below then places
+    # both in the same one.
+    - name: wait for {{ node }} to rejoin the cluster
+      command: pvecm status
+      register: quorum_after
+      changed_when: false
+      delegate_to: "{{ node }}"
+      until: quorum_after.stdout is search('Quorate:\\s+Yes')
+      retries: 30
+      delay: 10
+
+    - name: confirm the cluster is quorate now {{ node }} is back
+      command: pvecm status
+      register: quorum_witness
+      changed_when: false
+      delegate_to: "{{ witness }}"
+      failed_when: quorum_witness.stdout is not search('Quorate:\\s+Yes')
+  always:
+    # Both of these must happen even if the reboot failed: a node left in
+    # maintenance is excluded from HA placement, and a resource left stopped
+    # stays down.
+    - name: hand the resources on {{ node }} back to HA
+      command: "ha-manager set {{ item }} --state started"
+      loop: "{{ ha_here.stdout_lines }}"
+      delegate_to: "{{ witness }}"
+      when: proxmox_reboot_ha_mode == 'downtime'
+
+    - name: take {{ node }} out of HA maintenance
+      command: "ha-manager crm-command node-maintenance disable {{ node }}"
+      delegate_to: "{{ witness }}"
+      when: proxmox_reboot_ha_mode == 'migrate'
+
+- name: wait for the guests on {{ node }} to come back
+  shell: |
+    set -o pipefail
+    qm list | awk '$3 == "running" { print $1 }'
+  args:
+    executable: /bin/bash
+  register: guests_after
+  changed_when: false
+  delegate_to: "{{ node }}"
+  until: "guests_expected | difference(guests_after.stdout_lines) | length == 0"
+  retries: "{{ (proxmox_reboot_guest_timeout | int / 10) | int }}"
+  delay: 10
+
+- name: wait for the HA resources from {{ node }} to be started again
+  command: ha-manager status
+  register: ha_restored
+  changed_when: false
+  delegate_to: "{{ witness }}"
+  until: >-
+    ha_here.stdout_lines
+    | difference(ha_restored.stdout | regex_findall('^service (\S+) \(\S+, started\)', multiline=True))
+    | length == 0
+  retries: "{{ (proxmox_reboot_ha_settle_timeout | int / 10) | int }}"
+  delay: 10
+  when: ha_here.stdout_lines | length > 0

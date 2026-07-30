@@ -1,0 +1,76 @@
+---
+- name: authorise the ansible key for root
+  ansible.posix.authorized_key:
+    user: root
+    key: "{{ lookup('file', ansible_surrogate_public_key_file) }}"
+    state: present
+
+# Formation is additionally gated on this node not being in a cluster yet, so
+# even a bootstrap run is inert against nodes that are already members and
+# cannot re-create or re-join one that was detached for repair.
+- name: check whether this node is already in a cluster
+  stat:
+    path: /etc/pve/corosync.conf
+  register: proxmox_corosync_conf
+
+- name: form the cluster
+  when: not proxmox_corosync_conf.stat.exists
+  block:
+    - name: create the cluster on the primary
+      command: >-
+        pvecm create {{ proxmox_cluster_name }}
+        --nodeid {{ proxmox_nodeid }}
+        --link0 {{ proxmox_lan_address.split('/')[0] }}
+        --link1 {{ proxmox_fabric_address.split('/')[0] }}
+      when: inventory_hostname in groups['proxmox_primary']
+
+    - name: wait for the primary to be quorate
+      command: pvecm status
+      register: proxmox_formation_quorum
+      changed_when: false
+      until: proxmox_formation_quorum.stdout is search('Quorate:\s+Yes')
+      retries: 12
+      delay: 5
+      when: inventory_hostname in groups['proxmox_primary']
+
+    # pvecm add reaches the primary over SSH as root, and a fresh node's
+    # authorized_keys holds no peer keys until it joins — without this the join
+    # prompts for a password and hangs.
+    - name: read this node's root public key
+      slurp:
+        src: /root/.ssh/id_rsa.pub
+      register: proxmox_root_pubkey
+      when: inventory_hostname not in groups['proxmox_primary']
+
+    - name: authorise this node's root key on the primary
+      ansible.posix.authorized_key:
+        user: root
+        key: "{{ proxmox_root_pubkey.content | b64decode }}"
+        state: present
+      delegate_to: "{{ groups['proxmox_primary'] | first }}"
+      # Serialised: every joining node writes the same authorized_keys on the
+      # primary, and concurrent read-modify-writes lose keys — which would leave
+      # pvecm add prompting for a password and hanging.
+      throttle: 1
+      when: inventory_hostname not in groups['proxmox_primary']
+
+    # One at a time: concurrent joins race on corosync.conf's config_version and
+    # leave the cluster with a split view of its own membership.
+    - name: join the cluster
+      command: >-
+        pvecm add
+        {{ hostvars[groups['proxmox_primary'] | first].proxmox_lan_address.split('/')[0] }}
+        --use_ssh
+        --nodeid {{ proxmox_nodeid }}
+        --link0 {{ proxmox_lan_address.split('/')[0] }}
+        --link1 {{ proxmox_fabric_address.split('/')[0] }}
+      throttle: 1
+      when: inventory_hostname not in groups['proxmox_primary']
+
+    - name: wait for this node to be quorate
+      command: pvecm status
+      register: proxmox_formation_joined
+      changed_when: false
+      until: proxmox_formation_joined.stdout is search('Quorate:\s+Yes')
+      retries: 30
+      delay: 10

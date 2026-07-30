@@ -1,0 +1,24 @@
+{# Notification targets and matchers.
+
+   PVE's parser requires a blank line between sections. Ansible renders templates
+   with trim_blocks=True, which eats the newline immediately after a block tag —
+   so an `{% endraw %}` sitting at end of line silently swallows that separator
+   and PVE then fails with "expected section properties". The token reference is
+   therefore a `set` string rather than a raw block, and the blank line is emitted
+   inside the loop rather than before it.
+
+   {{ secrets.token }} in the url is PVE's own templating, resolved from
+   /etc/pve/priv/notifications.cfg — not Jinja. #}
+{% set discord_token_ref = '{{ secrets.token }}' %}
+webhook: discord
+	body {{ lookup('file', 'discord-notification-body.json') | trim | b64encode }}
+	header name=Content-Type,value={{ 'application/json' | b64encode }}
+	method post
+	url https://discord.com/api/webhooks/{{ discord_token_ref }}
+{% for m in proxmox_notification_matchers %}
+
+matcher: {{ m.name }}
+{% for k, v in m.items() if k != 'name' %}
+	{{ k }} {{ v }}
+{% endfor %}
+{% endfor %}

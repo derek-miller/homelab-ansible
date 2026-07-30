@@ -1,0 +1,31 @@
+---
+# Repairs a node certificate that no longer matches the FQDN. `pvecm updatecerts
+# --force` reuses the stale name, so the old pair is deleted first.
+
+- name: read the node certificate subject
+  command: openssl x509 -noout -subject -in /etc/pve/local/pve-ssl.pem
+  register: proxmox_cert_subject
+  changed_when: false
+  check_mode: no
+  failed_when: false
+
+- name: repair a certificate that does not match the fqdn
+  when: >-
+    proxmox_cert_subject.rc == 0
+    and (inventory_hostname ~ '.' ~ proxmox_domain) not in proxmox_cert_subject.stdout
+  block:
+    - name: discard the stale certificate
+      file:
+        path: "/etc/pve/local/{{ item }}"
+        state: absent
+      loop:
+        - pve-ssl.pem
+        - pve-ssl.key
+
+    - name: issue a certificate for the current fqdn
+      command: pvecm updatecerts --force
+
+    - name: restart pveproxy onto the new certificate
+      systemd:
+        name: pveproxy
+        state: restarted

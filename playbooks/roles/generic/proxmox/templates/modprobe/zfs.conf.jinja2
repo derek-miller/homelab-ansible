@@ -1,0 +1,8 @@
+{# Derived from this node's RAM rather than written as a literal, which is what the
+   installer does and why the value differs slightly per machine — the boxes do not
+   report identical byte counts. Load-bearing: each node commits most of its RAM to
+   guests, and ZFS defaulting to ~50% would leave them unable to fit.
+
+   Only read at module load, so a change here needs an initramfs rebuild and a
+   reboot before the running value follows. #}
+options zfs zfs_arc_max={{ (ansible_memtotal_mb * 1048576 * proxmox_zfs_arc_fraction) | int }}

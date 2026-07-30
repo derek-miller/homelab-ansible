@@ -1,0 +1,14 @@
+---
+- assert:
+    that: proxmox_state in ('present', 'absent')
+    quiet: yes
+
+- assert:
+    that: proxmox_scope in ('node', 'bootstrap', 'cluster')
+    quiet: yes
+
+- include_tasks: present.yml
+  when: proxmox_state == 'present'
+
+- include_tasks: absent.yml
+  when: proxmox_state == 'absent'

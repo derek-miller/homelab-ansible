@@ -1,8 +1,18 @@
 ---
 # disk-mount absent — reverse what present.yml did:
+#   - remove the symlinks it created
 #   - unmount each configured path
 #   - remove the fstab entry
 #   - remove the (now-empty) mount-point dir
+
+- name: remove links this disk provided
+  file:
+    path: "{{ item.1.dest }}"
+    state: absent
+  when: item.1.dest is defined
+  loop: "{{ disk_mounts | subelements('symlinks', skip_missing=true) }}"
+  loop_control:
+    label: "{{ item.1.dest }}"
 
 - name: unmount + remove fstab entry for each disk
   ansible.posix.mount:

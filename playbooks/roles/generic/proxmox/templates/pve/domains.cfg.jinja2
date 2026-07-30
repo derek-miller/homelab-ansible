@@ -1,0 +1,17 @@
+{# Realms. pam and pve are PVE's built-ins and must stay declared here, because
+   this file is the complete realm list — omitting them removes them. #}
+openid: {{ proxmox_oidc_realm }}
+	client-id {{ proxmox_oidc_client_id }}
+	issuer-url {{ proxmox_oidc_issuer_url }}
+	autocreate {{ proxmox_oidc_autocreate }}
+	client-key {{ proxmox_oidc_client_key }}
+	default {{ proxmox_oidc_default }}
+	query-userinfo 1
+	username-claim {{ proxmox_oidc_username_claim }}
+
+pam: pam
+	comment Linux PAM standard authentication
+
+pve: pve
+	comment Proxmox VE authentication server
+

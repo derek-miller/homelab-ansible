@@ -1,0 +1,14 @@
+---
+# Opt-in: a tag would not do, since every tag runs unless --tags is given.
+proxmox_reboot_enabled: no
+proxmox_upgrade_enabled: no
+
+proxmox_reboot_order: "{{ groups['proxmox'] }}"
+
+# downtime | migrate. Without live migration, migrate is two offline moves and
+# usually slower than the reboot it avoids.
+proxmox_reboot_ha_mode: downtime
+
+proxmox_reboot_timeout: 900
+proxmox_reboot_guest_timeout: 300
+proxmox_reboot_ha_settle_timeout: 300

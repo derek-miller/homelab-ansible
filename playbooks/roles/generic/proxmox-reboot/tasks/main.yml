@@ -1,0 +1,22 @@
+---
+- name: require an opt-in
+  meta: end_play
+  when: not (proxmox_reboot_enabled | bool)
+
+- name: check what was asked for
+  assert:
+    that:
+      - proxmox_reboot_order | length > 0
+      - proxmox_reboot_ha_mode in ['downtime', 'migrate']
+    fail_msg: >-
+      Set proxmox_reboot_order to the nodes to reboot, and
+      proxmox_reboot_ha_mode to downtime or migrate
+      (got '{{ proxmox_reboot_ha_mode }}').
+    quiet: yes
+
+- name: roll through the nodes
+  include_tasks: node.yml
+  loop: "{{ proxmox_reboot_order }}"
+  loop_control:
+    loop_var: node
+    label: "{{ node }} ({{ proxmox_reboot_ha_mode }})"

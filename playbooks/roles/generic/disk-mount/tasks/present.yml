@@ -4,6 +4,16 @@
 # sidesteps a chown failure on already-mounted non-POSIX filesystems
 # like exfat/ntfs, which reject file:owner/group.
 
+- name: create filesystems on empty managed devices
+  community.general.filesystem:
+    dev: "{{ item.device }}"
+    fstype: "{{ item.fstype }}"
+    opts: "{{ ('-L ' ~ item.src | regex_replace('^LABEL=', '')) if item.src.startswith('LABEL=') else omit }}"
+    state: present
+  loop: "{{ disk_mounts | selectattr('device', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.device }} ({{ item.fstype }})"
+
 # If another subsystem (e.g. udisks2's GUI auto-mount) has the device
 # mounted at a different path, our fstab entry would be ignored until
 # the next reboot. Unmount the device from any stale location first so
@@ -48,3 +58,15 @@
   loop: "{{ disk_mounts }}"
   loop_control:
     label: "{{ item.path }}"
+  notify: reload systemd units
+
+- name: link fixed paths that this disk has moved
+  file:
+    src: "{{ item.1.src }}"
+    dest: "{{ item.1.dest }}"
+    state: link
+    force: yes
+    follow: no
+  loop: "{{ disk_mounts | subelements('symlinks', skip_missing=true) }}"
+  loop_control:
+    label: "{{ item.1.dest }} -> {{ item.1.src }}"

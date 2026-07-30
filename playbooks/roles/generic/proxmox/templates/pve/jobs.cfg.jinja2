@@ -1,0 +1,25 @@
+{# Backup jobs.
+
+   Same two traps as notifications.cfg: PVE wants a blank line between sections,
+   and Ansible renders with trim_blocks=True, so the blank line is emitted inside
+   the loop rather than after the section tag. `{{guestname}}` in notes-template is
+   PVE's own templating, not Jinja, so it is carried through a `set` string — an
+   {% raw %} block would swallow the separator and PVE would reject the file. #}
+{% set notes_template = '{{guestname}}' %}
+{% for j in proxmox_backup_jobs %}
+{% if not loop.first %}
+
+{% endif %}
+vzdump: {{ j.id }}
+	comment {{ j.comment }}
+	compress {{ j.compress | default('zstd') }}
+	enabled {{ j.enabled | default(1) }}
+	fleecing 0
+	mode {{ j.mode | default('snapshot') }}
+	notes-template {{ notes_template }}
+	notification-mode notification-system
+	prune-backups {{ j.prune }}
+	schedule {{ j.schedule }}
+	storage {{ j.storage }}
+	vmid {{ j.vmid | join(',') }}
+{% endfor %}

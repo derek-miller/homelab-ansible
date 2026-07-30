@@ -1,0 +1,9 @@
+{# PVE's parser requires a blank line between sections; without one it folds the
+   next stanza into the previous section and throws "unexpected property". #}
+{% for s in proxmox_storages %}
+{{ s.type }}: {{ s.id }}
+{% for k, v in s.options.items() %}
+	{{ k }} {{ v }}
+{% endfor %}
+
+{% endfor %}
