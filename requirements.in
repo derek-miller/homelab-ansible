@@ -1,6 +1,7 @@
 --index-url https://pypi.python.org/simple
 
 ansible
+ansible-lint
 black
 chardet  # implicitly required by python-debian
 click

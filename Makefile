@@ -80,6 +80,10 @@ playbooks/roles/ansible/remote/files/requirements.txt: playbooks/roles/ansible/r
 fmt:
 	black . --line-length 100 --target-version py$(python_version_major)$(python_version_minor)
 
+.PHONY: ansible-lint
+ansible-lint:
+	ansible-lint
+
 .PHONY: check
 check:
 	$(ansible_playbook_cmd) --syntax-check

@@ -1,0 +1,32 @@
+---
+name: Ansible Lint
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  ansible-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Write vault password
+        run: echo "${{ secrets.VAULT_PASS }}" > .vault_pass
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          make after-git-pull
+
+      - name: ansible-lint
+        run: |
+          source .venv/bin/activate
+          make ansible-lint

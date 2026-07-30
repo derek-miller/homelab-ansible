@@ -1,0 +1,9 @@
+---
+# Start at the lowest profile — rules that catch genuinely broken content.
+# Ramp the tier over time (see the tracking ticket). yamllint owns YAML style
+# (see .yamllint); ansible-lint's own YAML rules are left to it via the profile.
+profile: min
+
+exclude_paths:
+  - playbooks/collections/
+  - playbooks/roles/galaxy/
