@@ -1,3 +1,4 @@
+---
 - name: create ansible surrogate user
   user:
     name: "{{ ansible_surrogate_user }}"

@@ -1,3 +1,4 @@
+---
 # Tailscale absent — fully reverse what the setup-* files did:
 #   - tailscale logout + down (disconnect from tailnet)
 #   - bootout + remove LaunchDaemon plist (Darwin)

@@ -1,3 +1,4 @@
+---
 tailscale_state: present
 
 # Extra args passed to `tailscale up`. Same var the artis3n Linux role uses;

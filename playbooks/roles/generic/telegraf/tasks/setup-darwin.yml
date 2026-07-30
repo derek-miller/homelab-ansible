@@ -1,3 +1,4 @@
+---
 # Homebrew refuses to run as root; swap ansible_become_user (host fact set
 # by the connection role) around brew operations. See common role for the
 # same pattern and rationale.

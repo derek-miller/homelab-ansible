@@ -1,3 +1,4 @@
+---
 dependencies:
   - role: generic/virtualenv
     virtualenv_state: "{{ tplink_plug_stats_state }}"

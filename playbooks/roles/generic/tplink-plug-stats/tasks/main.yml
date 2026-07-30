@@ -1,3 +1,4 @@
+---
 - assert:
     that: tplink_plug_stats_state in ('present', 'absent')
     quiet: yes

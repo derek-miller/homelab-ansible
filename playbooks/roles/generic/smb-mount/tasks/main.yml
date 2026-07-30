@@ -1,3 +1,4 @@
+---
 - assert:
     that:
       - ansible_os_family == 'Darwin'

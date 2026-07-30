@@ -1,3 +1,4 @@
+---
 # brew install telegraf drops the LaunchAgent plist at
 # ~/<mac_user>/Library/LaunchAgents/homebrew.mxcl.telegraf.plist and wires
 # its ProgramArguments to the config paths exposed by telegraf_conf /

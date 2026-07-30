@@ -1,3 +1,4 @@
+---
 - name: check if influxdata GPG key exists
   stat:
     path: /usr/share/keyrings/influxdata-archive.gpg

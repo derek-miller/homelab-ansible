@@ -1,3 +1,4 @@
+---
 - name: set up connection before gathering facts
   hosts: all
   gather_facts: no

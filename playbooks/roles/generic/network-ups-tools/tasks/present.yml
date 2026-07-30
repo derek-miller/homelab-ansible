@@ -1,3 +1,4 @@
+---
 - name: install nut
   apt:
     name: nut

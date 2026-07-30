@@ -1,3 +1,4 @@
+---
 smb_mount_state: present
 
 # Name of the autofs map file installed under /etc. Override per-host if

@@ -1,3 +1,4 @@
+---
 # Darwin path: install the Homebrew formula (NOT the cask) — the formula gives
 # us the `tailscaled` CLI daemon that runs as a system LaunchDaemon, no GUI
 # session required. Authenticates with a pre-generated authkey from

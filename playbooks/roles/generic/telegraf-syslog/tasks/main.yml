@@ -1,3 +1,4 @@
+---
 - assert:
     that: telegraf_syslog_state in ('present',)
     quiet: yes

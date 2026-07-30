@@ -1,3 +1,4 @@
+---
 # ansible.posix.mount below creates the mount-point dir on first use
 # (root:root:0755 default) — no separate mkdir task needed. This also
 # sidesteps a chown failure on already-mounted non-POSIX filesystems

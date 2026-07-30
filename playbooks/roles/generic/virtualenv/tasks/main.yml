@@ -1,3 +1,4 @@
+---
 - assert:
     that: virtualenv_state in ('present', 'absent')
     quiet: yes

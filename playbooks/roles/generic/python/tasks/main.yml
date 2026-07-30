@@ -1,3 +1,4 @@
+---
 - assert:
     that: python_state == 'present'
     quiet: yes

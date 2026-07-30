@@ -1,3 +1,4 @@
+---
 - name: stop {{ uctronics_lcd_service }} service
   systemd:
     name: "{{ uctronics_lcd_service }}"

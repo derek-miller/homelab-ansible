@@ -1,3 +1,4 @@
+---
 # Linux: service module drives systemd. macOS: kickstart the LaunchAgent
 # in the gui/<uid> domain so the updated plist / config takes effect
 # without needing a user re-login. bootout + bootstrap is more invasive

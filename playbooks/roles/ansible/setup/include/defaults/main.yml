@@ -1,3 +1,4 @@
+---
 ansible_surrogate_ssh_host_key_algorithm: ed25519
 ansible_surrogate_public_key_file: "{{ ansible_surrogate_user }}-id_{{ ansible_surrogate_ssh_host_key_algorithm }}.pub"
 ansible_surrogate_private_key_file: "vault/{{ ansible_surrogate_user }}-id_{{ ansible_surrogate_ssh_host_key_algorithm }}"

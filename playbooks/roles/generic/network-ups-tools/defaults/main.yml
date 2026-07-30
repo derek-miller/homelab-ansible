@@ -1,3 +1,4 @@
+---
 nut_state: present
 nut_max_retry: 3
 nut_mode: netserver

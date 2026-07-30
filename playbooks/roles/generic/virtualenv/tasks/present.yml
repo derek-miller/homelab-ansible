@@ -1,3 +1,4 @@
+---
 # The pip module only builds a venv when one is absent — it won't rebuild an
 # existing venv whose base interpreter changed. On macOS we moved off Apple's
 # system python3 (3.9) to a Homebrew interpreter, so an older venv would keep

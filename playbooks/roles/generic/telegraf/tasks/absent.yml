@@ -1,3 +1,4 @@
+---
 # Telegraf absent — fully reverse what present.yml installed:
 #   - stop + disable service (systemd / launchd)
 #   - remove config file + conf.d dir

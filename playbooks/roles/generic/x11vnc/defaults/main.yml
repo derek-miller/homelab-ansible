@@ -1,3 +1,4 @@
+---
 x11vnc_display: :0
 x11vnc_rfb_port: 5900
 x11vnc_rfb_pass_file: /etc/x11vnc.pass

@@ -1,3 +1,4 @@
+---
 dependencies:
   - role: generic/python
     when: "virtualenv_state == 'present'"
