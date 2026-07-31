@@ -88,8 +88,7 @@
 # lets hb-service pick the latest recommended LTS; a pinned version forces
 # an exact upgrade or downgrade. Idempotent: stdout reports "already
 # up-to-date" when the target already matches.
-# umask 022: the become session inherits umask 077, which would otherwise
-# leave the extracted Node.js tree unreadable to non-ansible users.
+# umask 022: the become session runs umask 077, which would leave the tree 0700.
 - name: keep Node.js at the Homebridge-managed version
   shell: >-
     umask 022 &&
@@ -101,15 +100,9 @@
   changed_when: "'Installing Node.js' in (_hb_update_node.stdout | default(''))"
   notify: homebridge changed
 
-# ---- /usr/local perms convergence --------------------------------------
-# The become session runs with umask 077, so anything it writes under
-# /usr/local (the npm -g installs above, plus other globally-installed
-# CLIs this host carries that ansible is not the source of truth for) can
-# land 0700 dirs / 0600 files with 0600 symlinks. macOS enforces symlink
-# modes (unlike Linux), so a 0600 symlink in /usr/local/bin is untraversable
-# by the services that exec through it. Normalise to world-readable every
-# run — this also re-heals after a macOS update resets the tree. Detection-
-# guarded so a converged tree reports ok, not changed.
+# macOS enforces symlink modes, so umask-077 leftovers under /usr/local are
+# untraversable. Converge every run — also covers non-managed globals and
+# re-heals after an OS update. Detection-guarded to stay idempotent.
 - name: normalize /usr/local Node.js tree perms (world-readable)
   shell: |
     set -eu
