@@ -52,7 +52,6 @@ raspi1
 
 [docker-build-images]
 rackpi1 docker_images_to_build=openclaw-webhook-proxy
-rackpi5 docker_images_to_build=youtrack
 rackvm5 docker_images_to_build=sourcebot,control4-driver-scraper,postgres-pgcron
 
 [control4-driver-scraper]
@@ -113,6 +112,6 @@ rackpi1  docker_labels=edge,webhooks
 rackpi2  docker_labels=metrics
 rackpi3  docker_labels=media
 rackpi4  docker_labels=home,mqtt
-rackpi5  docker_labels=youtrack
 rackvm2  docker_labels=grafana,identity
+rackvm4  docker_labels=youtrack
 rackvm5  docker_labels=sourcebot
