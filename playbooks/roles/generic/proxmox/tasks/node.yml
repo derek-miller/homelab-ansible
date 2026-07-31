@@ -32,6 +32,13 @@
   when: proxmox_fabric_address | default('') | length > 0
   notify: reload udev rules
 
+- name: remove the fabric hotplug rule when there is no fabric
+  file:
+    path: /etc/udev/rules.d/90-fabric-hotplug.rules
+    state: absent
+  when: proxmox_fabric_address | default('') | length == 0
+  notify: reload udev rules
+
 - name: configure network interfaces
   template:
     src: network/interfaces.jinja2

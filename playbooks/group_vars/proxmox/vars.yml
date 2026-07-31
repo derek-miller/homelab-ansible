@@ -189,6 +189,13 @@ proxmox_notification_matchers:
     comment: Non-critical (info/notice) notifications - disable to quiet routine traffic
     match-severity: info,notice
     target: node-red
+  # PVE re-injects this built-in whenever the file omits it, and it matches
+  # everything. Overriding it disabled is the only way to retire it.
+  - name: default-matcher
+    comment: Superseded by the node-red matchers
+    mode: all
+    target: mail-to-root
+    disable: 1
 
 proxmox_ha_resources:
   - sid: vm:100
