@@ -27,6 +27,7 @@
  *   GITHUB_GUARDRAILS_FILE   — path to file containing GitHub guardrails text
  *   GITHUB_ALLOW_USERS       — comma-separated usernames to allow (allowlist mode; mutually exclusive with GITHUB_IGNORE_USERS)
  *   GITHUB_IGNORE_USERS      — comma-separated usernames to skip (ignorelist mode; mutually exclusive with GITHUB_ALLOW_USERS)
+ *   GITHUB_SELF_USERS        — comma-separated commit-author names for this agent's own bots; all-green CI batches on their commits are dropped (optional)
  *
  * YouTrack (enabled when YOUTRACK_HOOK_PATH is set):
  *   YOUTRACK_HOOK_PATH       — URL path prefix for YouTrack webhooks
@@ -108,6 +109,13 @@ const GITHUB_ALLOW_USERS = (process.env.GITHUB_ALLOW_USERS || "")
   .split(",")
   .map((u) => u.trim().toLowerCase())
   .filter(Boolean);
+// Commit authors that are this agent's own service accounts. Used only to drop
+// all-green CI batches on commits we authored ourselves; see
+// isSelfAuthoredGreenCheckBatch(). Empty (the default) disables the behaviour.
+const GITHUB_SELF_USERS = (process.env.GITHUB_SELF_USERS || "")
+  .split(",")
+  .map((u) => u.trim().toLowerCase())
+  .filter(Boolean);
 const GITHUB_IGNORE_USERS = (process.env.GITHUB_IGNORE_USERS || "")
   .split(",")
   .map((u) => u.trim().toLowerCase())
@@ -147,7 +155,7 @@ const OPENCLAW_DELIVER = (process.env.OPENCLAW_DELIVER || "false").toLowerCase()
 const BATCH_WINDOW_MS = parseInt(process.env.BATCH_WINDOW_MS || "10000", 10);
 const MAX_BATCH_SIZE = 50;
 
-/** Map of batchKey → { events: [{eventType, detail, formattedMessage}], timer, guardrails, source, sessionKey } */
+/** Map of batchKey → { events: [{eventType, detail, formattedMessage}], timer, guardrails, source, sessionKey, deliveryIds } */
 const pendingBatches = new Map();
 
 // ─── Ticket ID extraction ───────────────────────────────────────────
@@ -234,10 +242,14 @@ function extractTicketIdFromGitHub(event, payload) {
     }
   }
 
-  // Try PR body for "Fixes TICKET-ID" / "Closes TICKET-ID" patterns
+  // Try PR body for "Fixes TICKET-ID" / "Closes TICKET-ID" patterns. The `\[?`
+  // matters: we write these as markdown links ("Fixes [DRV-44](url)"), and
+  // without it the PR-side events find no ticket while check_suite still
+  // matches the bare ID in the commit message, splitting one PR across two
+  // lanes and double-reviewing it (HL-17).
   const body = payload.pull_request?.body || payload.issue?.body;
   if (body) {
-    const fixesMatch = body.match(new RegExp(`(?:fixes|closes|resolves)\\s+(${TICKET_KEY_GROUP}-\\d+)`, "i"));
+    const fixesMatch = body.match(new RegExp(`(?:fixes|closes|resolves)\\s+\\[?(${TICKET_KEY_GROUP}-\\d+)`, "i"));
     if (fixesMatch) return fixesMatch[1];
   }
 
@@ -245,34 +257,44 @@ function extractTicketIdFromGitHub(event, payload) {
 }
 
 /**
- * Per-thread session key for GitHub events with no linked ticket. Keeps every
- * event for one PR/issue on the same OpenClaw lane (so they process in order)
- * while letting different threads run on parallel lanes. Without this, ticketless
- * events (notably check_run/check_suite CI bursts) all collapse onto the single
- * default `hook:ingress` lane and thrash it with lifecycle-claim retries.
- * Returns null for repo-level events with no PR/issue number (e.g. push), which
- * fall back to the default lane.
- * @returns {string|null} Session key like "hook:github:owner/repo#39" or null
+ * Resolve the thread of work a GitHub event belongs to.
+ *
+ * Every event for one PR/issue must resolve to the same id regardless of which
+ * webhook fired. When they don't, the events split across batches and OpenClaw
+ * lanes, and two agent sessions review the same head independently (HL-17).
+ * The returned id is used for BOTH the batch key and the session key so the two
+ * cannot disagree.
+ *
+ * Precedence: a ticket is the full track of work, and keeps GitHub events on the
+ * same lane as the YouTrack events for that ticket. Ticket extraction is only
+ * partial today because payload shapes differ per event type (check_run and
+ * check_suite carry no PR title/body; issue_comment carries no branch), so the
+ * PR/issue number, present on nearly every event, is the fallback, and the
+ * branch is the last resort for numberless events (post-merge CI, pushes).
+ *
+ * @returns {{id: string, sessionKey: string|null}}
  */
-function githubThreadSessionKey(payload) {
+function resolveGitHubThread(event, payload) {
   const repo = payload.repository?.full_name;
-  if (!repo) return null;
+  if (!repo) return { id: "unknown", sessionKey: null };
+
   const number =
     payload.pull_request?.number ??
     payload.issue?.number ??
     payload.check_run?.pull_requests?.[0]?.number ??
     payload.check_suite?.pull_requests?.[0]?.number;
-  if (number != null) return `hook:github:${repo}#${number}`;
-  // Repo-level fallback for numberless events (post-merge/default-branch CI,
-  // pushes): key on the branch so a repo's per-branch events stay ordered on
-  // one lane while different branches run in parallel. This is the bulk of the
-  // load in repos whose branches don't carry a ticket ID (e.g. CI on `main`).
+
   const branch =
     payload.check_run?.check_suite?.head_branch ??
     payload.check_suite?.head_branch ??
     payload.workflow_run?.head_branch ??
     (typeof payload.ref === "string" ? payload.ref.replace(/^refs\/heads\//, "") : null);
-  return branch ? `hook:github:${repo}@${branch}` : `hook:github:${repo}`;
+
+  const id =
+    number != null ? `${repo}#${number}` : branch ? `${repo}@${branch}` : repo;
+
+  const ticketId = extractTicketIdFromGitHub(event, payload);
+  return { id, sessionKey: ticketId ? `ticket:${ticketId}` : `hook:github:${id}` };
 }
 
 /**
@@ -763,26 +785,54 @@ function formatYouTrackMessage(payload) {
 
 // ─── Batching helpers ────────────────────────────────────────────────
 
-/** Return the batch key for a GitHub event, or null to forward immediately */
-function getGitHubBatchKey(event, payload) {
-  const repo = payload.repository?.full_name || "unknown";
-  switch (event) {
-    case "pull_request_review":
-    case "pull_request_review_comment":
-    case "pull_request":
-      return `github:${repo}:${payload.pull_request?.number}`;
-    case "issue_comment":
-    case "issues":
-      return `github:${repo}:${payload.issue?.number}`;
-    case "check_run":
-      // No batching for check_run — forward immediately so the agent can
-      // react to CI failures as fast as possible
-      return null;
-    case "check_suite":
-      return null;
-    default:
-      return null; // push and unknown events: forward immediately
-  }
+/**
+ * Per-event check metadata, used at flush time to spot an all-green CI batch on
+ * a commit we authored ourselves.
+ *
+ * Deliberately gathered per event rather than filtered per event: `check_run`
+ * payloads carry no commit author at all (only `check_suite` has
+ * `head_commit.author`), and `check_run created` arrives before the suite
+ * completes. Judging the whole batch sidesteps both problems, because by flush
+ * time the suite's authorship is in hand no matter what order things arrived.
+ *
+ * Note the actor filter cannot do this job: on these payloads `sender` is the
+ * repo owner (`derek-miller`), not the bot that authored the commit.
+ */
+function getCheckMeta(event, payload) {
+  if (event !== "check_run" && event !== "check_suite") return { isCheck: false };
+  const node = event === "check_run" ? payload.check_run : payload.check_suite;
+  return {
+    isCheck: true,
+    conclusion: node?.conclusion ?? null,
+    commitAuthor:
+      payload.check_suite?.head_commit?.author?.name ??
+      payload.check_run?.check_suite?.head_commit?.author?.name ??
+      null,
+  };
+}
+
+/**
+ * True when a batch is nothing but successful CI on a commit one of our own
+ * service accounts authored. Opening a PR fires its own CI, which used to wake
+ * an agent to review work that agent had just pushed (HL-17).
+ *
+ * Failures still get through, so AGENT-33 (react to broken builds on agent PRs)
+ * is unaffected, and green CI on a human's commit still gets through, so
+ * AGENT-36 (green means mergeable) is unaffected.
+ */
+function isSelfAuthoredGreenCheckBatch(events) {
+  if (GITHUB_SELF_USERS.length === 0) return false;
+  if (events.length === 0) return false;
+  if (!events.every((e) => e.check?.isCheck)) return false;
+
+  // Queued/in-progress runs carry no conclusion; they are not evidence either
+  // way, but a batch of only those tells us nothing, so require at least one.
+  const conclusions = events.map((e) => e.check.conclusion).filter(Boolean);
+  if (conclusions.length === 0) return false;
+  if (!conclusions.every((c) => c === "success")) return false;
+
+  const author = events.map((e) => e.check.commitAuthor).find(Boolean);
+  return !!author && GITHUB_SELF_USERS.includes(author.toLowerCase());
 }
 
 /** Return true if this event should flush its batch right away */
@@ -811,6 +861,12 @@ function getGitHubEventDetail(event, payload) {
       return { eventType: event, detail: `${repo}#${payload.issue?.number}` };
     case "issues":
       return { eventType: event, detail: `${repo}#${payload.issue?.number} action=${payload.action}` };
+    case "check_run":
+      return { eventType: event, detail: `${repo} ${payload.check_run?.name} ${payload.action}=${payload.check_run?.conclusion ?? "pending"}` };
+    case "check_suite":
+      return { eventType: event, detail: `${repo} ${payload.action}=${payload.check_suite?.conclusion ?? "pending"}` };
+    case "push":
+      return { eventType: event, detail: `${repo} ${(payload.ref || "").replace(/^refs\/heads\//, "")}` };
     default:
       return { eventType: event, detail: repo };
   }
@@ -824,10 +880,11 @@ function getYouTrackEventDetail(payload) {
 }
 
 /** Add an event entry to a pending batch, starting the debounce timer if needed */
-function addToBatch(key, eventEntry, guardrails, source, sessionKey = null) {
+function addToBatch(key, eventEntry, guardrails, source, sessionKey = null, deliveryId = null) {
   if (pendingBatches.has(key)) {
     const batch = pendingBatches.get(key);
     batch.events.push(eventEntry);
+    if (deliveryId) batch.deliveryIds.push(deliveryId);
     // First non-null sessionKey wins (batch events should share the same ticket)
     if (sessionKey && !batch.sessionKey) batch.sessionKey = sessionKey;
     logDebug(`Added event to batch ${key} (${batch.events.length} total)`);
@@ -840,7 +897,14 @@ function addToBatch(key, eventEntry, guardrails, source, sessionKey = null) {
       logDebug(`Batch window expired for ${key}, flushing`);
       flushBatch(key);
     }, BATCH_WINDOW_MS);
-    pendingBatches.set(key, { events: [eventEntry], timer, guardrails, source, sessionKey });
+    pendingBatches.set(key, {
+      events: [eventEntry],
+      timer,
+      guardrails,
+      source,
+      sessionKey,
+      deliveryIds: deliveryId ? [deliveryId] : [],
+    });
     logDebug(`Started new batch for ${key}${sessionKey ? ` (session: ${sessionKey})` : ""}`);
   }
 }
@@ -852,8 +916,15 @@ async function flushBatch(key) {
   clearTimeout(batch.timer);
   pendingBatches.delete(key);
 
-  const { events, guardrails, source, sessionKey } = batch;
+  const { events, guardrails, source, sessionKey, deliveryIds } = batch;
   if (events.length === 0) return;
+
+  if (source === "GitHub" && isSelfAuthoredGreenCheckBatch(events)) {
+    console.log(
+      `[${new Date().toISOString()}] Dropping batch ${key}: ${events.length} green check event(s) on a commit authored by ${events.map((e) => e.check.commitAuthor).find(Boolean)}`
+    );
+    return;
+  }
 
   let message;
   if (events.length === 1) {
@@ -867,7 +938,7 @@ async function flushBatch(key) {
   }
 
   logDebug(`Flushing batch ${key} with ${events.length} event(s)${sessionKey ? ` → session ${sessionKey}` : ""}`);
-  await forwardToOpenClaw(message, source, sessionKey);
+  await forwardToOpenClaw(message, source, sessionKey, (deliveryIds || []).join(","));
 }
 
 /** Flush all pending batches — called on graceful shutdown */
@@ -1065,41 +1136,40 @@ const server = createServer(async (req, res) => {
     }
 
     const eventMessage = formatGitHubMessage(event, payload);
-    const batchKey = getGitHubBatchKey(event, payload);
 
-    // Extract ticket ID for session routing; without one, fall back to a
-    // per-PR/issue lane instead of the shared default `hook:ingress` lane.
-    const ticketId = extractTicketIdFromGitHub(event, payload);
-    const sessionKey = ticketId
-      ? `ticket:${ticketId}`
-      : githubThreadSessionKey(payload);
-    if (sessionKey) {
-      logDebug(`GitHub ${event}: routed to session ${sessionKey}`);
-    }
-
-    if (!batchKey) {
-      // No batch key (e.g. push) — forward immediately
-      logDebug(`GitHub ${event}: no batch key, forwarding immediately`);
-      const message = `${GITHUB_GUARDRAILS}\n${eventMessage}`;
-      res.writeHead(200);
-      res.end("OK");
-      forwardToOpenClaw(message, "GitHub", sessionKey);
-      return;
-    }
+    // One resolved thread identity drives both the batch key and the session
+    // key, so a PR's events can never split across batches or lanes (HL-17).
+    //
+    // Every event batches, with no per-type opt-out. The previous allowlist was
+    // both incomplete and stale: `pull_request_review_thread` is subscribed but
+    // was missing, so it forwarded immediately exactly the way check_run and
+    // check_suite used to, while `push` was listed and neither App subscribes to
+    // it. An allowlist here has to be re-audited every time the App's event
+    // subscriptions change, and silently reintroduces the duplicate-review bug
+    // when it isn't. The thread id is defined for any payload, so key on it.
+    const thread = resolveGitHubThread(event, payload);
+    const batchKey = `github:${thread.id}`;
+    const sessionKey = thread.sessionKey;
+    logDebug(`GitHub ${event}: thread ${thread.id} → session ${sessionKey}`);
 
     const { eventType, detail } = getGitHubEventDetail(event, payload);
-    const eventEntry = { eventType, detail, formattedMessage: eventMessage };
+    const eventEntry = {
+      eventType,
+      detail,
+      formattedMessage: eventMessage,
+      check: getCheckMeta(event, payload),
+    };
 
     if (isImmediateFlushEvent(event, payload)) {
       logDebug(`GitHub ${event} (${detail}): immediate flush trigger`);
-      addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub", sessionKey);
+      addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub", sessionKey, delivery);
       res.writeHead(200);
       res.end("OK");
       flushBatch(batchKey);
       return;
     }
 
-    addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub", sessionKey);
+    addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub", sessionKey, delivery);
     res.writeHead(200);
     res.end("OK");
     return;
@@ -1178,7 +1248,7 @@ const server = createServer(async (req, res) => {
 });
 
 /** Forward a formatted message to the OpenClaw hooks API */
-async function forwardToOpenClaw(message, sourceName, sessionKey = null) {
+async function forwardToOpenClaw(message, sourceName, sessionKey = null, idempotencyKey = null) {
   try {
     const hookBody = {
       message,
@@ -1188,6 +1258,11 @@ async function forwardToOpenClaw(message, sourceName, sessionKey = null) {
     };
     if (sessionKey) {
       hookBody.sessionKey = sessionKey;
+    }
+    // Delivery GUID(s) of the source webhook(s): lets OpenClaw drop a replay if
+    // the upstream retries or the proxy is restarted mid-flush.
+    if (idempotencyKey) {
+      hookBody.idempotencyKey = idempotencyKey;
     }
     const hookPayload = JSON.stringify(hookBody);
 
