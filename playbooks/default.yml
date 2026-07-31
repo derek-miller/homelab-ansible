@@ -389,12 +389,6 @@
   tags:
     - tplink-plug-stats
 
-- hosts: sysdweb
-  roles:
-    - role: generic/sysdweb
-  tags:
-    - sysdweb
-
 - hosts: sourcebot-db
   roles:
     - role: generic/sourcebot-db

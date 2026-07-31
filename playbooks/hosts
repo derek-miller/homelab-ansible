@@ -77,19 +77,13 @@ rackvm[1:5]
 [ser2net]
 
 [network-ups-tools]
-rackpi2
 rackvm4
 raspi1
 
-[sysdweb]
-rackpi[1:5]
-
 [tplink-plug-stats]
-rackpi2
 rackvm4
 
 [control4-director-stats]
-rackpi2
 rackvm4
 
 [macos]
