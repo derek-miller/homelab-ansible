@@ -19,7 +19,10 @@ iface vmbr0 inet static
 # Isolated replication/migration fabric. No gateway by design — this segment
 # routes nowhere. Jumbo frames are enabled on the switch as well; without that,
 # frames over 1518 bytes are dropped and MTU 9000 fails in confusing ways.
+# Both allow-classes are needed: auto covers boot, allow-hotplug covers the USB
+# NIC re-enumerating, which otherwise leaves it renamed but unaddressed.
 auto {{ proxmox_fabric_interface }}
+allow-hotplug {{ proxmox_fabric_interface }}
 iface {{ proxmox_fabric_interface }} inet static
 	address {{ proxmox_fabric_address }}
 	mtu {{ proxmox_fabric_mtu }}
