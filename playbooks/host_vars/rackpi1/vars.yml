@@ -20,7 +20,6 @@ authorized_keys:
 
 additional_docker_users:
   - pi
-docker_stack_definition: "{{ vault_docker_stack_definition }}"
 
 lightdm_autologin_user: pi
 lightdm_xorg_create_video_dummy: yes

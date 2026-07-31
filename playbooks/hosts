@@ -56,13 +56,12 @@ rackvm5 docker_images_to_build=sourcebot,control4-driver-scraper,postgres-pgcron
 rackvm5
 
 [docker_swarm_manager]
-rackpi1 docker_stack_name=rackpis
-rackvm1
+rackvm1 docker_stack_name=rackpis
 rackvm2
+rackvm3
 
 [docker_swarm_worker]
-rackpi[2:5]
-rackvm[3:5]
+rackvm[4:5]
 
 [project-files]
 rackvm1

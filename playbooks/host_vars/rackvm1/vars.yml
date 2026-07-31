@@ -62,3 +62,5 @@ docker_daemon_options:
 project_files:
   - src: "vault/{{ inventory_hostname }}/var/docker/"
     dest: /var/docker/
+
+docker_stack_definition: "{{ vault_docker_stack_definition }}"

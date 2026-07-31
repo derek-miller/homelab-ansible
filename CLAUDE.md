@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Ansible-managed homelab infrastructure. Docker Swarm cluster (rackpi1 manager + rackpi2-5 workers, all ARM64 Raspberry Pi 5s) running user-facing services (sourcebot, youtrack, home assistant, arr stack, etc.). A Mac mini (`rackmini1`) runs native-only services outside the swarm (Plex, Homebridge, Tailscale, SMB mounts). Single main playbook (`playbooks/default.yml`) with tag-based execution.
+Ansible-managed homelab infrastructure. Docker Swarm cluster (rackvm1-3 managers + rackvm4-5 workers, amd64 VMs on the pve1-5 Proxmox cluster) running user-facing services (sourcebot, youtrack, home assistant, arr stack, etc.). A Mac mini (`rackmini1`) runs native-only services outside the swarm (Plex, Homebridge, Tailscale, SMB mounts). Single main playbook (`playbooks/default.yml`) with tag-based execution.
 
 ## macOS hosts — required manual steps at bootstrap
 
@@ -19,7 +19,7 @@ macOS has a small number of operations that cannot be scripted without GUI inter
 ```bash
 make after-git-pull     # Install all deps after pulling
 make run                # Run default playbook against all hosts
-make run hosts=rackpi1  # Limit to specific host
+make run hosts=rackvm1  # Limit to specific host
 make run tags=docker    # Run specific tag (auto-skips base,common)
 make dry-run            # Check mode
 make check              # Syntax validation
@@ -65,7 +65,7 @@ make bootstrap hosts=<host> user=<user>
 
 ## Key Patterns
 
-- **Docker Swarm stacks** are defined entirely within `playbooks/host_vars/rackpi1/vault.yml` as the `vault_docker_stack_definition` variable. Services, volumes, networks, and all config live there.
+- **Docker Swarm stacks** are defined entirely within `playbooks/host_vars/rackvm1/vault.yml` as the `vault_docker_stack_definition` variable. Services, volumes, networks, and all config live there. The stack is still named `rackpis` and every volume is `rackpis_*`; renaming it would point all 41 services at empty volumes, so the name stays regardless of which hosts run it.
 - **Docker Compose** services for individual hosts are in their respective `host_vars/{hostname}/vault.yml` as `docker_compose_definition`.
 - **Vault encryption** is enforced by a pre-commit hook (`hooks/pre-commit` → `make vault-check`). The `.vault_pass` file in the repo root (git-ignored) holds the encryption key.
 - **Variable layering**: Role defaults → group_vars → host_vars. Vault variables are referenced indirectly (e.g., `docker_stack_definition: "{{ vault_docker_stack_definition }}"`).
