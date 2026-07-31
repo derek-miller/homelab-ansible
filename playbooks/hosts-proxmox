@@ -1,0 +1,8 @@
+[proxmox]
+pve[1:5]
+
+[proxmox_primary]
+pve1
+
+[proxmox_guests]
+rackvm[1:5]

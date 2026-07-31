@@ -1,0 +1,25 @@
+---
+# update_storage_status emits `type` as both tag and field on the same line,
+# which InfluxDB 3 rejects with a 400 where 1.x tolerated it. PVE already has the
+# exclusion mechanism — guest callers pass { 'vmid' => 1 } — storage just omits
+# it. Reapplied every run because pve-manager upgrades revert this vendor file;
+# a revert shows up as 400s in the pvestatd journal and no object=storages rows.
+
+- name: keep a pristine copy of the influxdb status plugin
+  copy:
+    src: "{{ _proxmox_influxdb_plugin }}"
+    dest: "{{ _proxmox_influxdb_plugin }}.orig"
+    remote_src: yes
+    force: no
+    owner: root
+    group: root
+    mode: 0644
+
+- name: exclude the storage `type` field so influxdb3 accepts the line
+  lineinfile:
+    path: "{{ _proxmox_influxdb_plugin }}"
+    regexp: '^    build_influxdb_payload\(\$class, \$txn, \$data, \$ctime, \$object\);$'
+    line: '    build_influxdb_payload($class, $txn, $data, $ctime, $object, { type => 1 });'
+    backrefs: no
+    validate: "{{ 'perl -c %s' }}"
+  notify: restart pvestatd

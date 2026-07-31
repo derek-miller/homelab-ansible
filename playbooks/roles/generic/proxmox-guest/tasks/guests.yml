@@ -1,0 +1,124 @@
+---
+- name: clone guests from the template
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: no
+    node: "{{ item.node }}"
+    clone: "{{ proxmox_guest_template_name }}"
+    # Source template lives on the guest's own node, so its id is derived from
+    # that node rather than from the host running this play.
+    vmid: "{{ 9000 + hostvars[item.node].proxmox_nodeid }}"
+    newid: "{{ item.vmid }}"
+    name: "{{ item.name }}"
+    full: yes
+    storage: "{{ proxmox_guest_storage }}"
+    timeout: 600
+    state: present
+  loop: "{{ proxmox_guests }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.vmid }}) on {{ item.node }}"
+  delegate_to: localhost
+  # A guest that already exists and was not built from the template opts out here
+  # only. Its hardware and cloud-init are still converged below.
+  when: item.clone | default(true) | bool
+
+- name: read current guest config
+  command: "qm config {{ item.vmid }}"
+  register: proxmox_guest_config
+  changed_when: false
+  check_mode: no
+  delegate_to: "{{ item.node }}"
+  loop: "{{ proxmox_guests }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# proxmox_kvm's update:yes never diffs first, so it reports changed every run —
+# hence guarding on current config. Sizing and cloud-init are applied separately
+# because the clone action silently ignores most hardware parameters.
+- name: configure guest hardware and cloud-init
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: no
+    node: "{{ item.item.node }}"
+    vmid: "{{ item.item.vmid }}"
+    cores: "{{ item.item.cores }}"
+    memory: "{{ item.item.memory }}"
+    balloon: "{{ item.item.balloon | default(0) }}"
+    onboot: "{{ item.item.onboot | default(true) }}"
+    ciuser: "{{ item.item.ciuser | default(omit) }}"
+    sshkeys: "{{ proxmox_guest_ssh_keys }}"
+    ipconfig:
+      ipconfig0: "ip={{ item.item.address }},gw={{ item.item.gateway | default(proxmox_lan_gateway) }}"
+    update: yes
+    state: present
+  loop: "{{ proxmox_guest_config.results }}"
+  loop_control:
+    label: "{{ item.item.name }}: {{ item.item.cores }} cores, {{ item.item.memory }} MiB"
+  delegate_to: localhost
+  when: >-
+    ('cores: ' ~ item.item.cores) not in item.stdout
+    or ('memory: ' ~ item.item.memory) not in item.stdout
+    or ('balloon: ' ~ (item.item.balloon | default(0))) not in item.stdout
+    or (item.item.ciuser is defined
+         and ('ciuser: ' ~ item.item.ciuser) not in item.stdout)
+    or ('ip=' ~ item.item.address) not in item.stdout
+    or ('onboot: ' ~ (item.item.onboot | default(true) | int)) not in item.stdout
+
+# qm set allocates the create size in whole GiB, so a unit suffix other than G
+# would be silently truncated to GiB (2T -> 2 GiB). Reject anything but <int>G.
+- name: require guest disk sizes in whole GiB
+  assert:
+    that: item.1.size is match('^[0-9]+G$')
+    fail_msg: >-
+      {{ item.0.name }} disk {{ item.1.iface }} size '{{ item.1.size }}' must be
+      an integer with a G suffix.
+    quiet: yes
+  loop: "{{ proxmox_guests | subelements('disks', skip_missing=true) }}"
+  loop_control:
+    label: "{{ item.0.name }} {{ item.1.iface }}"
+
+# The template's disk is the 3 GB cloud image, so every declared disk needs work
+# after a clone. Declared per interface, since a guest can carry more than one.
+# Missing disks are created and undersized ones grown; nothing shrinks.
+- name: work out which disks need creating or growing
+  set_fact:
+    proxmox_guest_disk_plan: >-
+      {%- set out = [] -%}
+      {%- for r in proxmox_guest_config.results -%}
+      {%- for d in r.item.disks | default([]) -%}
+      {#- match the specific interface's line, not the whole config: two disks can
+          share a size, and a bare `size=` search would then compare the wrong one -#}
+      {%- set line = r.stdout_lines | select('match', '^' ~ d.iface ~ ':') | first | default('') -%}
+      {%- set base = {'name': r.item.name, 'vmid': r.item.vmid, 'node': r.item.node,
+                      'iface': d.iface, 'size': d.size,
+                      'storage': d.storage | default(r.item.storage | default(proxmox_guest_storage))} -%}
+      {%- if line == '' -%}
+      {%- set _ = out.append(base | combine({'action': 'create'})) -%}
+      {%- elif ('size=' ~ d.size) not in line -%}
+      {%- set _ = out.append(base | combine({'action': 'grow'})) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ out }}
+
+- name: attach missing disks
+  command: >-
+    qm set {{ item.vmid }}
+    --{{ item.iface }} {{ item.storage }}:{{ item.size | regex_replace('[^0-9]', '') }},discard=on
+  loop: "{{ proxmox_guest_disk_plan | selectattr('action', 'equalto', 'create') | list }}"
+  loop_control:
+    label: "{{ item.name }} {{ item.iface }} = {{ item.size }}"
+  delegate_to: "{{ item.node }}"
+
+- name: grow undersized disks
+  command: "qm disk resize {{ item.vmid }} {{ item.iface }} {{ item.size }}"
+  loop: "{{ proxmox_guest_disk_plan | selectattr('action', 'equalto', 'grow') | list }}"
+  loop_control:
+    label: "{{ item.name }} {{ item.iface }} -> {{ item.size }}"
+  delegate_to: "{{ item.node }}"

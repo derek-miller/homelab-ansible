@@ -1,0 +1,135 @@
+---
+- name: pin interface names by driver
+  template:
+    src: "systemd-network/{{ item.file }}.jinja2"
+    dest: "/etc/systemd/network/{{ item.file }}"
+    owner: root
+    group: root
+    mode: 0644
+  loop:
+    - file: 10-nic0.link
+    - file: 11-nic1.link
+  notify: proxmox interface names changed
+
+- name: configure network interfaces
+  template:
+    src: network/interfaces.jinja2
+    dest: /etc/network/interfaces
+    owner: root
+    group: root
+    mode: 0644
+    validate: "{{ 'ifup --no-act --all --interfaces %s' }}"
+  notify: reload network config
+
+- name: create mount points for cifs storages
+  file:
+    path: "/mnt/pve/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  loop: "{{ proxmox_cifs_storages | default([]) }}"
+
+# The subscription server ID is a function of /etc/machine-id, which a reinstall
+# regenerates. Restoring the captured value re-binds the existing key instead of
+# orphaning it against a new server ID.
+- name: restore machine-id
+  copy:
+    content: "{{ proxmox_machine_id }}\n"
+    dest: /etc/machine-id
+    owner: root
+    group: root
+    mode: 0444
+  when: proxmox_machine_id | default('') | length > 0
+  register: proxmox_machine_id_result
+
+- name: read current subscription status
+  command: pvesubscription get
+  register: proxmox_subscription_status
+  changed_when: false
+  failed_when: false
+  check_mode: no
+  when: proxmox_subscription_key | default('') | length > 0
+
+- name: apply subscription key
+  command: "pvesubscription set {{ proxmox_subscription_key }}"
+  no_log: yes
+  when:
+    - proxmox_subscription_key | default('') | length > 0
+    - >-
+      proxmox_machine_id_result is changed
+      or 'status: active' not in (proxmox_subscription_status.stdout | default(''))
+  notify: refresh subscription
+
+- include_tasks: influxdb-patch.yml
+  when: proxmox_patch_influxdb_storage_type | bool
+
+- name: cap the zfs arc
+  template:
+    src: modprobe/zfs.conf.jinja2
+    dest: /etc/modprobe.d/zfs.conf
+    owner: root
+    group: root
+    mode: 0644
+  notify: update initramfs
+
+- name: read the running arc ceiling
+  command: awk '/^c_max/{print $3}' /proc/spl/kstat/zfs/arcstats
+  register: proxmox_arc_running
+  changed_when: false
+  check_mode: no
+
+# Deliberately reports rather than reboots. zfs_arc_max is only read at module
+# load, and rebooting these nodes has its own hazards, so the file converges now
+# and the running value follows whenever the node next restarts.
+- name: report an arc ceiling that has not taken effect yet
+  debug:
+    msg: >-
+      Running arc ceiling is {{ (proxmox_arc_running.stdout | int / 1048576) | round | int }} MiB
+      but {{ ((ansible_memtotal_mb * 1048576 * proxmox_zfs_arc_fraction) | int / 1048576) | round | int }} MiB
+      is declared. The file is correct; this node needs a reboot for it to apply.
+  when: >-
+    ((proxmox_arc_running.stdout | int) - ((ansible_memtotal_mb * 1048576 * proxmox_zfs_arc_fraction) | int))
+      | abs > 67108864
+
+- name: configure hosts
+  template:
+    src: etc/hosts.jinja2
+    dest: /etc/hosts
+    owner: root
+    group: root
+    mode: 0644
+
+# Runs unconditionally rather than on a handler: the cert can disagree with the
+# FQDN without this file having changed on this run at all.
+- include_tasks: certs.yml
+
+- name: configure apt sources
+  template:
+    src: "apt/{{ item }}.jinja2"
+    dest: "/etc/apt/sources.list.d/{{ item }}"
+    owner: root
+    group: root
+    mode: 0644
+  loop:
+    - debian.sources
+    - pve-enterprise.sources
+
+# Left by the installer and never used — the cluster replicates with ZFS, not Ceph,
+# so this only costs an authenticated fetch on every apt update.
+- name: remove the unused ceph repository
+  file:
+    path: /etc/apt/sources.list.d/ceph.sources
+    state: absent
+
+- name: set the timezone
+  timezone:
+    name: "{{ proxmox_timezone }}"
+
+# A node whose clock has drifted rejects its own TLS certificates as not-yet-valid,
+# which is a failure mode this fleet has already hit elsewhere.
+- name: enable time synchronisation
+  systemd:
+    name: "{{ proxmox_time_sync_service }}"
+    enabled: yes
+    state: started

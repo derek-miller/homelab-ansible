@@ -1,0 +1,20 @@
+---
+proxmox_guest_state: present
+
+proxmox_guest_scope: all
+
+# One dict per guest, assembled in group_vars/proxmox from each host's
+# proxmox_guest (name comes from the inventory hostname). Example:
+#   - vmid: 201
+#     node: pve1
+#     name: rackvm1
+#     address: 192.168.1.21/24   # CIDR, feeds cloud-init ipconfig0
+#     cores: 4
+#     memory: 20480
+#     balloon: 12288             # optional, default 0
+#     onboot: true               # optional, default true
+#     ciuser: debian             # optional
+#     disks:
+#       - iface: scsi0
+#         size: 100G             # whole GiB
+proxmox_guests: []

@@ -30,7 +30,7 @@ ansible_playbook_cmd_fn = ansible-playbook $(1) $(ansible_default_flags) $(ansib
 ansible_playbook_cmd = $(call ansible_playbook_cmd_fn,$(playbook_file))
 ansible_setup = ansible -m setup $(ansible_default_flags) $(ansible_flags)
 
-ansible_bootstrap_flags = --user=$(user) --ask-become-pass --ask-pass
+ansible_bootstrap_flags = $(if $(user),--user=$(user)) --ask-pass $(if $(become_pass),--ask-become-pass)
 
 python_version_full := $(wordlist 2,4,$(subst ., ,$(shell python --version 2>&1)))
 python_version_major := $(word 1,${python_version_full})
@@ -108,6 +108,23 @@ run:
 dry-run:
 	$(ansible_playbook_cmd) --check
 
+# <name> selects playbooks/<name>.yml, paired with playbooks/hosts-<name>
+# when that inventory exists.
+bootstrap-% run-% dry-run-% check-%: playbook = $*
+bootstrap-% run-% dry-run-% check-%: inventory = $(if $(wildcard playbooks/hosts-$*),hosts-$*,hosts)
+
+bootstrap-%:
+	$(ansible_playbook_cmd) $(ansible_bootstrap_flags) --extra-vars=bootstrap=yes --tags=bootstrap --skip-tags=base,common
+
+run-%:
+	$(ansible_playbook_cmd)
+
+dry-run-%:
+	$(ansible_playbook_cmd) --check
+
+check-%:
+	$(ansible_playbook_cmd) --syntax-check
+
 .PHONY: facts
 facts:
 	$(ansible_setup) all
@@ -135,7 +152,6 @@ vault-ls-decrypted:
 .PHONY: vault-decrypt
 vault-decrypt:
 	$(if $(vault_files_encrypted),ansible-vault decrypt -v $(vault_flag) $(vault_files_encrypted))
-
 
 .PHONY: vault-encrypt
 vault-encrypt: vault-revert-unchanged

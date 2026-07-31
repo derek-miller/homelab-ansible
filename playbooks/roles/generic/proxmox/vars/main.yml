@@ -1,0 +1,2 @@
+---
+_proxmox_influxdb_plugin: /usr/share/perl5/PVE/Status/InfluxDB.pm

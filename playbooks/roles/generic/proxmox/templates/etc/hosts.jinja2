@@ -1,0 +1,13 @@
+{# PVE derives its node certificate's CN from the FQDN resolved here, so this file
+   is what decides whether the cert matches the name clients connect to. Getting it
+   wrong is recoverable but not obvious — see certs.yml, which repairs the cert when
+   the two disagree. #}
+127.0.0.1 localhost.localdomain localhost
+{{ proxmox_lan_address.split('/')[0] }} {{ inventory_hostname }}.{{ proxmox_domain }} {{ inventory_hostname }}
+
+::1     ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+ff02::3 ip6-allhosts

@@ -24,6 +24,16 @@ make run tags=docker    # Run specific tag (auto-skips base,common)
 make dry-run            # Check mode
 make check              # Syntax validation
 
+# Any other playbook by name: playbooks/<name>.yml, with playbooks/hosts-<name>
+# as its inventory when that file exists. hosts=/tags= work here too.
+make bootstrap-proxmox user=root   # First contact: asks for the PAM password,
+                                  # authorises the repo key for root, then forms
+                                  # or joins the cluster
+make run-proxmox        # Run playbooks/proxmox.yml against hosts-proxmox
+make run-proxmox hosts=pve3 tags=proxmox-cluster
+make dry-run-proxmox
+make check-proxmox
+
 # Vault
 make vault-diff         # Show vault file changes (use for commit messages)
 make vault-encrypt      # Encrypt all vault files (required before commit)

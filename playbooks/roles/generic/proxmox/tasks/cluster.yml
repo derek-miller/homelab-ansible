@@ -1,0 +1,323 @@
+---
+- name: configure realms
+  template:
+    src: pve/domains.cfg.jinja2
+    dest: /etc/pve/domains.cfg
+    owner: root
+    group: www-data
+    mode: 0640
+
+- name: configure storages
+  template:
+    src: pve/storage.cfg.jinja2
+    dest: /etc/pve/storage.cfg
+    owner: root
+    group: www-data
+    mode: 0640
+
+- name: configure notification targets and matchers
+  template:
+    src: pve/notifications.cfg.jinja2
+    dest: /etc/pve/notifications.cfg
+    owner: root
+    group: www-data
+    mode: 0640
+
+- name: configure cluster-wide defaults
+  template:
+    src: pve/datacenter.cfg.jinja2
+    dest: /etc/pve/datacenter.cfg
+    owner: root
+    group: www-data
+    mode: 0640
+
+- name: configure backup jobs
+  template:
+    src: pve/jobs.cfg.jinja2
+    dest: /etc/pve/jobs.cfg
+    owner: root
+    group: www-data
+    mode: 0640
+
+- name: configure metrics server
+  template:
+    src: pve/status.cfg.jinja2
+    dest: /etc/pve/status.cfg
+    owner: root
+    group: www-data
+    mode: 0640
+  notify: restart pvestatd
+
+# /etc/pve/priv is root-only and never returned by the API. PVE reads these
+# fresh on each use, so writing the file is enough.
+- name: create priv directories
+  file:
+    path: "/etc/pve/priv/{{ item }}"
+    state: directory
+    owner: root
+    group: www-data
+    mode: 0700
+  loop:
+    - storage
+    - metricserver
+
+- name: write cifs storage credentials
+  copy:
+    content: "{{ proxmox_cifs_password }}\n"
+    dest: /etc/pve/priv/storage/unas-backup.pw
+    owner: root
+    group: www-data
+    mode: 0600
+  no_log: yes
+
+- name: write metrics token
+  copy:
+    # No trailing newline: PVE passes the file contents through verbatim as the
+    # Authorization header value.
+    content: "{{ proxmox_influxdb_token }}"
+    dest: /etc/pve/priv/metricserver/influxdb3.pw
+    owner: root
+    group: www-data
+    mode: 0600
+  no_log: yes
+  notify: restart pvestatd
+
+- name: write notification secrets
+  copy:
+    content: |
+      webhook: discord
+      	secret name=token,value={{ proxmox_discord_webhook_token | b64encode }}
+    dest: /etc/pve/priv/notifications.cfg
+    owner: root
+    group: www-data
+    mode: 0600
+  no_log: yes
+
+# PVE owns user.cfg and autocreates OIDC users on login, so ACLs go through
+# the CLI rather than by templating that file.
+- name: read current acls
+  command: pvesh get /access/acl --output-format=json
+  register: proxmox_acl_current
+  changed_when: false
+  check_mode: no
+
+- name: grant acls
+  command: >-
+    pveum acl modify {{ item.path }}
+    --roles {{ item.roleid }}
+    --users {{ item.ugid }}
+    --propagate {{ item.propagate | default(1) }}
+  loop: "{{ proxmox_acls }}"
+  loop_control:
+    label: "{{ item.ugid }} -> {{ item.roleid }} on {{ item.path }}"
+  when: >-
+    (proxmox_acl_current.stdout | default('[]') | from_json
+      | selectattr('path', 'equalto', item.path)
+      | selectattr('roleid', 'equalto', item.roleid)
+      | selectattr('ugid', 'equalto', item.ugid)
+      | list | length) == 0
+
+- name: read current ha resources
+  command: pvesh get /cluster/ha/resources --output-format=json
+  register: proxmox_ha_current
+  changed_when: false
+  check_mode: no
+  failed_when: false
+
+- name: register ha resources
+  command: >-
+    ha-manager add {{ item.sid }}
+    --state {{ item.state | default('started') }}
+    --max_restart {{ item.max_restart | default(1) }}
+    --max_relocate {{ item.max_relocate | default(1) }}
+  loop: "{{ proxmox_ha_resources }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  when: >-
+    item.sid not in (proxmox_ha_current.stdout | default('[]', true) | from_json
+                     | map(attribute='sid') | list)
+
+# ha-manager add only creates; without this, UI edits stick.
+- name: converge ha resources
+  command: >-
+    ha-manager set {{ item.sid }}
+    --state {{ item.state | default('started') }}
+    --max_restart {{ item.max_restart | default(1) }}
+    --max_relocate {{ item.max_relocate | default(1) }}
+  loop: "{{ proxmox_ha_resources }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  vars:
+    live: >-
+      {{ (proxmox_ha_current.stdout | default('[]', true) | from_json
+          | selectattr('sid', 'equalto', item.sid) | list | first) | default({}, true) }}
+  when:
+    - live | length > 0
+    - >-
+      (live.state | default('')) != (item.state | default('started'))
+      or (live.max_restart | default(-1) | int) != (item.max_restart | default(1) | int)
+      or (live.max_relocate | default(-1) | int) != (item.max_relocate | default(1) | int)
+
+- name: read current ha rules
+  command: ha-manager rules config --output-format=json
+  register: proxmox_ha_rules_current
+  changed_when: false
+  check_mode: no
+  failed_when: false
+
+# PVE 9 replaced HA groups with rules — groupadd errors, though the old
+# syntax is still in `ha-manager help`. --strict is the new --restricted.
+- name: add ha node-affinity rules
+  command: >-
+    ha-manager rules add {{ item.type }} {{ item.rule }}
+    --resources {{ item.resources }}
+    --nodes "{{ item.nodes }}"
+    --strict {{ item.strict | default(0) }}
+  loop: "{{ proxmox_ha_rules }}"
+  loop_control:
+    label: "{{ item.rule }}"
+  when: >-
+    (proxmox_ha_rules_current.stdout | default('[]', true) | from_json
+      | selectattr('rule', 'equalto', item.rule)
+      | list | length) == 0
+
+- name: converge ha node-affinity rules
+  command: >-
+    ha-manager rules set {{ item.type }} {{ item.rule }}
+    --resources {{ item.resources }}
+    --nodes "{{ item.nodes }}"
+    --strict {{ item.strict | default(0) }}
+  loop: "{{ proxmox_ha_rules }}"
+  loop_control:
+    label: "{{ item.rule }}"
+  vars:
+    live: >-
+      {{ (proxmox_ha_rules_current.stdout | default('[]', true) | from_json
+          | selectattr('rule', 'equalto', item.rule) | list | first) | default({}, true) }}
+  when:
+    - live | length > 0
+    - >-
+      (live.nodes | default('')) != item.nodes
+      or (live.resources | default('')) != item.resources
+      or (live.strict | default(-1) | int) != (item.strict | default(0) | int)
+
+# Maintenance is runtime CRM state, not config, so nothing else clears it;
+# a node left in it is silently excluded from HA placement.
+- name: find nodes left in ha maintenance
+  shell: |
+    set -o pipefail
+    ha-manager status | sed -n 's/^lrm \([^ ]*\) (maintenance mode.*/\1/p'
+  args:
+    executable: /bin/bash
+  register: proxmox_ha_maintenance
+  changed_when: false
+  check_mode: no
+
+- name: clear ha maintenance left behind
+  command: "ha-manager crm-command node-maintenance disable {{ item }}"
+  loop: "{{ proxmox_ha_maintenance.stdout_lines }}"
+
+- name: replication
+  when: proxmox_replication_enabled | bool
+  block:
+    - name: read guests across the cluster
+      command: pvesh get /cluster/resources --type vm --output-format=json
+      register: proxmox_cluster_guests
+      changed_when: false
+      check_mode: no
+
+    - name: read current replication jobs
+      command: pvesr list
+      register: proxmox_replication_current
+      changed_when: false
+      check_mode: no
+
+    - name: work out each guest's replication target
+      set_fact:
+        proxmox_replication_plan: >-
+          {%- set ring = groups['proxmox'] | sort -%}
+          {%- set out = [] -%}
+          {%- for g in (proxmox_cluster_guests.stdout | from_json)
+                | sort(attribute='vmid') -%}
+          {#- PVE reports template: 0 on ordinary guests, so this has to filter on
+              the value. rejectattr('template', 'defined') drops everything. -#}
+          {%- if (g.template | default(0) | int) != 1 -%}
+          {%- set idx = ring.index(g.node) -%}
+          {%- set _ = out.append({
+                'vmid': g.vmid,
+                'name': g.name | default('vm' ~ g.vmid),
+                'source': g.node,
+                'target': ring[(idx + 1) % (ring | length)],
+              }) -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ out }}
+
+    - name: create replication jobs
+      command: >-
+        pvesr create-local-job {{ item.vmid }}-0 {{ item.target }}
+        --schedule "{{ proxmox_replication_schedule }}"
+      loop: "{{ proxmox_replication_plan }}"
+      loop_control:
+        label: "{{ item.name }} ({{ item.vmid }}) {{ item.source }} -> {{ item.target }}"
+      # A job whose target is wrong must be deleted and recreated — target is
+      # create-only — and that costs a full resync, so it is left to a human.
+      when: (item.vmid | string ~ '-0') not in proxmox_replication_current.stdout
+
+    - name: report jobs whose target does not match the ring
+      debug:
+        msg: >-
+          {{ item.name }} ({{ item.vmid }}) should replicate to {{ item.target }}.
+          Its existing job points elsewhere. Changing the target means deleting and
+          recreating the job, which forces a full resync — do it deliberately:
+          pvesr delete {{ item.vmid }}-0 && pvesr create-local-job {{ item.vmid }}-0 {{ item.target }}
+      loop: "{{ proxmox_replication_plan }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - (item.vmid | string ~ '-0') in proxmox_replication_current.stdout
+        - ('local/' ~ item.target) not in
+          (proxmox_replication_current.stdout_lines
+            | select('search', '^' ~ item.vmid | string ~ '-0') | join(' '))
+
+# PVE shows a token secret once, at creation, so this is asserted rather
+# than created.
+- name: read api tokens
+  command: "pveum user token list {{ proxmox_api_user }} --output-format=json"
+  register: proxmox_api_tokens
+  changed_when: false
+  check_mode: no
+  failed_when: false
+
+- name: require the provisioning api token
+  assert:
+    that:
+      - proxmox_api_tokens.rc == 0
+      - proxmox_api_token_id in (proxmox_api_tokens.stdout | default('[]'))
+    fail_msg: >-
+      The API token {{ proxmox_api_user }}!{{ proxmox_api_token_id }} does not exist,
+      so guest provisioning cannot authenticate. Create it and vault the secret it
+      prints — it is shown only once:
+      pveum user token add {{ proxmox_api_user }} {{ proxmox_api_token_id }} --privsep 0
+    quiet: yes
+
+# Corosync fails over silently, so a dead ring1 costs redundancy without
+# costing availability — nothing would report it until ring0 also broke.
+- name: read corosync link status
+  command: corosync-cfgtool -s
+  register: proxmox_corosync_links
+  changed_when: false
+  check_mode: no
+
+- name: require every corosync ring to carry every node
+  assert:
+    that:
+      - (proxmox_corosync_links.stdout | regex_findall('nodeid:\s+\d+:\s+(?:localhost|connected)')
+          | length) == (groups['proxmox'] | length) * proxmox_corosync_links_expected
+    fail_msg: >-
+      Expected {{ (groups['proxmox'] | length) * proxmox_corosync_links_expected }}
+      healthy corosync peer entries ({{ proxmox_corosync_links_expected }} rings across
+      {{ groups['proxmox'] | length }} nodes) but found
+      {{ proxmox_corosync_links.stdout | regex_findall('nodeid:\s+\d+:\s+(?:localhost|connected)') | length }}.
+      A ring is degraded — check the fabric link before it is the only one left.
+    quiet: yes

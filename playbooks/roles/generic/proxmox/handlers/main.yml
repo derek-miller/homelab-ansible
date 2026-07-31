@@ -1,0 +1,28 @@
+---
+- name: reload network config
+  command: ifreload -a
+  listen: reload network config
+
+# Renaming a live interface requires it to be down, so .link changes only take
+# effect on the next boot. Surfaced rather than acted on: bouncing a hypervisor's
+# management interface mid-play is not worth the convenience.
+- name: proxmox interface names changed
+  debug:
+    msg: >-
+      Interface .link files changed. Names are only re-applied on boot (or after
+      `ip link set <if> down; udevadm trigger --action=add`), so verify before
+      relying on them.
+  listen: proxmox interface names changed
+
+- name: refresh subscription
+  command: pvesubscription update
+  listen: refresh subscription
+
+- name: restart pvestatd
+  systemd:
+    name: pvestatd
+    state: restarted
+  listen: restart pvestatd
+
+- name: update initramfs
+  command: update-initramfs -u -k all

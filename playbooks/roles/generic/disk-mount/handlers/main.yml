@@ -1,0 +1,7 @@
+---
+# systemd generates its .mount units from fstab at daemon-reload, so a changed
+# fstab is not visible to it until then — `findmnt --verify` warns about exactly
+# this. Without it the new unit only appears after a reboot.
+- name: reload systemd units
+  systemd:
+    daemon_reload: yes

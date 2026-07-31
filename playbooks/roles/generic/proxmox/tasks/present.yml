@@ -1,0 +1,28 @@
+---
+- name: require site config
+  assert:
+    that:
+      - vars[item] is defined
+      - vars[item] not in [None, ""]
+    fail_msg: "{{ item }} must be set — see group_vars/proxmox"
+    quiet: yes
+  loop:
+    - proxmox_cluster_name
+    - proxmox_domain
+    - proxmox_timezone
+    - proxmox_keyboard
+    - proxmox_lan_driver
+    - proxmox_fabric_driver
+    - proxmox_fabric_mtu
+    - proxmox_bridge_vids
+    - proxmox_corosync_links_expected
+    - proxmox_metrics_server
+
+- include_tasks: node.yml
+  when: proxmox_scope == 'node'
+
+- include_tasks: bootstrap.yml
+  when: proxmox_scope == 'bootstrap'
+
+- include_tasks: cluster.yml
+  when: proxmox_scope == 'cluster'

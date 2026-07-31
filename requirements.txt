@@ -73,6 +73,8 @@ pathspec==1.1.1
     #   yamllint
 platformdirs==4.11.0
     # via black
+proxmoxer==2.3.0
+    # via -r requirements.in
 pycparser==3.0
     # via cffi
 pynacl==1.6.2

@@ -1,0 +1,34 @@
+---
+proxmox_state: present
+
+proxmox_scope: node
+
+proxmox_lan_interface: nic0
+proxmox_fabric_interface: nic1
+proxmox_bridge_vlan_aware: yes
+
+proxmox_machine_id:
+proxmox_subscription_key:
+
+# Reverted by a pve-manager upgrade, so it is reapplied every run.
+proxmox_patch_influxdb_storage_type: yes
+
+# preferred_username. Changing this orphans every ACL keyed on the old id.
+proxmox_oidc_username_claim: username
+proxmox_oidc_autocreate: 1
+proxmox_oidc_default: 1
+
+# Local ZFS is not shared: HA can only start a guest where its disks are.
+proxmox_replication_enabled: yes
+proxmox_replication_schedule: "*/15"
+
+proxmox_zfs_arc_fraction: 0.10
+proxmox_time_sync_service: chrony
+
+proxmox_acls: []
+proxmox_storages: []
+proxmox_notification_matchers: []
+proxmox_ha_resources: []
+proxmox_ha_rules: []
+proxmox_backup_jobs: []
+proxmox_cifs_storages: []

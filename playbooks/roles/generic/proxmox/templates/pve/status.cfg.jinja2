@@ -1,0 +1,8 @@
+{# Metrics. influxdbproto MUST be set: it defaults to udp, and pointing udp at
+   an HTTP-only influxdb3 fails as "Connection refused" via ICMP. #}
+influxdb: {{ proxmox_metrics_id }}
+	server {{ proxmox_metrics_server }}
+	port {{ proxmox_metrics_port }}
+	influxdbproto {{ proxmox_metrics_proto }}
+	bucket {{ proxmox_metrics_bucket }}
+	verify-certificate {{ proxmox_metrics_verify_certificate }}

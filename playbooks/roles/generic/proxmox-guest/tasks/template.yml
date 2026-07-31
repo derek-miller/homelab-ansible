@@ -1,0 +1,47 @@
+---
+- name: fetch the debian cloud image
+  get_url:
+    url: "{{ proxmox_guest_image_url }}"
+    dest: "{{ proxmox_guest_image_path }}"
+    mode: 0644
+    force: no
+
+- name: check whether the template exists
+  command: "qm config {{ proxmox_guest_template_vmid }}"
+  register: proxmox_guest_template_check
+  changed_when: false
+  failed_when: false
+  check_mode: no
+
+- name: create the template
+  when: proxmox_guest_template_check.rc != 0
+  block:
+    - name: define the vm
+      command: >-
+        qm create {{ proxmox_guest_template_vmid }}
+        --name {{ proxmox_guest_template_name }}
+        --ostype l26
+        --cpu host
+        --cores {{ proxmox_guest_template_cores }}
+        --memory {{ proxmox_guest_template_memory }}
+        --net0 virtio,bridge=vmbr0
+        --scsihw virtio-scsi-single
+        --agent enabled=1
+        --serial0 socket
+        --vga serial0
+
+    - name: import the cloud image as the boot disk
+      command: >-
+        qm set {{ proxmox_guest_template_vmid }}
+        --scsi0 {{ proxmox_guest_storage }}:0,import-from={{ proxmox_guest_image_path }},discard=on
+
+    - name: attach a cloud-init drive
+      command: >-
+        qm set {{ proxmox_guest_template_vmid }}
+        --ide2 {{ proxmox_guest_storage }}:cloudinit
+
+    - name: set the boot order
+      command: "qm set {{ proxmox_guest_template_vmid }} --boot order=scsi0"
+
+    - name: convert to a template
+      command: "qm template {{ proxmox_guest_template_vmid }}"

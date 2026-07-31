@@ -1,0 +1,28 @@
+auto lo
+iface lo inet loopback
+
+iface {{ proxmox_lan_interface }} inet manual
+
+auto vmbr0
+iface vmbr0 inet static
+	address {{ proxmox_lan_address }}
+	gateway {{ proxmox_lan_gateway }}
+	bridge-ports {{ proxmox_lan_interface }}
+	bridge-stp off
+	bridge-fd 0
+{% if proxmox_bridge_vlan_aware | bool %}
+	bridge-vlan-aware yes
+	bridge-vids {{ proxmox_bridge_vids }}
+{% endif %}
+
+{% if proxmox_fabric_address | default('') | length > 0 %}
+# Isolated replication/migration fabric. No gateway by design — this segment
+# routes nowhere. Jumbo frames are enabled on the switch as well; without that,
+# frames over 1518 bytes are dropped and MTU 9000 fails in confusing ways.
+auto {{ proxmox_fabric_interface }}
+iface {{ proxmox_fabric_interface }} inet static
+	address {{ proxmox_fabric_address }}
+	mtu {{ proxmox_fabric_mtu }}
+{% endif %}
+
+source /etc/network/interfaces.d/*

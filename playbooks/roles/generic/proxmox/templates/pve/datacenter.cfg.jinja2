@@ -1,0 +1,9 @@
+{# Cluster-wide defaults. The migration line is the load-bearing one: without it,
+   replication and live migration run over the LAN instead of the isolated 2.5GbE
+   fabric — everything still works, just on the wrong NIC, which is why it is worth
+   templating rather than leaving to a hand-edit that a reinstall would lose.
+   `insecure` skips SSH tunnelling of the disk stream, which is safe only because
+   that fabric is a dedicated switch with no gateway. #}
+email_from: {{ proxmox_mail_from }}
+keyboard: {{ proxmox_keyboard }}
+migration: network={{ proxmox_migration_network }},type=insecure

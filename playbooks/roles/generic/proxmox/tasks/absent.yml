@@ -1,0 +1,32 @@
+---
+- name: revert the influxdb storage-type patch
+  copy:
+    src: "{{ _proxmox_influxdb_plugin }}.orig"
+    dest: "{{ _proxmox_influxdb_plugin }}"
+    remote_src: yes
+    owner: root
+    group: root
+    mode: 0644
+  # Only if we have a pristine copy to restore; otherwise leave the vendor file
+  # alone rather than guess at its original contents.
+  when: proxmox_state == 'absent'
+  failed_when: false
+  notify: restart pvestatd
+
+- name: remove the pristine copy
+  file:
+    path: "{{ _proxmox_influxdb_plugin }}.orig"
+    state: absent
+
+- name: unpin interface names
+  file:
+    path: "/etc/systemd/network/{{ item }}"
+    state: absent
+  loop:
+    - 10-nic0.link
+    - 11-nic1.link
+  notify: proxmox interface names changed
+
+# /etc/network/interfaces is deliberately left in place. Removing it would strand
+# the node, and there is no meaningful "absent" state for a hypervisor's
+# management network.
