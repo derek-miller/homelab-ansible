@@ -1,0 +1,21 @@
+---
+# Only unschedule the jobs — never DROP the extension: postgres preloads pg_cron
+# from its command line and won't start if the library is gone.
+- name: unschedule the retention jobs
+  command:
+    argv:
+      - docker
+      - exec
+      - "{{ sourcebot_db_cid.stdout }}"
+      - psql
+      - -U
+      - "{{ sourcebot_db_user }}"
+      - -d
+      - "{{ sourcebot_db_name }}"
+      - -tAc
+      - "SELECT cron.unschedule(jobname) FROM cron.job WHERE jobname = '{{ item }}'"
+  loop: "{{ sourcebot_db_retention_jobs | map(attribute='name') | list }}"
+  register: sourcebot_db_unscheduled
+  changed_when: sourcebot_db_unscheduled.stdout | trim | length > 0
+  failed_when: false
+  when: sourcebot_db_cid.stdout | length > 0

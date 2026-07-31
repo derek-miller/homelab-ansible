@@ -1,0 +1,102 @@
+---
+- name: require the sourcebot postgres container
+  assert:
+    that: sourcebot_db_cid.stdout | length > 0
+    fail_msg: >-
+      sourcebot-postgres is not running on {{ inventory_hostname }}; deploy the
+      stack before applying the retention setup.
+    quiet: yes
+
+- name: converge the retention setup
+  vars:
+    psql:
+      - docker
+      - exec
+      - "{{ sourcebot_db_cid.stdout }}"
+      - psql
+      - -U
+      - "{{ sourcebot_db_user }}"
+      - -d
+      - "{{ sourcebot_db_name }}"
+      - -tAc
+  block:
+    - name: wait for postgres to accept connections
+      command: >-
+        docker exec {{ sourcebot_db_cid.stdout }}
+        pg_isready -U {{ sourcebot_db_user }} -d {{ sourcebot_db_name }}
+      register: sourcebot_db_ready
+      until: sourcebot_db_ready.rc == 0
+      retries: 30
+      delay: 5
+      changed_when: false
+
+    - name: create the pg_cron extension
+      command:
+        argv: "{{ psql + ['CREATE EXTENSION IF NOT EXISTS pg_cron'] }}"
+      register: sourcebot_db_extension
+      changed_when: "'already exists' not in sourcebot_db_extension.stderr"
+
+    # A CONCURRENTLY build interrupted midway leaves an invalid index that
+    # CREATE ... IF NOT EXISTS then skips forever while the planner ignores it.
+    - name: read the retention index's validity
+      command:
+        argv: >-
+          {{ psql + ["SELECT indisvalid FROM pg_index i JOIN pg_class c
+             ON c.oid = i.indexrelid WHERE c.relname = '" ~ sourcebot_db_index ~ "'"] }}
+      register: sourcebot_db_index_valid
+      changed_when: false
+
+    - name: drop the retention index if a prior build left it invalid
+      command:
+        argv: >-
+          {{ psql + ['DROP INDEX CONCURRENTLY IF EXISTS "' ~ sourcebot_db_index ~ '"'] }}
+      when: sourcebot_db_index_valid.stdout | trim == 'f'
+
+    - name: index the columns the retention sweeps scan
+      command:
+        argv: >-
+          {{ psql + ['CREATE INDEX CONCURRENTLY IF NOT EXISTS "' ~ sourcebot_db_index
+             ~ '" ON "RepoIndexingJob" (status, "createdAt")'] }}
+      register: sourcebot_db_indexed
+      changed_when: "'already exists' not in sourcebot_db_indexed.stderr"
+
+    - name: read RepoIndexingJob's storage parameters
+      command:
+        argv: >-
+          {{ psql + ["SELECT coalesce(array_to_string(reloptions, ','), '')
+             FROM pg_class WHERE relname = 'RepoIndexingJob'"] }}
+      register: sourcebot_db_reloptions
+      changed_when: false
+
+    - name: tighten RepoIndexingJob's autovacuum thresholds
+      command:
+        argv: >-
+          {{ psql + ['ALTER TABLE "RepoIndexingJob" SET (autovacuum_vacuum_scale_factor = '
+             ~ sourcebot_db_vacuum_scale_factor ~ ', autovacuum_analyze_scale_factor = '
+             ~ sourcebot_db_analyze_scale_factor ~ ')'] }}
+      when: >-
+        ('autovacuum_vacuum_scale_factor=' ~ sourcebot_db_vacuum_scale_factor)
+          not in (sourcebot_db_reloptions.stdout | trim).split(',')
+        or ('autovacuum_analyze_scale_factor=' ~ sourcebot_db_analyze_scale_factor)
+          not in (sourcebot_db_reloptions.stdout | trim).split(',')
+
+    - name: read the scheduled jobs
+      command:
+        argv: >-
+          {{ psql + ["SELECT jobname || '@@' || schedule || '@@'
+             || btrim(regexp_replace(command, '\s+', ' ', 'g')) FROM cron.job"] }}
+      register: sourcebot_db_scheduled
+      changed_when: false
+
+    - name: schedule the retention jobs
+      command:
+        argv: >-
+          {{ psql + ["SELECT cron.schedule('" ~ item.name ~ "', '" ~ item.schedule
+             ~ "', $sb$" ~ (item.sql | regex_replace('\s+', ' ') | trim) ~ "$sb$)"] }}
+      loop: "{{ sourcebot_db_retention_jobs }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: >-
+        (item.name ~ '@@' ~ item.schedule ~ '@@'
+         ~ (item.sql | regex_replace('\s+', ' ') | trim))
+        not in sourcebot_db_scheduled.stdout_lines
