@@ -1,0 +1,12 @@
+# ifupdown2 ships ifup@.service but not the udev rule that starts it, so a
+# re-enumerating USB NIC comes back named and link-up but without its address
+# (Debian #988050). This supplies the missing trigger.
+#
+# Must match move as well as add. A re-enumerating NIC emits add (as eth0) then
+# move (the rename to nic1); matching add alone loses the race, because the move
+# event's property set overwrites SYSTEMD_WANTS before systemd acts on it.
+#
+# Numbered above 80 so 80-net-setup-link.rules has already set ID_NET_NAME from
+# our .link file. Deliberately not named 80-ifupdown.rules — that would mask the
+# real file under /lib if ifupdown2 ever ships it.
+ACTION=="add|move", SUBSYSTEM=="net", ENV{ID_NET_NAME}=="{{ proxmox_fabric_interface }}", ENV{SYSTEMD_WANTS}+="ifup@{{ proxmox_fabric_interface }}.service"
