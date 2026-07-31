@@ -27,6 +27,7 @@
  *   GITHUB_GUARDRAILS_FILE   — path to file containing GitHub guardrails text
  *   GITHUB_ALLOW_USERS       — comma-separated usernames to allow (allowlist mode; mutually exclusive with GITHUB_IGNORE_USERS)
  *   GITHUB_IGNORE_USERS      — comma-separated usernames to skip (ignorelist mode; mutually exclusive with GITHUB_ALLOW_USERS)
+ *   GITHUB_SELF_USERS        — comma-separated commit-author names for this agent's own bots; all-green CI batches on their commits are dropped (optional)
  *
  * YouTrack (enabled when YOUTRACK_HOOK_PATH is set):
  *   YOUTRACK_HOOK_PATH       — URL path prefix for YouTrack webhooks
@@ -105,6 +106,13 @@ const OPENCLAW_HOOKS_URL = process.env.OPENCLAW_HOOKS_URL;
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 const GITHUB_HOOK_PATH = process.env.GITHUB_HOOK_PATH || "";
 const GITHUB_ALLOW_USERS = (process.env.GITHUB_ALLOW_USERS || "")
+  .split(",")
+  .map((u) => u.trim().toLowerCase())
+  .filter(Boolean);
+// Commit authors that are this agent's own service accounts. Used only to drop
+// all-green CI batches on commits we authored ourselves; see
+// isSelfAuthoredGreenCheckBatch(). Empty (the default) disables the behaviour.
+const GITHUB_SELF_USERS = (process.env.GITHUB_SELF_USERS || "")
   .split(",")
   .map((u) => u.trim().toLowerCase())
   .filter(Boolean);
@@ -803,6 +811,56 @@ function getGitHubBatchKey(event, threadId) {
   }
 }
 
+/**
+ * Per-event check metadata, used at flush time to spot an all-green CI batch on
+ * a commit we authored ourselves.
+ *
+ * Deliberately gathered per event rather than filtered per event: `check_run`
+ * payloads carry no commit author at all (only `check_suite` has
+ * `head_commit.author`), and `check_run created` arrives before the suite
+ * completes. Judging the whole batch sidesteps both problems, because by flush
+ * time the suite's authorship is in hand no matter what order things arrived.
+ *
+ * Note the actor filter cannot do this job: on these payloads `sender` is the
+ * repo owner (`derek-miller`), not the bot that authored the commit.
+ */
+function getCheckMeta(event, payload) {
+  if (event !== "check_run" && event !== "check_suite") return { isCheck: false };
+  const node = event === "check_run" ? payload.check_run : payload.check_suite;
+  return {
+    isCheck: true,
+    conclusion: node?.conclusion ?? null,
+    commitAuthor:
+      payload.check_suite?.head_commit?.author?.name ??
+      payload.check_run?.check_suite?.head_commit?.author?.name ??
+      null,
+  };
+}
+
+/**
+ * True when a batch is nothing but successful CI on a commit one of our own
+ * service accounts authored. Opening a PR fires its own CI, which used to wake
+ * an agent to review work that agent had just pushed (HL-17).
+ *
+ * Failures still get through, so AGENT-33 (react to broken builds on agent PRs)
+ * is unaffected, and green CI on a human's commit still gets through, so
+ * AGENT-36 (green means mergeable) is unaffected.
+ */
+function isSelfAuthoredGreenCheckBatch(events) {
+  if (GITHUB_SELF_USERS.length === 0) return false;
+  if (events.length === 0) return false;
+  if (!events.every((e) => e.check?.isCheck)) return false;
+
+  // Queued/in-progress runs carry no conclusion; they are not evidence either
+  // way, but a batch of only those tells us nothing, so require at least one.
+  const conclusions = events.map((e) => e.check.conclusion).filter(Boolean);
+  if (conclusions.length === 0) return false;
+  if (!conclusions.every((c) => c === "success")) return false;
+
+  const author = events.map((e) => e.check.commitAuthor).find(Boolean);
+  return !!author && GITHUB_SELF_USERS.includes(author.toLowerCase());
+}
+
 /** Return true if this event should flush its batch right away */
 function isImmediateFlushEvent(event, payload) {
   // Only flush immediately on approval — changes_requested reviews are
@@ -886,6 +944,13 @@ async function flushBatch(key) {
 
   const { events, guardrails, source, sessionKey, deliveryIds } = batch;
   if (events.length === 0) return;
+
+  if (source === "GitHub" && isSelfAuthoredGreenCheckBatch(events)) {
+    console.log(
+      `[${new Date().toISOString()}] Dropping batch ${key}: ${events.length} green check event(s) on a commit authored by ${events.map((e) => e.check.commitAuthor).find(Boolean)}`
+    );
+    return;
+  }
 
   let message;
   if (events.length === 1) {
@@ -1116,7 +1181,12 @@ const server = createServer(async (req, res) => {
     }
 
     const { eventType, detail } = getGitHubEventDetail(event, payload);
-    const eventEntry = { eventType, detail, formattedMessage: eventMessage };
+    const eventEntry = {
+      eventType,
+      detail,
+      formattedMessage: eventMessage,
+      check: getCheckMeta(event, payload),
+    };
 
     if (isImmediateFlushEvent(event, payload)) {
       logDebug(`GitHub ${event} (${detail}): immediate flush trigger`);
