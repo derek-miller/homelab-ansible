@@ -102,9 +102,8 @@ rackvm5
 [qemu-guest-agent]
 rackvm[1:5]
 [docker_labels]
-rackpi2  docker_labels=metrics
 rackvm1  docker_labels=identity,edge,webhooks
 rackvm2  docker_labels=home,mqtt,youtrack
 rackvm3  docker_labels=media
-rackvm4  docker_labels=grafana
+rackvm4  docker_labels=grafana,metrics
 rackvm5  docker_labels=sourcebot
