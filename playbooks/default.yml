@@ -363,3 +363,9 @@
     - role: generic/sourcebot-db
   tags:
     - sourcebot-db
+
+- hosts: qemu-guest-agent
+  roles:
+    - role: generic/qemu-guest-agent
+  tags:
+    - qemu-guest-agent

@@ -105,3 +105,6 @@ rackmini1
 
 [sourcebot-db]
 rackvm5
+
+[qemu-guest-agent]
+rackvm[1:5]

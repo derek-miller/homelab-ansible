@@ -1,0 +1,3 @@
+---
+qemu_guest_agent_state: present
+qemu_guest_agent_virtio_port: /dev/virtio-ports/org.qemu.guest_agent.0

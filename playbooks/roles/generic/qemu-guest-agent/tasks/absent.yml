@@ -1,0 +1,14 @@
+---
+# No disable step: the unit is static, and the udev rule that starts it is
+# removed with the package.
+- name: stop the guest agent
+  systemd:
+    name: qemu-guest-agent
+    state: stopped
+  failed_when: false
+
+- name: remove the guest agent
+  apt:
+    name: qemu-guest-agent
+    state: absent
+    purge: yes
