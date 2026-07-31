@@ -202,6 +202,21 @@
         hostname: "{{ inventory_hostname }}"
         role: "{{ 'manager' if 'docker_swarm_manager' in group_names else 'worker' }}"
       delegate_to: "{{ docker_swarm_primary_manager_name }}"
+
+    - name: reconcile swarm node labels with docker_labels
+      community.docker.docker_node:
+        hostname: "{{ inventory_hostname }}"
+        labels: "{{ swarm_node_labels }}"
+        labels_state: replace
+      delegate_to: "{{ docker_swarm_primary_manager_name }}"
+
+    - name: the edge label must sit on a manager
+      assert:
+        that: "'edge' not in swarm_node_labels or 'docker_swarm_manager' in group_names"
+        fail_msg: >-
+          {{ inventory_hostname }} carries the edge label but is not a swarm
+          manager; traefik reads the swarm API through a manager's socket.
+        quiet: yes
   tags:
     - docker
     - docker-swarm

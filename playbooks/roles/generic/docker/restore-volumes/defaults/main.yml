@@ -1,7 +1,9 @@
 ---
 docker_restore_volumes: false
 docker_restore_volumes_force: false
-docker_restore_volumes_backup_dir: "/mnt/Backups/Volumes/{{ inventory_hostname }}"
+docker_restore_volumes_label: ""
+docker_restore_volumes_backup_dir: >-
+  /mnt/Backups/Volumes/{{ docker_restore_volumes_label | default(inventory_hostname, true) }}
 # When empty (default), every volume found inside the archive is restored.
 # Set to a list of volume names (without the docker stack/project prefix)
 # to restrict the restore — useful for migrations where only a subset of

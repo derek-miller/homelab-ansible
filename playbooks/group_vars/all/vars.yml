@@ -1,6 +1,11 @@
 ---
 ansible_surrogate_user: ansible
 
+swarm_node_labels: >-
+  {{ dict((docker_labels | default('')).split(',')
+          | map('trim') | select | list
+          | zip_longest([], fillvalue='true')) }}
+
 pip_default_index_url: https://pypi.python.org/simple
 pip_version_spec:
 setuptools_version_spec:
