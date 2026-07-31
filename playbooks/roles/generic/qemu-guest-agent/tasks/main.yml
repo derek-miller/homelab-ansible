@@ -1,0 +1,17 @@
+---
+- assert:
+    that:
+      - ansible_os_family == 'Debian'
+      - qemu_guest_agent_state in ('present', 'absent')
+    fail_msg: >-
+      generic/qemu-guest-agent only supports Debian guests (got
+      {{ ansible_os_family }})
+    quiet: yes
+
+- name: include present tasks
+  include_tasks: present.yml
+  when: qemu_guest_agent_state == 'present'
+
+- name: include absent tasks
+  include_tasks: absent.yml
+  when: qemu_guest_agent_state == 'absent'

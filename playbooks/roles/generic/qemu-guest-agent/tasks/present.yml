@@ -1,0 +1,27 @@
+---
+- name: check for the guest agent channel
+  stat:
+    path: "{{ qemu_guest_agent_virtio_port }}"
+  register: virtio_port
+
+- assert:
+    that: virtio_port.stat.exists
+    fail_msg: >-
+      {{ qemu_guest_agent_virtio_port }} is missing, so the agent has no channel
+      to the host. Set `agent: 1` on the VM (`qm set <vmid> --agent 1`) and power
+      cycle it — a reboot from inside the guest will not attach the device.
+    quiet: yes
+
+- name: install the guest agent
+  apt:
+    name: qemu-guest-agent
+    state: present
+  register: agent_pkg
+
+# Static unit: a udev rule starts it from the virtio port, so nothing to enable.
+# The when: skips only the case check mode has no installed unit to inspect.
+- name: start the guest agent
+  systemd:
+    name: qemu-guest-agent
+    state: started
+  when: not (ansible_check_mode and agent_pkg is changed)
