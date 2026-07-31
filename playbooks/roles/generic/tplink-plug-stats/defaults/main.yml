@@ -1,5 +1,5 @@
 ---
-tplink_plug_stats_state: present
+tplink_plug_stats_state: "{{ 'present' if tplink_plug_stats_ip_addresses is truthy else 'absent' }}"
 tplink_plug_stats_metric_name: ''
 tplink_plug_stats_dir: /opt/tplink-plug-stats
 tplink_plug_stats_virtualenv_path: "{{ tplink_plug_stats_dir }}/virtualenv"
