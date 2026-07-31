@@ -39,7 +39,8 @@ rackpi2        cifs_shares_host_config=unas         cifs_share_names='["Backups"
 rackpi3        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Public"]'
 rackpi4        cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
 rackpi5        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container", "Public"]'
-rackvm[1:2]    cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
+rackvm1        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container"]'
+rackvm2        cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
 rackvm3        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Public"]'
 rackvm[4:5]    cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
 raspi1         cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
@@ -53,7 +54,7 @@ rackvm[1:5]
 raspi1
 
 [docker-build-images]
-rackpi1 docker_images_to_build=openclaw-webhook-proxy
+rackvm1 docker_images_to_build=openclaw-webhook-proxy
 rackvm5 docker_images_to_build=sourcebot,control4-driver-scraper,postgres-pgcron
 
 [control4-driver-scraper]
@@ -69,7 +70,7 @@ rackpi[2:5]
 rackvm[3:5]
 
 [project-files]
-rackpi1
+rackvm1
 rackvm2
 rackvm5
 raspi1
@@ -110,9 +111,8 @@ rackvm5
 [qemu-guest-agent]
 rackvm[1:5]
 [docker_labels]
-rackpi1  docker_labels=edge,webhooks
 rackpi2  docker_labels=metrics
-rackvm1  docker_labels=identity
+rackvm1  docker_labels=identity,edge,webhooks
 rackvm2  docker_labels=home,mqtt,youtrack
 rackvm3  docker_labels=media
 rackvm4  docker_labels=grafana

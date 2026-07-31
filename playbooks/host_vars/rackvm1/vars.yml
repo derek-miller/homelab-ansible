@@ -58,3 +58,7 @@ disk_mounts:
 
 docker_daemon_options:
   data-root: /mnt/data/docker
+
+project_files:
+  - src: "vault/{{ inventory_hostname }}/var/docker/"
+    dest: /var/docker/
