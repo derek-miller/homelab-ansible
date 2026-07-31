@@ -69,6 +69,22 @@ make bootstrap hosts=<host> user=<user>
 - **Docker Compose** services for individual hosts are in their respective `host_vars/{hostname}/vault.yml` as `docker_compose_definition`.
 - **Vault encryption** is enforced by a pre-commit hook (`hooks/pre-commit` → `make vault-check`). The `.vault_pass` file in the repo root (git-ignored) holds the encryption key.
 - **Variable layering**: Role defaults → group_vars → host_vars. Vault variables are referenced indirectly (e.g., `docker_stack_definition: "{{ vault_docker_stack_definition }}"`).
-- Services on the swarm use placement constraints like `node.hostname == rackpi4` to pin to specific nodes.
+- Services on the swarm are placed by node label (`node.labels.metrics == true`), not by hostname. A label is declared on exactly one host as a comma-delimited `docker_labels` in the `[docker_labels]` inventory group, and `default.yml` reconciles those onto the nodes. `portainer-agent` is global; nothing else pins to a host.
 - Roles that install something follow a `present.yml` / `absent.yml` split routed from `tasks/main.yml` via a `<role>_state` variable — `absent` must fully reverse what `present` did (stop service, remove config, uninstall package, clear repo/keyring).
 - Traefik labels on swarm services handle routing, OAuth middleware, and TLS.
+
+## Moving a swarm workload to another host
+
+Swarm does not move local volumes, so a workload moves in two halves: the data has to be copied while the services are stopped, and only then may the label follow. `generic/docker/migrate-labels` does both, driven by the inventory.
+
+Move the label to the new host in `[docker_labels]`, then:
+
+```bash
+make run tags=docker-swarm ANSIBLE_FLAGS="-e docker_migrate_labels=yes"
+```
+
+Do not narrow this with `hosts=`: the role runs on the primary manager and reaches both nodes by delegation, so a limit has to name the source, the target and the manager, and omitting the manager means it never runs at all.
+
+For each label whose inventory host no longer matches the node carrying it, the role scales that label's services to 0, tars each of their volumes through `docker_migrate_transit_dir` onto the target, removes the source copy, and moves the label. The stack deploy then starts the services on the target, on top of their data. Services and volumes are read from the stack definition, so nothing needs listing by hand.
+
+Without `docker_migrate_labels=yes` the move is only reported, and the label reconcile is held back — moving a label while its data sits on the old host would start the service on an empty volume. A routine `make run` is therefore safe to run with a pending move outstanding; it just will not act on it.

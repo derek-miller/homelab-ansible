@@ -193,7 +193,26 @@
     - docker-compose
     - docker-build-images
 
+# Runs before the label reconcile below: once that has written the inventory's
+# labels onto the nodes there is nothing left to compare against.
+- hosts: docker_swarm_manager[0]
+  roles:
+    - role: generic/docker/migrate-labels
+  tags:
+    - docker
+    - docker-swarm
+    - docker-migrate-labels
+
+# galaxy/docker-swarm reconciles node labels against docker_swarm_labels and
+# strips anything missing from it, so it has to be told what we manage or it
+# removes every label on each run.
 - hosts: docker_swarm_manager:docker_swarm_worker
+  vars:
+    docker_swarm_labels: >-
+      {{ docker_swarm_current_labels | default({})
+         if (hostvars[groups['docker_swarm_manager'][0]].docker_labels_pending_migration
+             | default(false))
+         else swarm_node_labels }}
   roles:
     - role: galaxy/docker-swarm
   post_tasks:
@@ -209,6 +228,9 @@
         labels: "{{ swarm_node_labels }}"
         labels_state: replace
       delegate_to: "{{ docker_swarm_primary_manager_name }}"
+      when: >-
+        not (hostvars[groups['docker_swarm_manager'][0]].docker_labels_pending_migration
+             | default(false))
 
     - name: the edge label must sit on a manager
       assert:

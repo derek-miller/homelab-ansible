@@ -1,0 +1,46 @@
+---
+- name: "{{ move.label }} | find the services and volumes carrying this label"
+  set_fact:
+    _mig: >-
+      {%- set svcs = [] -%}
+      {%- set vols = [] -%}
+      {%- for name, spec in docker_stack_definition.services.items() -%}
+      {%- set cons = (((spec.deploy | default({})).placement | default({})).constraints | default([])) -%}
+      {%- for c in cons -%}
+      {%- if c is search('node\.labels\.' ~ move.label ~ ' == true') -%}
+      {%- set _ = svcs.append(name) -%}
+      {%- for v in (spec.volumes | default([])) -%}
+      {%- if v is string and ':' in v and not v.startswith('/') -%}
+      {%- set _ = vols.append(v.split(':')[0]) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ {'services': svcs | unique | list, 'volumes': vols | unique | list} }}
+
+- name: "{{ move.label }} | plan"
+  debug:
+    msg: >-
+      {{ move.from }} -> {{ move.to }};
+      services {{ _mig.services | join(', ') }};
+      volumes {{ _mig.volumes | join(', ') | default('none', true) }}
+
+- name: "{{ move.label }} | stop the services so the volumes are quiesced"
+  command: "docker service scale {{ docker_stack_name }}_{{ item }}=0"
+  loop: "{{ _mig.services }}"
+  when: not ansible_check_mode
+
+- name: "{{ move.label }} | move each volume"
+  include_tasks: migrate_volume.yml
+  loop: "{{ _mig.volumes }}"
+  loop_control:
+    loop_var: volume_name
+
+- name: "{{ move.label }} | take the label off {{ move.from }}"
+  command: "docker node update --label-rm {{ move.label }} {{ move.from }}"
+  when: not ansible_check_mode
+
+- name: "{{ move.label }} | put the label on {{ move.to }}"
+  command: "docker node update --label-add {{ move.label }}=true {{ move.to }}"
+  when: not ansible_check_mode

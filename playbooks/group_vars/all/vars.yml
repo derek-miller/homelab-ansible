@@ -6,6 +6,9 @@ swarm_node_labels: >-
           | map('trim') | select | list
           | zip_longest([], fillvalue='true')) }}
 
+docker_volume_backup_root: /mnt/Backups/Volumes
+docker_migrate_transit_dir: /mnt/Backups/migrate
+
 pip_default_index_url: https://pypi.python.org/simple
 pip_version_spec:
 setuptools_version_spec:

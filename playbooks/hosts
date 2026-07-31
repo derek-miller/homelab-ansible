@@ -110,8 +110,9 @@ rackvm5
 rackvm[1:5]
 [docker_labels]
 rackpi1  docker_labels=edge,webhooks
-rackpi2  docker_labels=grafana,metrics
+rackpi2  docker_labels=metrics
 rackpi3  docker_labels=media
 rackpi4  docker_labels=home,mqtt
 rackpi5  docker_labels=identity,youtrack
+rackvm2  docker_labels=grafana
 rackvm5  docker_labels=sourcebot

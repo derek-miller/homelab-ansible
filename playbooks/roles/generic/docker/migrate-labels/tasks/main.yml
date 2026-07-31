@@ -1,0 +1,63 @@
+---
+- name: require a transit directory both nodes can reach
+  assert:
+    that: docker_migrate_transit_dir | default('', true) | length > 0
+    fail_msg: >-
+      Set docker_migrate_transit_dir to a path mounted on every swarm node; the
+      volume is staged there on its way between them.
+    quiet: yes
+
+- name: read the labels currently on each swarm node
+  command: "docker node inspect {{ item }} --format {% raw %}'{{ json .Spec.Labels }}'{% endraw %}"
+  loop: "{{ groups['docker_swarm_manager'] | union(groups['docker_swarm_worker']) | sort }}"
+  register: _live_labels
+  changed_when: false
+  check_mode: false
+
+- name: work out which labels are on the wrong node
+  set_fact:
+    docker_migrate_plan: >-
+      {%- set live = {} -%}
+      {%- for r in _live_labels.results -%}
+      {%- for lbl in (r.stdout | from_json | default({}, true)) -%}
+      {%- set _ = live.update({lbl: r.item}) -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {%- set out = [] -%}
+      {%- for host in groups['docker_labels'] | default([]) -%}
+      {%- for lbl in (hostvars[host].docker_labels | default('')).split(',') | map('trim') | select | list -%}
+      {%- if live.get(lbl) and live[lbl] != host -%}
+      {%- set _ = out.append({'label': lbl, 'from': live[lbl], 'to': host}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ out }}
+
+- name: report the pending label moves
+  debug:
+    msg: >-
+      {{ docker_migrate_plan | length }} label move(s) pending:
+      {{ docker_migrate_plan | map('to_json') | join(', ') }}
+  when: docker_migrate_plan | length > 0
+
+- name: hold the labels until the volumes move with them
+  debug:
+    msg: >-
+      Leaving the labels where they are: moving them without their volumes
+      would start the services on a node with no data. Re-run with
+      docker_migrate_labels=yes to migrate.
+  when:
+    - docker_migrate_plan | length > 0
+    - not (docker_migrate_labels | bool)
+
+- name: block the label reconcile while a move is pending
+  set_fact:
+    docker_labels_pending_migration: "{{ docker_migrate_plan | length > 0 and not (docker_migrate_labels | bool) }}"
+
+- name: migrate each label
+  include_tasks: migrate_label.yml
+  loop: "{{ docker_migrate_plan }}"
+  loop_control:
+    loop_var: move
+    label: "{{ move.label }}: {{ move.from }} -> {{ move.to }}"
+  when: docker_migrate_labels | bool

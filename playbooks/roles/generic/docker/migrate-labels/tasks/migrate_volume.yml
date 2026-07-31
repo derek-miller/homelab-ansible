@@ -1,0 +1,95 @@
+---
+- name: "{{ move.label }}/{{ volume_name }} | full volume name"
+  set_fact:
+    _vol: "{{ docker_stack_name }}_{{ volume_name }}"
+
+- name: "{{ move.label }}/{{ volume_name }} | inspect the source volume"
+  command: "docker volume inspect {{ _vol }}"
+  delegate_to: "{{ move.from }}"
+  become: true
+  register: _src
+  failed_when: false
+  changed_when: false
+  check_mode: false
+
+- name: "{{ move.label }}/{{ volume_name }} | nothing to move"
+  debug:
+    msg: "{{ _vol }} does not exist on {{ move.from }}; skipping."
+  when: _src.rc != 0
+
+- name: "{{ move.label }}/{{ volume_name }} | move it"
+  when: _src.rc == 0
+  block:
+    - name: "{{ move.label }}/{{ volume_name }} | check the target is empty"
+      command: >-
+        docker run --rm -v {{ _vol }}:/v:ro alpine sh -c 'ls -A /v 2>/dev/null | head -1'
+      delegate_to: "{{ move.to }}"
+      become: true
+      register: _tgt
+      failed_when: false
+      changed_when: false
+      check_mode: false
+
+    - name: "{{ move.label }}/{{ volume_name }} | refuse to overwrite target data"
+      fail:
+        msg: >-
+          {{ _vol }} already has data on {{ move.to }}. Set docker_migrate_force=yes
+          to overwrite it.
+      when:
+        - _tgt.stdout | default('') | trim | length > 0
+        - not (docker_migrate_force | bool)
+
+    - name: "{{ move.label }}/{{ volume_name }} | ensure the transit directory exists"
+      file:
+        path: "{{ docker_migrate_transit_dir }}"
+        state: directory
+      delegate_to: "{{ move.from }}"
+      become: true
+
+    - name: "{{ move.label }}/{{ volume_name }} | archive it on {{ move.from }}"
+      command: >-
+        docker run --rm
+        -v {{ _vol }}:/src:ro
+        -v {{ docker_migrate_transit_dir }}:/transit
+        alpine
+        tar cf /transit/{{ _vol }}.tar -C /src .
+      delegate_to: "{{ move.from }}"
+      become: true
+      when: not ansible_check_mode
+
+    - name: "{{ move.label }}/{{ volume_name }} | restore it on {{ move.to }}"
+      command: >-
+        docker run --rm
+        -v {{ docker_migrate_transit_dir }}:/transit:ro
+        -v {{ _vol }}:/dst
+        alpine
+        sh -c 'find /dst -mindepth 1 -delete 2>/dev/null || true;
+               tar xf /transit/{{ _vol }}.tar -C /dst'
+      delegate_to: "{{ move.to }}"
+      become: true
+      when: not ansible_check_mode
+
+    - name: "{{ move.label }}/{{ volume_name }} | match the volume root to its contents"
+      command: >-
+        docker run --rm -v {{ _vol }}:/v alpine
+        sh -c 'e=$(ls -A /v | head -1); [ -n "$e" ] && chown "$(stat -c %u:%g /v/$e)" /v || true'
+      delegate_to: "{{ move.to }}"
+      become: true
+      when: not ansible_check_mode
+
+    - name: "{{ move.label }}/{{ volume_name }} | drop the transit archive"
+      file:
+        path: "{{ docker_migrate_transit_dir }}/{{ _vol }}.tar"
+        state: absent
+      delegate_to: "{{ move.from }}"
+      become: true
+      when:
+        - not (docker_migrate_keep_transit | bool)
+        - not ansible_check_mode
+
+    - name: "{{ move.label }}/{{ volume_name }} | remove it from {{ move.from }}"
+      command: "docker volume rm {{ _vol }}"
+      delegate_to: "{{ move.from }}"
+      become: true
+      failed_when: false
+      when: not ansible_check_mode

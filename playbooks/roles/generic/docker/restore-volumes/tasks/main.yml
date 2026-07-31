@@ -1,4 +1,10 @@
 ---
+- name: require the archive root
+  assert:
+    that: docker_volume_backup_root | default('', true) | length > 0
+    fail_msg: Set docker_volume_backup_root to the directory the backup services write to.
+    quiet: yes
+
 - name: verify backup directory exists
   stat:
     path: "{{ docker_restore_volumes_backup_dir }}"
