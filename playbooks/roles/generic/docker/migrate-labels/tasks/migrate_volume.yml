@@ -87,9 +87,26 @@
         - not (docker_migrate_keep_transit | bool)
         - not ansible_check_mode
 
+    - name: "{{ move.label }}/{{ volume_name }} | discard the exited tasks still holding it"
+      shell: |
+        set -o pipefail
+        ids=$(docker ps -aq --filter volume={{ _vol }})
+        if [ -n "$ids" ]; then docker rm $ids; fi
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ move.from }}"
+      become: true
+      register: _stale
+      changed_when: _stale.stdout | trim | length > 0
+      when: not ansible_check_mode
+
     - name: "{{ move.label }}/{{ volume_name }} | remove it from {{ move.from }}"
       command: "docker volume rm {{ _vol }}"
       delegate_to: "{{ move.from }}"
       become: true
-      failed_when: false
+      register: _rm
+      changed_when: _rm.rc == 0
+      failed_when:
+        - _rm.rc != 0
+        - "'no such volume' not in (_rm.stderr | lower)"
       when: not ansible_check_mode
