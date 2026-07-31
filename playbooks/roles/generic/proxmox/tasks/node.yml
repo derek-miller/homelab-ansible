@@ -1,14 +1,15 @@
 ---
 - name: pin interface names by driver
   template:
-    src: "systemd-network/{{ item.file }}.jinja2"
+    src: systemd-network/link.jinja2
     dest: "/etc/systemd/network/{{ item.file }}"
     owner: root
     group: root
     mode: 0644
-  loop:
-    - file: 10-nic0.link
-    - file: 11-nic1.link
+  loop: "{{ _proxmox_interface_links }}"
+  loop_control:
+    label: "{{ item.file }}"
+  when: item.address | length > 0
   notify: proxmox interface names changed
 
 - name: configure network interfaces
@@ -23,12 +24,14 @@
 
 - name: create mount points for cifs storages
   file:
-    path: "/mnt/pve/{{ item }}"
+    path: "{{ item.options.path }}"
     state: directory
     owner: root
     group: root
     mode: 0755
-  loop: "{{ proxmox_cifs_storages | default([]) }}"
+  loop: "{{ proxmox_storages | selectattr('type', 'equalto', 'cifs') | list }}"
+  loop_control:
+    label: "{{ item.id }}"
 
 # The subscription server ID is a function of /etc/machine-id, which a reinstall
 # regenerates. Restoring the captured value re-binds the existing key instead of

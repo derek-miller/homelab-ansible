@@ -91,11 +91,11 @@
 # running once from the controller and delegating.
 #
 #   make run-proxmox tags=proxmox-reboot ANSIBLE_FLAGS="-e proxmox_reboot_enabled=yes"
+#
+# Defaults to group order; append -e proxmox_reboot_order='["pve3","pve1"]' to change it.
 - name: proxmox rolling reboot
   hosts: localhost
   gather_facts: no
-  vars:
-    proxmox_reboot_order: "{{ hostvars[groups['proxmox'] | first].proxmox_reboot_order | default(groups['proxmox'], true) }}"
   roles:
     - role: generic/proxmox-reboot
   tags:

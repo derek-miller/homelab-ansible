@@ -21,7 +21,7 @@
         pvecm create {{ proxmox_cluster_name }}
         --nodeid {{ proxmox_nodeid }}
         --link0 {{ proxmox_lan_address.split('/')[0] }}
-        --link1 {{ proxmox_fabric_address.split('/')[0] }}
+        {{ _proxmox_corosync_link1 }}
       when: inventory_hostname in groups['proxmox_primary']
 
     - name: wait for the primary to be quorate
@@ -63,7 +63,7 @@
         --use_ssh
         --nodeid {{ proxmox_nodeid }}
         --link0 {{ proxmox_lan_address.split('/')[0] }}
-        --link1 {{ proxmox_fabric_address.split('/')[0] }}
+        {{ _proxmox_corosync_link1 }}
       throttle: 1
       when: inventory_hostname not in groups['proxmox_primary']
 

@@ -14,9 +14,6 @@ proxmox_lan_gateway: !vault |
   6666616135626534300a643838343038613035383934646261323030393036636561663931356233
   3139
 
-proxmox_cifs_storages:
-  - unas-backup
-
 proxmox_oidc_client_key: !vault |
   $ANSIBLE_VAULT;1.1;AES256
   64303863656339653132343138643135623164343437623531363138316635376265373339373266
@@ -98,8 +95,6 @@ proxmox_fabric_mtu: 9000
 
 proxmox_bridge_vids: 2-4094
 
-proxmox_corosync_links_expected: 2
-
 proxmox_oidc_realm: keycloak
 proxmox_oidc_client_id: proxmox
 proxmox_oidc_issuer_url: !vault |
@@ -137,6 +132,7 @@ proxmox_storages:
       sparse: 1
   - id: unas-backup
     type: cifs
+    password: "{{ proxmox_cifs_password }}"
     options:
       path: /mnt/pve/unas-backup
       server: !vault |

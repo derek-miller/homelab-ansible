@@ -72,13 +72,16 @@
     - storage
     - metricserver
 
-- name: write cifs storage credentials
+- name: write storage credentials
   copy:
-    content: "{{ proxmox_cifs_password }}\n"
-    dest: /etc/pve/priv/storage/unas-backup.pw
+    content: "{{ item.password }}\n"
+    dest: "/etc/pve/priv/storage/{{ item.id }}.pw"
     owner: root
     group: www-data
     mode: 0600
+  loop: "{{ proxmox_storages | selectattr('password', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.id }}"
   no_log: yes
 
 - name: write metrics token
@@ -86,7 +89,7 @@
     # No trailing newline: PVE passes the file contents through verbatim as the
     # Authorization header value.
     content: "{{ proxmox_influxdb_token }}"
-    dest: /etc/pve/priv/metricserver/influxdb3.pw
+    dest: "/etc/pve/priv/metricserver/{{ proxmox_metrics_id }}.pw"
     owner: root
     group: www-data
     mode: 0600
@@ -322,11 +325,10 @@
   assert:
     that:
       - (proxmox_corosync_links.stdout | regex_findall('nodeid:\s+\d+:\s+(?:localhost|connected)')
-          | length) == (groups['proxmox'] | length) * proxmox_corosync_links_expected
+          | length) == (_proxmox_corosync_peers_expected | int)
     fail_msg: >-
-      Expected {{ (groups['proxmox'] | length) * proxmox_corosync_links_expected }}
-      healthy corosync peer entries ({{ proxmox_corosync_links_expected }} rings across
-      {{ groups['proxmox'] | length }} nodes) but found
+      Expected {{ _proxmox_corosync_peers_expected | int }} healthy corosync peer
+      entries across {{ groups['proxmox'] | length }} nodes but found
       {{ proxmox_corosync_links.stdout | regex_findall('nodeid:\s+\d+:\s+(?:localhost|connected)') | length }}.
       A ring is degraded — check the fabric link before it is the only one left.
     quiet: yes
