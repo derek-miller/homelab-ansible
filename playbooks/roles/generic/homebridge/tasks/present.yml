@@ -70,10 +70,10 @@
 - name: install hb-service LaunchDaemon (first-time bootstrap)
   shell: >-
     umask 022 &&
-    {{ homebridge_hbservice_bin }} install
-    --user {{ homebridge_user }}
-    --port {{ homebridge_ui_port }}
-    -S {{ homebridge_service_name }}
+    {{ homebridge_hbservice_bin | quote }} install
+    --user {{ homebridge_user | quote }}
+    --port {{ homebridge_ui_port | quote }}
+    -S {{ homebridge_service_name | quote }}
     {% if homebridge_plugin_path is truthy %}-P {{ homebridge_plugin_path | quote }}{% endif %}
     {% if homebridge_user_storage_path is truthy %}-U {{ homebridge_user_storage_path | quote }}{% endif %}
   environment:
@@ -88,33 +88,14 @@
 # lets hb-service pick the latest recommended LTS; a pinned version forces
 # an exact upgrade or downgrade. Idempotent: stdout reports "already
 # up-to-date" when the target already matches.
-# umask 022: the become session runs umask 077, which would leave the tree 0700.
+# umask 022: the become session runs umask 077, which would leave node 0700.
 - name: keep Node.js at the Homebridge-managed version
   shell: >-
     umask 022 &&
-    {{ homebridge_hbservice_bin }} update-node
-    {% if homebridge_node_version is truthy %}{{ homebridge_node_version }}{% endif %}
+    {{ homebridge_hbservice_bin | quote }} update-node
+    {% if homebridge_node_version is truthy %}{{ homebridge_node_version | quote }}{% endif %}
   environment:
     PATH: "/usr/local/bin:/opt/homebrew/bin:{{ ansible_env.PATH | default('/usr/bin:/bin:/usr/sbin:/sbin') }}"
   register: _hb_update_node
   changed_when: "'Installing Node.js' in (_hb_update_node.stdout | default(''))"
   notify: homebridge changed
-
-# macOS enforces symlink modes, so umask-077 leftovers under /usr/local are
-# untraversable. Converge every run — also covers non-managed globals and
-# re-heals after an OS update. Detection-guarded to stay idempotent.
-- name: normalize /usr/local Node.js tree perms (world-readable)
-  shell: |
-    set -eu
-    fixed=0
-    if [ -d /usr/local/lib/node_modules ] && [ -n "$(find /usr/local/lib/node_modules \( -type d ! -perm -055 -o -type f ! -perm -044 \) -print 2>/dev/null | head -n1)" ]; then
-      chmod -R go+rX /usr/local/lib/node_modules
-      fixed=1
-    fi
-    if [ -d /usr/local/bin ] && [ -n "$(find /usr/local/bin -type l ! -perm -055 -print 2>/dev/null | head -n1)" ]; then
-      find /usr/local/bin -type l ! -perm -055 -exec chmod -h go+rx {} +
-      fixed=1
-    fi
-    printf 'fixed=%s\n' "$fixed"
-  register: _hb_node_perms
-  changed_when: "'fixed=1' in _hb_node_perms.stdout"
