@@ -70,7 +70,7 @@ rackvm[3:5]
 
 [project-files]
 rackpi1
-rackvm3
+rackvm2
 rackvm5
 raspi1
 
@@ -112,7 +112,8 @@ rackvm[1:5]
 [docker_labels]
 rackpi1  docker_labels=edge,webhooks
 rackpi2  docker_labels=metrics
-rackvm2  docker_labels=grafana,identity
-rackvm3  docker_labels=media,home,mqtt
-rackvm4  docker_labels=youtrack
+rackvm1  docker_labels=identity
+rackvm2  docker_labels=home,mqtt,youtrack
+rackvm3  docker_labels=media
+rackvm4  docker_labels=grafana
 rackvm5  docker_labels=sourcebot
