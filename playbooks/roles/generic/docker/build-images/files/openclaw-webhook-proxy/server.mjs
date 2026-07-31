@@ -786,32 +786,6 @@ function formatYouTrackMessage(payload) {
 // ─── Batching helpers ────────────────────────────────────────────────
 
 /**
- * Return the batch key for a GitHub event, or null to forward immediately.
- *
- * Keyed on the resolved thread id so every event for one PR/issue lands in the
- * same batch. check_run and check_suite are batched like everything else: they
- * arrive as a guaranteed pair 8-300ms apart, and forwarding each immediately
- * spawned two agent sessions that reviewed the same head independently (HL-17).
- * The debounce costs at most BATCH_WINDOW_MS before the agent sees a CI failure,
- * which is well inside the time it takes a run to finish in the first place.
- */
-function getGitHubBatchKey(event, threadId) {
-  switch (event) {
-    case "pull_request_review":
-    case "pull_request_review_comment":
-    case "pull_request":
-    case "issue_comment":
-    case "issues":
-    case "check_run":
-    case "check_suite":
-    case "push":
-      return `github:${threadId}`;
-    default:
-      return null; // unknown events: forward immediately
-  }
-}
-
-/**
  * Per-event check metadata, used at flush time to spot an all-green CI batch on
  * a commit we authored ourselves.
  *
@@ -1165,20 +1139,18 @@ const server = createServer(async (req, res) => {
 
     // One resolved thread identity drives both the batch key and the session
     // key, so a PR's events can never split across batches or lanes (HL-17).
+    //
+    // Every event batches, with no per-type opt-out. The previous allowlist was
+    // both incomplete and stale: `pull_request_review_thread` is subscribed but
+    // was missing, so it forwarded immediately exactly the way check_run and
+    // check_suite used to, while `push` was listed and neither App subscribes to
+    // it. An allowlist here has to be re-audited every time the App's event
+    // subscriptions change, and silently reintroduces the duplicate-review bug
+    // when it isn't. The thread id is defined for any payload, so key on it.
     const thread = resolveGitHubThread(event, payload);
-    const batchKey = getGitHubBatchKey(event, thread.id);
+    const batchKey = `github:${thread.id}`;
     const sessionKey = thread.sessionKey;
     logDebug(`GitHub ${event}: thread ${thread.id} → session ${sessionKey}`);
-
-    if (!batchKey) {
-      // Unknown event type — forward immediately
-      logDebug(`GitHub ${event}: no batch key, forwarding immediately`);
-      const message = `${GITHUB_GUARDRAILS}\n${eventMessage}`;
-      res.writeHead(200);
-      res.end("OK");
-      forwardToOpenClaw(message, "GitHub", sessionKey, delivery);
-      return;
-    }
 
     const { eventType, detail } = getGitHubEventDetail(event, payload);
     const eventEntry = {
