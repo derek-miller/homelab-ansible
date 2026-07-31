@@ -1,3 +1,4 @@
+---
 # Plex absent — reverse what present.yml installed. Always removes the
 # cask, LaunchAgent, and transcoder preference. Whether library state is
 # also wiped depends on plex_wipe_state (default: false, preserve data).

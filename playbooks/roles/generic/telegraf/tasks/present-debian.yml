@@ -1,3 +1,4 @@
+---
 - name: enable telegraf
   service:
     name: telegraf

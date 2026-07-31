@@ -1,3 +1,4 @@
+---
 plex_state: present
 
 # `present` adopts the existing install without forcing a version; `latest`

@@ -1,3 +1,4 @@
+---
 - assert:
     that: disk_mount_state in ('present', 'absent')
     quiet: yes

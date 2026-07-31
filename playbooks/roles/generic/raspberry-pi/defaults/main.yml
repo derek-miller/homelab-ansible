@@ -1,26 +1,26 @@
 ---
 raspberry_pi_boot_config_path: /boot/config.txt
-#raspberry_pi_boot_config_options:
+# raspberry_pi_boot_config_options:
 #  - option: ""
 #    value: ""
 raspberry_pi_cmdline_path: /boot/cmdline.txt
-#raspberry_pi_cmdline_extra_params:
+# raspberry_pi_cmdline_extra_params:
 #  - option: ""
 #    value: ""        # optional, omit for bare flags
 #    state: present   # present (default) or absent
-#raspberry_pi_rc_local_options:
+# raspberry_pi_rc_local_options:
 #  - option: ""
 #    value: ""
-#raspberry_pi_wifi_ssid: ""
-#raspberry_pi_wifi_password: ""
-#raspberry_pi_wifi_security: ""
-#raspberry_pi_bluetooth: false
-#raspberry_pi_serial: false
-#raspberry_pi_i2c: false
-#raspberry_pi_spi: false
-#raspberry_pi_camera: false
-#raspberry_pi_vnc: false
-#raspberry_pi_onewire: false
-#raspberry_pi_rgpio: false
-#raspberry_pi_poe_hat: false
-#raspberry_pi_swap_size_mb: 100
+# raspberry_pi_wifi_ssid: ""
+# raspberry_pi_wifi_password: ""
+# raspberry_pi_wifi_security: ""
+# raspberry_pi_bluetooth: false
+# raspberry_pi_serial: false
+# raspberry_pi_i2c: false
+# raspberry_pi_spi: false
+# raspberry_pi_camera: false
+# raspberry_pi_vnc: false
+# raspberry_pi_onewire: false
+# raspberry_pi_rgpio: false
+# raspberry_pi_poe_hat: false
+# raspberry_pi_swap_size_mb: 100

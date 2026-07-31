@@ -1,3 +1,4 @@
+---
 - assert:
     that: control4_director_stats_state in ('present', 'absent')
     quiet: yes

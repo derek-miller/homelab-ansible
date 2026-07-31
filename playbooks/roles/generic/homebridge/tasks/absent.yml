@@ -1,3 +1,4 @@
+---
 # Homebridge absent — reverse what present.yml installed:
 #   - hb-service uninstall (stops + removes LaunchDaemon)
 #   - npm uninstall homebridge packages

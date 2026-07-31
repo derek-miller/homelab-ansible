@@ -1,3 +1,4 @@
+---
 # Darwin teardown: unload the brew-installed LaunchAgent, remove the plist,
 # brew uninstall the formula.
 

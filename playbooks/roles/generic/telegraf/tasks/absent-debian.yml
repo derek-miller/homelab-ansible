@@ -1,3 +1,4 @@
+---
 - name: stop and disable telegraf service
   service:
     name: telegraf

@@ -1,3 +1,4 @@
+---
 - block:
     - name: gather and combine environment paths
       set_fact:

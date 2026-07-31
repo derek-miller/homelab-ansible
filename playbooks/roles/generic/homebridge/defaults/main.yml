@@ -1,3 +1,4 @@
+---
 homebridge_state: present
 
 # Path to the Node.js install. Homebridge's wiki-recommended "Option 2"

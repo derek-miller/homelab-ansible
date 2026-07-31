@@ -1,3 +1,4 @@
+---
 # TODO: Properly delete systemd services
 - name: uninstall nut
   apt:

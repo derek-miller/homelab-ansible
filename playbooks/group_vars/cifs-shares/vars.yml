@@ -1,3 +1,4 @@
+---
 cifs_shares_host_configs:
   unas:
     host: !vault |

@@ -1,0 +1,33 @@
+---
+# yamllint config. Enforces the repo's existing conventions; rules that fight
+# Ansible idiom are relaxed rather than churned: long vault/URL lines, yes/no
+# booleans, and comment spacing/indentation.
+extends: default
+
+yaml-files:
+  - "*.yml"
+  - "*.yaml"
+
+ignore: |
+  playbooks/collections/ansible_collections/
+  playbooks/roles/galaxy/
+  playbooks/files/vault/
+  playbooks/host_vars/*/vault.yml
+  # third-party/worktree YAML under the dev + CI venv and Claude worktrees; not ours to lint
+  .venv/
+  .claude/
+
+rules:
+  # Vault ciphertext, long URLs, and the inline docker stack all exceed any sane
+  # width; wrapping them would hurt readability.
+  line-length: disable
+  # Ansible convention is yes/no, not true/false.
+  truthy:
+    allowed-values: ["true", "false", "yes", "no"]
+    check-keys: false
+  # Every file opens with `---`.
+  document-start:
+    present: true
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: disable

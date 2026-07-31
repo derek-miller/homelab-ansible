@@ -1,3 +1,4 @@
+---
 - name: restart nut
   systemd:
     name: "{{ item }}"

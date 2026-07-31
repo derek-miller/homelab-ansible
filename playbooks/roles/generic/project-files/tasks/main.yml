@@ -1,3 +1,4 @@
+---
 - name: Ensure project file destination directories exist
   ansible.builtin.file:
     path: "{{ item.dest | dirname }}"
@@ -19,8 +20,8 @@
     mode: "{{ item.mode | default(file_mode_default) }}"
     directory_mode: "{{ item.directory_mode | default(directory_mode_default) }}"
   when:
-   - project_files | length > 0
-   - (item.state | default('present')) == "present"
+    - project_files | length > 0
+    - (item.state | default('present')) == "present"
   loop: "{{ project_files }}"
 
 - name: Delete project files

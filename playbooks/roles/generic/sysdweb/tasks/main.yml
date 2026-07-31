@@ -1,3 +1,4 @@
+---
 - assert:
     that: sysdweb_state in ('present', 'absent')
     quiet: yes
@@ -9,13 +10,13 @@
   block:
     - name: install apt dependencies
       apt:
-       name:
-        - build-essential
-        - libdbus-1-dev
-        - libglib2.0-dev
-        - libpython3-dev
-        - libsystemd-dev
-       state: latest
+        name:
+          - build-essential
+          - libdbus-1-dev
+          - libglib2.0-dev
+          - libpython3-dev
+          - libsystemd-dev
+        state: latest
 
     - name: install python dependencies
       pip:

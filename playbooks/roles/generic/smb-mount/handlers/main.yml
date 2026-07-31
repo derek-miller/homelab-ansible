@@ -1,3 +1,4 @@
+---
 - name: reload autofs
   # `automount -vc` flushes cached map data and re-reads /etc/auto_master
   # plus all referenced map files. Safe to re-run; mounted shares aren't

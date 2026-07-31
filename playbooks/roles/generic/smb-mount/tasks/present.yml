@@ -1,3 +1,4 @@
+---
 - assert:
     that:
       - smb_mounts is defined

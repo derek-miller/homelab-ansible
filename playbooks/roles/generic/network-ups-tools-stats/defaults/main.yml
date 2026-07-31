@@ -1,3 +1,4 @@
+---
 nut_stats_state: "{{ 'present' if nut_stats_targets is truthy else 'absent' }}"
 nut_stats_metric_name: ups
 nut_stats_dir: /opt/nut-stats

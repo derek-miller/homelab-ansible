@@ -1,3 +1,4 @@
+---
 - assert:
     that: lightdm_state in ('present',)
     quiet: yes

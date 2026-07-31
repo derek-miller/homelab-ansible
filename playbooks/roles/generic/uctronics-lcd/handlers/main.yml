@@ -1,3 +1,4 @@
+---
 - name: restart uctronics-lcd
   systemd:
     name: "{{ uctronics_lcd_service }}"

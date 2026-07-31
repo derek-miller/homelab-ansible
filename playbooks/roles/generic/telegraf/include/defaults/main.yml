@@ -1,3 +1,4 @@
+---
 telegraf_state: present
 telegraf_collection_interval: 10s
 telegraf_collection_jitter: 0s

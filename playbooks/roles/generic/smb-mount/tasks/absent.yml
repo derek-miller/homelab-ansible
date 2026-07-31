@@ -1,3 +1,4 @@
+---
 # Tear down autofs config. The /etc/auto_master line removal requires a
 # GUI-Terminal one-liner because writes to it fail over SSH (and even from
 # a boot-time LaunchDaemon — see defaults/main.yml).

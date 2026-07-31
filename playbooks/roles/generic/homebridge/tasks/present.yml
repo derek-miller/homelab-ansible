@@ -1,3 +1,4 @@
+---
 # ---- Node.js install (first-time bootstrap only) -----------------------
 # Homebridge's wiki "Option 2" native install uses the official nodejs.org
 # .pkg which lands under /usr/local/. We match that convention. If Node.js

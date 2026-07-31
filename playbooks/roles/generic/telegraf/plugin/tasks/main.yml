@@ -1,3 +1,4 @@
+---
 - assert:
     that: telegraf_plugin_state in ('present', 'absent')
     quiet: yes

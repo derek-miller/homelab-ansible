@@ -1,3 +1,4 @@
+---
 # disk-mount absent — reverse what present.yml did:
 #   - unmount each configured path
 #   - remove the fstab entry
