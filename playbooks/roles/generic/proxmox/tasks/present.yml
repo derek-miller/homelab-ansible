@@ -12,8 +12,6 @@
     - proxmox_timezone
     - proxmox_keyboard
     - proxmox_lan_driver
-    - proxmox_fabric_driver
-    - proxmox_fabric_mtu
     - proxmox_bridge_vids
     - proxmox_metrics_server
 

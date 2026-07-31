@@ -9,9 +9,13 @@ _proxmox_interface_links:
     name: "{{ proxmox_lan_interface }}"
     address: "{{ proxmox_lan_address | default('') }}"
   - file: 11-nic1.link
-    driver: "{{ proxmox_fabric_driver }}"
-    name: "{{ proxmox_fabric_interface }}"
+    driver: "{{ proxmox_fabric_driver | default('') }}"
+    name: "{{ proxmox_fabric_interface | default('') }}"
     address: "{{ proxmox_fabric_address | default('') }}"
+
+# PVE ships mail-to-root; it has no stanza in notifications.cfg to match against.
+_proxmox_builtin_notification_targets:
+  - mail-to-root
 
 _proxmox_corosync_link1: >-
   {{ ('--link1 ' ~ proxmox_fabric_address.split('/')[0])

@@ -17,10 +17,13 @@
 
 - name: require every matcher to name a defined target
   assert:
-    that: item.target in (proxmox_notification_targets | map(attribute='name') | list)
+    that: >-
+      item.target in ((proxmox_notification_targets | map(attribute='name') | list)
+                      + _proxmox_builtin_notification_targets)
     fail_msg: >-
-      Matcher {{ item.name }} targets {{ item.target }}, which is not in
-      proxmox_notification_targets. PVE drops notifications for unknown targets.
+      Matcher {{ item.name }} targets {{ item.target }}, which is neither in
+      proxmox_notification_targets nor built into PVE. PVE drops notifications
+      for unknown targets.
     quiet: yes
   loop: "{{ proxmox_notification_matchers }}"
   loop_control:

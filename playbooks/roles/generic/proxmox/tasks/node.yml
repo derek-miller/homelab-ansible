@@ -12,6 +12,16 @@
   when: item.address | length > 0
   notify: proxmox interface names changed
 
+- name: unpin interface names no longer configured
+  file:
+    path: "/etc/systemd/network/{{ item.file }}"
+    state: absent
+  loop: "{{ _proxmox_interface_links }}"
+  loop_control:
+    label: "{{ item.file }}"
+  when: item.address | length == 0
+  notify: proxmox interface names changed
+
 - name: configure network interfaces
   template:
     src: network/interfaces.jinja2
@@ -24,7 +34,7 @@
 
 - name: create mount points for cifs storages
   file:
-    path: "{{ item.options.path }}"
+    path: "{{ item.options.path | default('/mnt/pve/' ~ item.id) }}"
     state: directory
     owner: root
     group: root
