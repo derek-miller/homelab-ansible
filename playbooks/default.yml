@@ -150,12 +150,6 @@
   tags:
     - project-files
 
-- hosts: ser2net
-  roles:
-    - role: generic/ser2net
-  tags:
-    - ser2net
-
 - hosts: disk-mounts
   roles:
     - role: generic/disk-mount

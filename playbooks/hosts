@@ -74,8 +74,6 @@ raspi1
 [disk-mounts]
 rackvm[1:5]
 
-[ser2net]
-
 [network-ups-tools]
 rackvm4
 raspi1
