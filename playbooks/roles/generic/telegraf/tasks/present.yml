@@ -13,7 +13,6 @@
     owner: "{{ telegraf_conf_owner|default(root_user|default('root')) }}"
     group: "{{ telegraf_conf_group|default(root_group|default('root')) }}"
     mode: 0644
-    backup: yes
   notify: restart telegraf
 
 - include_tasks: present-debian.yml
