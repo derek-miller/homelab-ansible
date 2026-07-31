@@ -12,10 +12,7 @@
     - proxmox_timezone
     - proxmox_keyboard
     - proxmox_lan_driver
-    - proxmox_fabric_driver
-    - proxmox_fabric_mtu
     - proxmox_bridge_vids
-    - proxmox_corosync_links_expected
     - proxmox_metrics_server
 
 - include_tasks: node.yml

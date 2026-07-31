@@ -1,0 +1,1 @@
+{"title":"{{ escape title }}","message":"{{ escape message }}","severity":"{{ severity }}","timestamp":{{ timestamp }},"fields":{{ json fields }}}

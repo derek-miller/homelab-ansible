@@ -22,9 +22,7 @@
   file:
     path: "/etc/systemd/network/{{ item }}"
     state: absent
-  loop:
-    - 10-nic0.link
-    - 11-nic1.link
+  loop: "{{ _proxmox_interface_links | map(attribute='file') | list }}"
   notify: proxmox interface names changed
 
 - name: remove the fabric hotplug rule

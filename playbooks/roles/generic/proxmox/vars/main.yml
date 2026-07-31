@@ -1,2 +1,30 @@
 ---
 _proxmox_influxdb_plugin: /usr/share/perl5/PVE/Status/InfluxDB.pm
+
+# A link is pinned only when its interface is configured, so `address` doubles as
+# the condition — the fabric NIC is optional.
+_proxmox_interface_links:
+  - file: 10-nic0.link
+    driver: "{{ proxmox_lan_driver }}"
+    name: "{{ proxmox_lan_interface }}"
+    address: "{{ proxmox_lan_address | default('') }}"
+  - file: 11-nic1.link
+    driver: "{{ proxmox_fabric_driver | default('') }}"
+    name: "{{ proxmox_fabric_interface | default('') }}"
+    address: "{{ proxmox_fabric_address | default('') }}"
+
+# PVE ships mail-to-root; it has no stanza in notifications.cfg to match against.
+_proxmox_builtin_notification_targets:
+  - mail-to-root
+
+_proxmox_corosync_link1: >-
+  {{ ('--link1 ' ~ proxmox_fabric_address.split('/')[0])
+     if proxmox_fabric_address | default('') | length > 0 else '' }}
+
+# Every node answers on ring0; only fabric-equipped nodes also answer on ring1.
+_proxmox_corosync_peers_expected: >-
+  {{ (groups['proxmox'] | length)
+     + (groups['proxmox'] | map('extract', hostvars)
+        | selectattr('proxmox_fabric_address', 'defined')
+        | rejectattr('proxmox_fabric_address', 'equalto', '')
+        | list | length) }}
