@@ -1,0 +1,137 @@
+[
+  {
+    "id": "pve-discord-flow",
+    "type": "tab",
+    "label": "Proxmox → Discord",
+    "disabled": false,
+    "info": "Relays Proxmox notifications to Discord — full message and metadata, truncated to fit.",
+    "env": []
+  },
+  {
+    "id": "pve-http-in",
+    "type": "http in",
+    "z": "pve-discord-flow",
+    "name": "POST /hook/proxmox",
+    "url": "/hook/proxmox",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 160,
+    "y": 100,
+    "wires": [
+      [
+        "pve-format"
+      ]
+    ]
+  },
+  {
+    "id": "pve-format",
+    "type": "function",
+    "z": "pve-discord-flow",
+    "name": "format for Discord",
+    "func": "const p = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};\nconst meta = (p.fields && typeof p.fields === 'object') ? p.fields : {};\n\nconst severity = String(p.severity || 'unknown').toLowerCase();\nconst COLOR = { error: 15158332, warning: 15105570 };\nconst show = v => (v !== null && typeof v === 'object') ? JSON.stringify(v) : String(v);\n\n// Discord allows 25 fields, 1024 chars each. Everything past hostname/type is\n// whatever the event happened to carry, so new PVE metadata appears on its own.\nconst fields = [\n    { name: 'Node', value: show(meta.hostname || 'n/a').slice(0, 1024), inline: true },\n    { name: 'Event', value: show(meta.type || 'n/a').slice(0, 1024), inline: true },\n    { name: 'Severity', value: severity, inline: true }\n];\nlet fieldChars = fields.reduce((a, f) => a + f.name.length + f.value.length, 0);\nfor (const [k, v] of Object.entries(meta)) {\n    if (k === 'hostname' || k === 'type' || fields.length >= 25) continue;\n    const name = k.slice(0, 256);\n    const value = show(v).slice(0, 1024) || '—';\n    // Metadata must not crowd out the message it describes.\n    if (fieldChars + name.length + value.length > 2400) continue;\n    fields.push({ name: name, value: value, inline: true });\n    fieldChars += name.length + value.length;\n}\n\nconst title = String(p.title || 'Proxmox notification').slice(0, 256);\n\n// Whole embed must stay under 6000; give the description whatever is left,\n// capped by Discord's own 4096 limit on that one attribute.\nlet body = String(p.message == null ? '' : p.message).replace(/```/g, \"'''\");\nconst LIMIT = Math.max(0, Math.min(3900, 5800 - title.length - fieldChars - 60));\nif (LIMIT < 120) {\n    body = '';\n} else if (body.length > LIMIT) {\n    const head = Math.floor(LIMIT * 0.55);\n    const tail = LIMIT - head;\n    body = body.slice(0, head) + \"\\n\\n... \" + (body.length - head - tail) + \" characters truncated ...\\n\\n\" +\n        (tail > 0 ? body.slice(body.length - tail) : '');\n}\n\nconst ts = Number(p.timestamp);\n\nconst embed = {\n    title: title,\n    color: COLOR[severity] || 9807270,\n    description: body.length ? \"```\\n\" + body + \"\\n```\" : \"_(no message body)_\",\n    fields: fields,\n    timestamp: new Date((Number.isFinite(ts) && ts > 0 ? ts * 1000 : Date.now())).toISOString()\n};\n\nconst url = env.get('DISCORD_WEBHOOK_URL');\nif (!url) {\n    node.error('DISCORD_WEBHOOK_URL is not set', msg);\n    return null;\n}\n\nmsg.method = 'POST';\nmsg.url = url;\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.payload = { username: 'Proxmox', embeds: [embed] };\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 100,
+    "wires": [
+      [
+        "pve-discord-req"
+      ]
+    ]
+  },
+  {
+    "id": "pve-discord-req",
+    "type": "http request",
+    "z": "pve-discord-flow",
+    "name": "POST to Discord",
+    "method": "POST",
+    "ret": "txt",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "x": 630,
+    "y": 100,
+    "wires": [
+      [
+        "pve-finalize"
+      ]
+    ]
+  },
+  {
+    "id": "pve-finalize",
+    "type": "function",
+    "z": "pve-discord-flow",
+    "name": "log non-2xx, ACK Proxmox",
+    "func": "// http request does not throw on non-2xx, so surface it here.\nconst sc = msg.statusCode;\nif (typeof sc !== 'number' || sc < 200 || sc >= 300) {\n    let detail = msg.payload;\n    try { detail = typeof detail === 'string' ? detail : JSON.stringify(detail); }\n    catch (e) { detail = String(detail); }\n    node.warn('Discord returned HTTP ' + sc + ': ' + String(detail).slice(0, 300));\n}\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 870,
+    "y": 100,
+    "wires": [
+      [
+        "pve-http-resp"
+      ]
+    ]
+  },
+  {
+    "id": "pve-http-resp",
+    "type": "http response",
+    "z": "pve-discord-flow",
+    "name": "respond 200",
+    "statusCode": "200",
+    "headers": {},
+    "x": 1110,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "pve-catch",
+    "type": "catch",
+    "z": "pve-discord-flow",
+    "name": "catch relay errors",
+    "scope": null,
+    "uncaught": false,
+    "x": 390,
+    "y": 200,
+    "wires": [
+      [
+        "pve-error"
+      ]
+    ]
+  },
+  {
+    "id": "pve-error",
+    "type": "function",
+    "z": "pve-discord-flow",
+    "name": "log error",
+    "func": "node.warn('Proxmox->Discord relay error: ' + ((msg.error && msg.error.message) || 'unknown'));\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 640,
+    "y": 200,
+    "wires": [
+      [
+        "pve-http-resp"
+      ]
+    ]
+  }
+]

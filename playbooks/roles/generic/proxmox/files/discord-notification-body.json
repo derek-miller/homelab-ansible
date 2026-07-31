@@ -1,1 +1,0 @@
-{"embeds":[{"title":"{{ escape title }}","color":{{#if (eq severity "error")}}15158332{{else if (eq severity "warning")}}15105570{{else}}9807270{{/if}},"fields":[{"name":"Node","value":"{{ fields.hostname }}","inline":true},{"name":"Event","value":"{{ fields.type }}","inline":true},{"name":"Severity","value":"{{ severity }}","inline":true}]}]}

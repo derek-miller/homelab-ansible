@@ -27,6 +27,7 @@ proxmox_time_sync_service: chrony
 
 proxmox_acls: []
 proxmox_storages: []
+proxmox_notification_targets: []
 proxmox_notification_matchers: []
 proxmox_ha_resources: []
 proxmox_ha_rules: []

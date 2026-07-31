@@ -1,0 +1,10 @@
+{# Secret halves of the targets in notifications.cfg, keyed by the same names. #}
+{% for t in proxmox_notification_targets if t.secrets | default({}) %}
+{% if not loop.first %}
+
+{% endif %}
+webhook: {{ t.name }}
+{% for name, value in t.secrets | dictsort %}
+	secret name={{ name }},value={{ value | b64encode }}
+{% endfor %}
+{% endfor %}

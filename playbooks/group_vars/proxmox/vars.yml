@@ -29,18 +29,6 @@ proxmox_oidc_client_key: !vault |
   33313462343738346261303331316466666438646161663966623766643635653136363437313939
   3031
 
-proxmox_discord_webhook_token: !vault |
-  $ANSIBLE_VAULT;1.1;AES256
-  33313839346635626564386263366265653466633865636530313463303464396364393634656561
-  3066393635616132353435393535336466636533633531370a646631376636323964366462313061
-  62353936613036663434613539326334386331383364656362386235326363636561333161396433
-  6237303330643932310a306234643731313061666235366462656566646537653165326337316665
-  34646562663932613261636331623666363163393162633137613263663065663536333030373332
-  38313566353536336331653965383737356635313232373066386437613466326432363737353762
-  30396339313766323062323264373838383061306332646663353039636362303235386562366431
-  38616365303464306564373933386538633935323834346134653630653833623137356161303936
-  6437
-
 proxmox_cifs_password: !vault |
   $ANSIBLE_VAULT;1.1;AES256
   62623564343737376263316461333939326435666138376534653064373261666331623132393664
@@ -178,17 +166,33 @@ proxmox_metrics_proto: https
 proxmox_metrics_bucket: pve
 proxmox_metrics_verify_certificate: 1
 
-# Mail would log success and never arrive — no relayhost. The body is omitted
-# because a real vzdump report exceeds Discord's embed limit and 400s.
+# node-red reformats and decides where these end up. Mail is unusable here, no relayhost.
+proxmox_notification_targets:
+  - name: node-red
+    url: !vault |
+      $ANSIBLE_VAULT;1.1;AES256
+      30323631623261353231346234636333383738366537646666363737613730366634633939626533
+      3761666366396630363461376133396139636539323735620a653565373863356132363965633631
+      38613862373534386339386335346137366165656165633534643334613764343535633065666237
+      3331373463623365370a343633393138616365336339643338646537393535356362663137653563
+      34313834636534363864303762336166333166353964346133393136353531643236333839306633
+      3065323632633433356539343432633330343032316637313834
+    body_file: node-red-notification-body.json
+    headers:
+      Content-Type: application/json
+      X-Webhook-Token: "{{ '{{ secrets.token }}' }}"
+    secrets:
+      token: "{{ node_red_webhook_token }}"
+
 proxmox_notification_matchers:
-  - name: discord-critical
-    comment: Critical (warning/error/unknown) notifications to Discord
+  - name: critical
+    comment: Critical (warning/error/unknown) notifications
     match-severity: warning,error,unknown
-    target: discord
-  - name: discord-non-critical
-    comment: Non-critical (info/notice) notifications to Discord - disable to quiet the channel
+    target: node-red
+  - name: non-critical
+    comment: Non-critical (info/notice) notifications - disable to quiet routine traffic
     match-severity: info,notice
-    target: discord
+    target: node-red
 
 proxmox_ha_resources:
   - sid: vm:100

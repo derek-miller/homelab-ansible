@@ -15,6 +15,17 @@
     group: www-data
     mode: 0640
 
+- name: require every matcher to name a defined target
+  assert:
+    that: item.target in (proxmox_notification_targets | map(attribute='name') | list)
+    fail_msg: >-
+      Matcher {{ item.name }} targets {{ item.target }}, which is not in
+      proxmox_notification_targets. PVE drops notifications for unknown targets.
+    quiet: yes
+  loop: "{{ proxmox_notification_matchers }}"
+  loop_control:
+    label: "{{ item.name }}"
+
 - name: configure notification targets and matchers
   template:
     src: pve/notifications.cfg.jinja2
@@ -83,10 +94,8 @@
   notify: restart pvestatd
 
 - name: write notification secrets
-  copy:
-    content: |
-      webhook: discord
-      	secret name=token,value={{ proxmox_discord_webhook_token | b64encode }}
+  template:
+    src: pve/priv-notifications.cfg.jinja2
     dest: /etc/pve/priv/notifications.cfg
     owner: root
     group: www-data
