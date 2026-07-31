@@ -88,3 +88,10 @@ Do not narrow this with `hosts=`: the role runs on the primary manager and reach
 For each label whose inventory host no longer matches the node carrying it, the role scales that label's services to 0, tars each of their volumes through `docker_migrate_transit_dir` onto the target, removes the source copy, and moves the label. The stack deploy then starts the services on the target, on top of their data. Services and volumes are read from the stack definition, so nothing needs listing by hand.
 
 Without `docker_migrate_labels=yes` the move is only reported, and the label reconcile is held back — moving a label while its data sits on the old host would start the service on an empty volume. A routine `make run` is therefore safe to run with a pending move outstanding; it just will not act on it.
+
+Volumes are all the role moves. Check the rest by hand before moving a label, because a service that lands on a host missing any of it fails to start, or starts and is unreachable:
+
+- **Host bind mounts** — `/var/docker/...` paths come from `project-files`, which is keyed by hostname, so the file tree and the `project_files` declaration move to the new host too.
+- **CIFS shares** — the target needs whatever the services mount beyond `Backups`.
+- **Locally built images** — `docker_images_to_build` moves with the workload, or the target has no image to run.
+- **Host-network services** — these are not on the overlay, so traefik routes them from `external-rules.yaml` by address rather than discovering them. That address is not a label and does not follow the move; repoint it or the service is reachable locally and 502s through traefik.
