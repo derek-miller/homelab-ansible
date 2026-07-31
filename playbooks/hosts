@@ -82,6 +82,7 @@ rackvm[1:5]
 
 [network-ups-tools]
 rackpi2
+rackvm4
 raspi1
 
 [sysdweb]
@@ -92,6 +93,7 @@ rackpi2
 
 [control4-director-stats]
 rackpi2
+rackvm4
 
 [macos]
 rackmini1

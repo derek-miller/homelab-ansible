@@ -1,5 +1,5 @@
 ---
-nut_state: present
+nut_state: "{{ 'present' if nut_ups_devices is truthy else 'absent' }}"
 nut_max_retry: 3
 nut_mode: netserver
 
