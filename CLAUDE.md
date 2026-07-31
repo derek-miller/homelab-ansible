@@ -95,4 +95,4 @@ Volumes are all the role moves. Check the rest by hand before moving a label, be
 - **CIFS shares** — the target needs whatever the services mount beyond `Backups`.
 - **Locally built images** — `docker_images_to_build` moves with the workload, or the target has no image to run.
 - **Host-network services** — these are not on the overlay, so traefik routes them from `external-rules.yaml` by address rather than discovering them. That address is not a label and does not follow the move; repoint it or the service is reachable locally and 502s through traefik.
-- **Endpoints other hosts write to** — `influxdb3_url` in `group_vars/all` names the metrics host directly, so moving `metrics` leaves every telegraf agent writing to the old one. Nothing errors; the graphs just stop filling.
+- **Endpoints other hosts write to** — `influxdb3_url` follows the `metrics` label out of the inventory, but each telegraf agent only picks up the new address when its config is rewritten. Run `make run tags=telegraf` across every host after moving `metrics`, or the agents keep writing to the old one; nothing errors, the graphs just stop filling.
