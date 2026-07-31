@@ -68,7 +68,8 @@
 # plist is missing — re-running hb-service install regenerates the plist
 # + restarts, which we don't want on every ansible run.
 - name: install hb-service LaunchDaemon (first-time bootstrap)
-  command: >-
+  shell: >-
+    umask 022 &&
     {{ homebridge_hbservice_bin }} install
     --user {{ homebridge_user }}
     --port {{ homebridge_ui_port }}
@@ -87,8 +88,11 @@
 # lets hb-service pick the latest recommended LTS; a pinned version forces
 # an exact upgrade or downgrade. Idempotent: stdout reports "already
 # up-to-date" when the target already matches.
+# umask 022: the become session inherits umask 077, which would otherwise
+# leave the extracted Node.js tree unreadable to non-ansible users.
 - name: keep Node.js at the Homebridge-managed version
-  command: >-
+  shell: >-
+    umask 022 &&
     {{ homebridge_hbservice_bin }} update-node
     {% if homebridge_node_version is truthy %}{{ homebridge_node_version }}{% endif %}
   environment:
@@ -96,3 +100,28 @@
   register: _hb_update_node
   changed_when: "'Installing Node.js' in (_hb_update_node.stdout | default(''))"
   notify: homebridge changed
+
+# ---- /usr/local perms convergence --------------------------------------
+# The become session runs with umask 077, so anything it writes under
+# /usr/local (the npm -g installs above, plus other globally-installed
+# CLIs this host carries that ansible is not the source of truth for) can
+# land 0700 dirs / 0600 files with 0600 symlinks. macOS enforces symlink
+# modes (unlike Linux), so a 0600 symlink in /usr/local/bin is untraversable
+# by the services that exec through it. Normalise to world-readable every
+# run — this also re-heals after a macOS update resets the tree. Detection-
+# guarded so a converged tree reports ok, not changed.
+- name: normalize /usr/local Node.js tree perms (world-readable)
+  shell: |
+    set -eu
+    fixed=0
+    if [ -d /usr/local/lib/node_modules ] && [ -n "$(find /usr/local/lib/node_modules \( -type d ! -perm -055 -o -type f ! -perm -044 \) -print 2>/dev/null | head -n1)" ]; then
+      chmod -R go+rX /usr/local/lib/node_modules
+      fixed=1
+    fi
+    if [ -d /usr/local/bin ] && [ -n "$(find /usr/local/bin -type l ! -perm -055 -print 2>/dev/null | head -n1)" ]; then
+      find /usr/local/bin -type l ! -perm -055 -exec chmod -h go+rx {} +
+      fixed=1
+    fi
+    printf 'fixed=%s\n' "$fixed"
+  register: _hb_node_perms
+  changed_when: "'fixed=1' in _hb_node_perms.stdout"
