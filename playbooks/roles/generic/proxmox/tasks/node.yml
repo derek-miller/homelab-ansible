@@ -22,6 +22,16 @@
   when: item.address | length == 0
   notify: proxmox interface names changed
 
+- name: trigger ifup when the fabric interface re-enumerates
+  template:
+    src: udev/90-fabric-hotplug.rules.jinja2
+    dest: /etc/udev/rules.d/90-fabric-hotplug.rules
+    owner: root
+    group: root
+    mode: 0644
+  when: proxmox_fabric_address | default('') | length > 0
+  notify: reload udev rules
+
 - name: configure network interfaces
   template:
     src: network/interfaces.jinja2

@@ -25,6 +25,12 @@
   loop: "{{ _proxmox_interface_links | map(attribute='file') | list }}"
   notify: proxmox interface names changed
 
+- name: remove the fabric hotplug rule
+  file:
+    path: /etc/udev/rules.d/90-fabric-hotplug.rules
+    state: absent
+  notify: reload udev rules
+
 # /etc/network/interfaces is deliberately left in place. Removing it would strand
 # the node, and there is no meaningful "absent" state for a hypervisor's
 # management network.
