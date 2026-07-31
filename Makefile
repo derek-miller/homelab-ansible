@@ -51,8 +51,10 @@ install-git-hooks: .git/hooks/pre-commit
 	ln -sf ../../hooks/pre-commit $@
 
 .PHONY: init
+# Cap pip below 26: pip 26 dropped pip._internal.utils.compat.stdlib_pkgs, which
+# pip-tools 7.6.0 (its latest) still imports, so an unpinned upgrade breaks pip-sync.
 init:
-	pip install -i $(PIP_INDEX_URL) -U setuptools pip wheel pip-tools
+	pip install -i $(PIP_INDEX_URL) -U setuptools 'pip<26' wheel pip-tools
 
 .PHONY: install
 install: requirements.txt playbooks/roles/ansible/remote/files/requirements.txt
