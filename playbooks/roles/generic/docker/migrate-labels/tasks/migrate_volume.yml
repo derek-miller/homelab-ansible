@@ -90,8 +90,9 @@
     - name: "{{ move.label }}/{{ volume_name }} | discard the exited tasks still holding it"
       shell: |
         set -o pipefail
-        ids=$(docker ps -aq --filter volume={{ _vol }})
-        if [ -n "$ids" ]; then docker rm $ids; fi
+        for id in $(docker ps -aq --filter volume={{ _vol }}); do
+          docker rm "$id" || true
+        done
       args:
         executable: /bin/bash
       delegate_to: "{{ move.from }}"
@@ -106,7 +107,19 @@
       become: true
       register: _rm
       changed_when: _rm.rc == 0
-      failed_when:
-        - _rm.rc != 0
-        - "'no such volume' not in (_rm.stderr | lower)"
+      failed_when: false
       when: not ansible_check_mode
+
+    # The copy is already on the target, so a source that will not release the
+    # volume is litter rather than a failure — saying so beats aborting a
+    # migration mid-way and leaving the services down.
+    - name: "{{ move.label }}/{{ volume_name }} | left behind on {{ move.from }}"
+      debug:
+        msg: >-
+          {{ _vol }} could not be removed from {{ move.from }}
+          ({{ _rm.stderr | default('') | trim }}). The data is on
+          {{ move.to }}; clean up the source copy by hand.
+      when:
+        - not ansible_check_mode
+        - _rm.rc | default(0) != 0
+        - "'no such volume' not in (_rm.stderr | default('') | lower)"
