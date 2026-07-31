@@ -2,7 +2,7 @@
 available_docker_images:
   sourcebot:
     repo: https://github.com/sourcebot-dev/sourcebot.git
-    version: v5.1.2
+    version: v5.1.4
     patches:
       # Strips the Sentry sourcemap-upload secret mounts: RUN --mount requires
       # BuildKit, which the docker_image build path doesn't use, and no Sentry
@@ -10,7 +10,11 @@ available_docker_images:
       - sourcebot/no-buildkit.patch
       - sourcebot/vault-entitlements.patch
     image_name: sourcebot
-    image_tag: v5.1.2-patched1
+    image_tag: v5.1.4-patched1
+  postgres-pgcron:
+    dockerfile: postgres-pgcron/Dockerfile
+    image_name: postgres-pgcron
+    image_tag: "16-cron1.6.7"
   youtrack:
     dockerfile: youtrack/Dockerfile
     image_name: youtrack

@@ -1,5 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/sourcebot-dev/sourcebot/main/schemas/v3/index.json",
+  "settings": {
+    "reindexIntervalMs": 21600000,
+    "reindexRepoPollingIntervalMs": 60000,
+    "resyncConnectionPollingIntervalMs": 60000,
+    "maxRepoIndexingJobConcurrency": 4
+  },
   "connections": {
     "drivers-control4-com-driver-repos-shard0": {
       "type": "git",
