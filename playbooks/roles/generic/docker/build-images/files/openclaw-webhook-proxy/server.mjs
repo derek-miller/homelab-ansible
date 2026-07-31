@@ -27,7 +27,7 @@
  *   GITHUB_GUARDRAILS_FILE   — path to file containing GitHub guardrails text
  *   GITHUB_ALLOW_USERS       — comma-separated usernames to allow (allowlist mode; mutually exclusive with GITHUB_IGNORE_USERS)
  *   GITHUB_IGNORE_USERS      — comma-separated usernames to skip (ignorelist mode; mutually exclusive with GITHUB_ALLOW_USERS)
- *   GITHUB_SELF_USERS        — comma-separated commit-author names for this agent's own bots; all-green CI batches on their commits are dropped (optional)
+ *   GITHUB_SELF_USERS        — comma-separated identities for this agent's own bots, matched against the commit author's git name, email, or noreply login; all-green CI batches on their commits are dropped (optional)
  *
  * YouTrack (enabled when YOUTRACK_HOOK_PATH is set):
  *   YOUTRACK_HOOK_PATH       — URL path prefix for YouTrack webhooks
@@ -109,8 +109,9 @@ const GITHUB_ALLOW_USERS = (process.env.GITHUB_ALLOW_USERS || "")
   .split(",")
   .map((u) => u.trim().toLowerCase())
   .filter(Boolean);
-// Commit authors that are this agent's own service accounts. Used only to drop
-// all-green CI batches on commits we authored ourselves; see
+// Identities for this agent's own service accounts, matched against the commit
+// author's git name, email, or noreply login (see selfMatchCandidates). Used
+// only to drop all-green CI batches on commits we authored ourselves; see
 // isSelfAuthoredGreenCheckBatch(). Empty (the default) disables the behaviour.
 const GITHUB_SELF_USERS = (process.env.GITHUB_SELF_USERS || "")
   .split(",")
@@ -808,7 +809,34 @@ function getCheckMeta(event, payload) {
       payload.check_suite?.head_commit?.author?.name ??
       payload.check_run?.check_suite?.head_commit?.author?.name ??
       null,
+    commitAuthorEmail:
+      payload.check_suite?.head_commit?.author?.email ??
+      payload.check_run?.check_suite?.head_commit?.author?.email ??
+      null,
   };
+}
+
+/**
+ * Identity strings a commit author can be matched against GITHUB_SELF_USERS on.
+ *
+ * `author.name` is the git display name: free-form, and it drifts (a squash
+ * merge attributes to the PR author, a rename changes it silently). Because the
+ * match is what suppresses the drop, drift fails open — bot CI quietly starts
+ * waking agents again with nothing in the logs to say so. GitHub's noreply
+ * address embeds the immutable account login
+ * ("269585087+svc-derek-miller[bot]@users.noreply.github.com"), so matching the
+ * local part with the numeric account id stripped survives a name change.
+ */
+function selfMatchCandidates(name, email) {
+  const out = [];
+  if (name) out.push(name.trim().toLowerCase());
+  if (email) {
+    const addr = email.trim().toLowerCase();
+    out.push(addr);
+    const local = addr.split("@")[0].replace(/^\d+\+/, "");
+    if (local) out.push(local);
+  }
+  return out;
 }
 
 /**
@@ -831,8 +859,11 @@ function isSelfAuthoredGreenCheckBatch(events) {
   if (conclusions.length === 0) return false;
   if (!conclusions.every((c) => c === "success")) return false;
 
-  const author = events.map((e) => e.check.commitAuthor).find(Boolean);
-  return !!author && GITHUB_SELF_USERS.includes(author.toLowerCase());
+  const authored = events.map((e) => e.check).find((c) => c.commitAuthor || c.commitAuthorEmail);
+  if (!authored) return false;
+  return selfMatchCandidates(authored.commitAuthor, authored.commitAuthorEmail).some((c) =>
+    GITHUB_SELF_USERS.includes(c)
+  );
 }
 
 /** Return true if this event should flush its batch right away */
@@ -879,14 +910,26 @@ function getYouTrackEventDetail(payload) {
   return { eventType: action, detail: issueId };
 }
 
+/** True for a session key that names a ticket, i.e. the full track of work */
+function isTicketSession(sessionKey) {
+  return typeof sessionKey === "string" && sessionKey.startsWith("ticket:");
+}
+
 /** Add an event entry to a pending batch, starting the debounce timer if needed */
 function addToBatch(key, eventEntry, guardrails, source, sessionKey = null, deliveryId = null) {
   if (pendingBatches.has(key)) {
     const batch = pendingBatches.get(key);
     batch.events.push(eventEntry);
     if (deliveryId) batch.deliveryIds.push(deliveryId);
-    // First non-null sessionKey wins (batch events should share the same ticket)
-    if (sessionKey && !batch.sessionKey) batch.sessionKey = sessionKey;
+    // First sessionKey wins, except that a ticket lane upgrades a bare hook lane
+    // even when it arrives second. Events in one batch share a thread id but not
+    // necessarily a resolved ticket (a `check_run` sees only the branch, while
+    // `pull_request` sees the body), and pinning the batch to `hook:github:...`
+    // because the thin event happened to land first leaves the *next* batch on
+    // `ticket:X` — the same cross-batch lane split HL-17 exists to close.
+    if (sessionKey && (!batch.sessionKey || (isTicketSession(sessionKey) && !isTicketSession(batch.sessionKey)))) {
+      batch.sessionKey = sessionKey;
+    }
     logDebug(`Added event to batch ${key} (${batch.events.length} total)`);
     if (batch.events.length >= MAX_BATCH_SIZE) {
       logDebug(`Batch ${key} reached max size (${MAX_BATCH_SIZE}), flushing immediately`);
@@ -921,7 +964,7 @@ async function flushBatch(key) {
 
   if (source === "GitHub" && isSelfAuthoredGreenCheckBatch(events)) {
     console.log(
-      `[${new Date().toISOString()}] Dropping batch ${key}: ${events.length} green check event(s) on a commit authored by ${events.map((e) => e.check.commitAuthor).find(Boolean)}`
+      `[${new Date().toISOString()}] Dropping batch ${key}: ${events.length} green check event(s) on a commit authored by ${events.map((e) => e.check.commitAuthor || e.check.commitAuthorEmail).find(Boolean)}`
     );
     return;
   }
@@ -1314,5 +1357,13 @@ server.listen(PORT, () => {
   console.log(`OpenClaw webhook proxy listening on port ${PORT}`);
   console.log(`Forwarding to: ${OPENCLAW_HOOKS_URL}`);
   console.log(`Active sources: ${sources.join(", ")}`);
+  // Echoed because a self-user entry that no longer matches any commit author
+  // fails open silently: green bot CI just starts waking agents again. Having
+  // the configured list in the log makes a drift diagnosable from one restart.
+  if (GITHUB_ENABLED) {
+    console.log(
+      `Self commit authors (green CI dropped): ${GITHUB_SELF_USERS.length > 0 ? GITHUB_SELF_USERS.join(", ") : "(none — self-CI drop disabled)"}`
+    );
+  }
   console.log(`Log level: ${LOG_LEVEL}`);
 });
