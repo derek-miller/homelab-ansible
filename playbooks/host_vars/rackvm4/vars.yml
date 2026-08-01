@@ -80,6 +80,10 @@ control4_director_stats_controllers:
   - name: core1
     address: 192.168.2.92
 
-# Empty drives the role to absent. The plugs stopped answering the legacy
-# unauthenticated protocol; restoring them needs credentials — see HL-23.
+# Empty drives the role to absent. The plugs still answer the legacy unauthenticated
+# protocol on 9999 and no credentials are needed. What broke the collector was a
+# zoneinfo lookup of the legacy zone name the plugs report, fixed in #81 by adding the
+# tzdata wheel to the role virtualenv. Re-enabling is a placement question rather than
+# a protocol one: the addresses still live in rackpi2's host_vars, which is HL-11.
+# See HL-23.
 tplink_plug_stats_ip_addresses: []
