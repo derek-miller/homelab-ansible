@@ -4,15 +4,78 @@
 # sidesteps a chown failure on already-mounted non-POSIX filesystems
 # like exfat/ntfs, which reject file:owner/group.
 
-- name: create filesystems on empty managed devices
-  community.general.filesystem:
-    dev: "{{ item.device }}"
-    fstype: "{{ item.fstype }}"
-    opts: "{{ ('-L ' ~ item.src | regex_replace('^LABEL=', '')) if item.src.startswith('LABEL=') else omit }}"
-    state: present
+# `src` (LABEL=/UUID=) is what the mount resolves and is the authority once the
+# filesystem exists; `device` is only a target for creating one on a disk that
+# has none. Kernel names are not stable across reboots, so a `device` that was
+# right at provisioning time can later name a different disk entirely — resolve
+# both before anything runs mkfs.
+- name: probe managed devices
+  shell: |
+    set -eu
+    src={{ item.src | quote }}
+    case "$src" in
+      UUID=*)  existing="$(blkid -U "${src#UUID=}" 2>/dev/null || true)" ;;
+      LABEL=*) existing="$(blkid -L "${src#LABEL=}" 2>/dev/null || true)" ;;
+      *)       existing="" ;;
+    esac
+    real="$(readlink -f {{ item.device | quote }} 2>/dev/null || true)"
+    sig=""
+    inuse=no
+    if [ -b "$real" ]; then
+      sig="$(blkid -p -o value -s TYPE -s PTTYPE "$real" 2>/dev/null | tr '\n' ',' | sed 's/,$//' || true)"
+      for d in "$real" $(lsblk -nrpo NAME "$real" 2>/dev/null | tail -n +2); do
+        if findmnt -n --source "$d" >/dev/null 2>&1; then inuse=yes; fi
+      done
+    fi
+    printf '{"existing":"%s","real":"%s","sig":"%s","inuse":"%s"}' \
+      "$existing" "$real" "$sig" "$inuse"
+  register: _disk_mount_probe
+  changed_when: false
+  # Read-only, and --check must still reach a real decision about mkfs.
+  check_mode: no
   loop: "{{ disk_mounts | selectattr('device', 'defined') | list }}"
   loop_control:
-    label: "{{ item.device }} ({{ item.fstype }})"
+    label: "{{ item.src }} ({{ item.device }})"
+
+# Only evaluated when src was not found, i.e. the disk is genuinely fresh.
+# mke2fs does refuse a device with mounted partitions, but that is a last line
+# of defence inside another tool, not something this role should lean on.
+- name: refuse to create a filesystem on an unsafe device
+  assert:
+    that:
+      - _probe.real | length > 0
+      - _probe.inuse == 'no'
+      - _probe.sig | length == 0
+    fail_msg: >-
+      Refusing to run mkfs on {{ item.item.device }}
+      ({{ _probe.real if _probe.real | length > 0 else 'unresolved' }}):
+      {{ 'it does not exist' if _probe.real | length == 0
+         else 'it or one of its partitions is mounted' if _probe.inuse == 'yes'
+         else 'it already carries ' ~ _probe.sig }}.
+      {{ item.item.src }} is not present on this host, so this would have put a
+      new filesystem on the wrong disk. Compare `device` against
+      `lsblk -o NAME,SIZE,LABEL` and wipe the target deliberately if it is
+      genuinely the one you meant.
+    quiet: yes
+  vars:
+    _probe: "{{ item.stdout | from_json }}"
+  when: (item.stdout | from_json).existing | length == 0
+  loop: "{{ _disk_mount_probe.results }}"
+  loop_control:
+    label: "{{ item.item.device }}"
+
+- name: create filesystems on empty managed devices
+  community.general.filesystem:
+    dev: "{{ item.item.device }}"
+    fstype: "{{ item.item.fstype }}"
+    opts: >-
+      {{ ('-L ' ~ item.item.src | regex_replace('^LABEL=', ''))
+         if item.item.src.startswith('LABEL=') else omit }}
+    state: present
+  when: (item.stdout | from_json).existing | length == 0
+  loop: "{{ _disk_mount_probe.results }}"
+  loop_control:
+    label: "{{ item.item.device }} ({{ item.item.fstype }})"
 
 # If another subsystem (e.g. udisks2's GUI auto-mount) has the device
 # mounted at a different path, our fstab entry would be ignored until

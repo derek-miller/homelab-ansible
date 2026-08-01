@@ -47,7 +47,7 @@ proxmox_guest:
 
 disk_mounts:
   - src: "LABEL=docker-data"
-    device: /dev/sdb
+    device: /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1
     path: /mnt/data
     fstype: ext4
     opts: "defaults,nofail,x-systemd.device-timeout=10s"
