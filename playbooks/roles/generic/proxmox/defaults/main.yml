@@ -7,9 +7,6 @@ proxmox_lan_interface: nic0
 proxmox_fabric_interface: nic1
 proxmox_bridge_vlan_aware: yes
 
-# Offloads to turn off on the LAN NIC via a post-up hook. Which offloads a NIC
-# needs disabled is a fact about the hardware, so the site opts in; empty leaves
-# the driver defaults alone.
 proxmox_lan_offloads_disabled: []
 
 proxmox_machine_id:
