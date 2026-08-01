@@ -19,6 +19,9 @@
       *)       existing="" ;;
     esac
     real="$(readlink -f {{ item.device | quote }} 2>/dev/null || true)"
+    # readlink -f resolves a missing final component and exits 0, so a
+    # nonexistent device yields a plausible path. Only a block device counts.
+    [ -b "$real" ] || real=""
     sig=""
     inuse=no
     if [ -b "$real" ]; then
@@ -49,7 +52,7 @@
     fail_msg: >-
       Refusing to run mkfs on {{ item.item.device }}
       ({{ _probe.real if _probe.real | length > 0 else 'unresolved' }}):
-      {{ 'it does not exist' if _probe.real | length == 0
+      {{ 'it does not exist or is not a block device' if _probe.real | length == 0
          else 'it or one of its partitions is mounted' if _probe.inuse == 'yes'
          else 'it already carries ' ~ _probe.sig }}.
       {{ item.item.src }} is not present on this host, so this would have put a
