@@ -3,7 +3,8 @@ iface lo inet loopback
 
 iface {{ proxmox_lan_interface }} inet manual
 {% if proxmox_lan_offloads_disabled | default([]) | length > 0 %}
-	post-up ethtool -K {{ proxmox_lan_interface }} {{ proxmox_lan_offloads_disabled | map('regex_replace', '$', ' off') | join(' ') }}
+	post-up ethtool -K {{ proxmox_lan_interface }}{% for feature in proxmox_lan_offloads_disabled %} {{ feature }} off{% endfor %}
+
 {% endif %}
 
 auto vmbr0
