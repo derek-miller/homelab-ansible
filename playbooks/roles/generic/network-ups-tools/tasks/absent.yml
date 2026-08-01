@@ -1,15 +1,19 @@
 ---
-# Stop first: apt runs the units' prerm while they are still live otherwise, and
-# a driver mid-poll leaves the enumerator failed before it is even removed.
+# Stop first, apt runs the units' prerm while they are still live otherwise. The
+# enumerator is a path unit watching /etc/nut/ups.conf, so it has to go before
+# the file does or deleting the config trips it into the failed state cleared
+# at the bottom.
 - name: stop the nut units
   systemd:
     name: "{{ item }}"
     state: stopped
     enabled: no
   loop:
+    - nut-driver-enumerator.path
     - nut-monitor
     - nut-server
     - nut-driver.target
+    - nut.target
   failed_when: false
 
 # The metapackages alone leave nut-server and nut-client behind, so their units

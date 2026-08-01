@@ -53,11 +53,14 @@
 
 # The .desktop file ships in a meta package ahead of the compositor itself, so
 # selecting a session on that evidence alone boots the host into a login loop.
+# insertafter only applies when the key is absent, and without it the line lands
+# at EOF under [VNCServer], where lightdm never reads it.
 - name: select the session
   lineinfile:
     path: /etc/lightdm/lightdm.conf
     regexp: "^{{ item.key }}=.*"
     line: "{{ item.key }}={{ item.value }}"
+    insertafter: '^\[Seat:\*\]'
   loop:
     - {key: user-session, value: "{{ vnc_session }}"}
     - {key: autologin-session, value: "{{ vnc_session }}"}
