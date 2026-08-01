@@ -196,11 +196,13 @@
 # removes every label on each run.
 - hosts: docker_swarm_manager:docker_swarm_worker
   vars:
+    # Undefined (migrate-labels skipped by a hosts= limit) must hold, not reconcile.
+    docker_labels_reconcile_allowed: >-
+      {{ hostvars[groups['docker_swarm_manager'][0]].docker_labels_pending_migration is defined
+         and not hostvars[groups['docker_swarm_manager'][0]].docker_labels_pending_migration }}
     docker_swarm_labels: >-
-      {{ docker_swarm_current_labels | default({})
-         if (hostvars[groups['docker_swarm_manager'][0]].docker_labels_pending_migration
-             | default(false))
-         else swarm_node_labels }}
+      {{ swarm_node_labels if (docker_labels_reconcile_allowed | bool)
+         else docker_swarm_current_labels }}
   roles:
     - role: galaxy/docker-swarm
   post_tasks:
@@ -216,9 +218,7 @@
         labels: "{{ swarm_node_labels }}"
         labels_state: replace
       delegate_to: "{{ docker_swarm_primary_manager_name }}"
-      when: >-
-        not (hostvars[groups['docker_swarm_manager'][0]].docker_labels_pending_migration
-             | default(false))
+      when: docker_labels_reconcile_allowed | bool
 
     - name: the edge label must sit on a manager
       assert:

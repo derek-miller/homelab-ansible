@@ -72,6 +72,11 @@
       predate labwc; upgrade raspberrypi-ui-mods to converge it.
   when: not (vnc_compositor.stat.exists | default(false))
 
+# raspi-config picks wayvnc or vncserver-x11-serviced from `pgrep labwc`, so the
+# session has to be running before do_vnc, not merely selected.
+- name: restart lightdm before choosing a vnc server
+  meta: flush_handlers
+
 - name: read the built-in vnc server state
   command: systemctl is-enabled wayvnc
   register: vnc_enabled
