@@ -24,8 +24,6 @@ raspi1
 [tailscale:vars]
 create_cloudflare_ipv4_dns_record=yes
 
-# Advertisers for the NAS 4via6 route. Tailscale runs one primary and promotes
-# a standby when it drops, so every member needs its route approved to count.
 [nas-subnet-router]
 rackvm[1:5]
 
@@ -60,6 +58,13 @@ rackvm3
 
 [docker_swarm_worker]
 rackvm[4:5]
+
+[docker_labels]
+rackvm1  docker_labels=identity,edge,webhooks
+rackvm2  docker_labels=home,mqtt,youtrack
+rackvm3  docker_labels=media
+rackvm4  docker_labels=grafana,metrics
+rackvm5  docker_labels=sourcebot
 
 [project-files]
 rackvm1
@@ -97,9 +102,3 @@ rackvm5
 
 [qemu-guest-agent]
 rackvm[1:5]
-[docker_labels]
-rackvm1  docker_labels=identity,edge,webhooks
-rackvm2  docker_labels=home,mqtt,youtrack
-rackvm3  docker_labels=media
-rackvm4  docker_labels=grafana,metrics
-rackvm5  docker_labels=sourcebot
