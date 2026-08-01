@@ -28,8 +28,6 @@ sudoers:
   - user: pi
     passwordless: true
 
-tailscale_host_args: --advertise-routes=fd7a:115c:a1e0:b1a:0:1:c0a8:10a/128,192.168.1.10/32 # unas-pro
-
 raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:
   - pi

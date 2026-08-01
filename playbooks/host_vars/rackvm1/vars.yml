@@ -25,6 +25,10 @@ sudoers:
   - user: debian
     passwordless: true
 
+# 4via6, not a /24: the remote sites run 192.168.1.0/24 themselves. This exact
+# address is what `unas_over_ts` mounts, so it must not change.
+tailscale_host_args: --advertise-routes=fd7a:115c:a1e0:b1a:0:1:c0a8:10a/128 # unas-pro
+
 proxmox_guest:
   vmid: 201
   node: pve1
