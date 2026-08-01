@@ -89,6 +89,8 @@ For each label whose inventory host no longer matches the node carrying it, the 
 
 Without `docker_migrate_labels=yes` the move is only reported, and the label reconcile is held back — moving a label while its data sits on the old host would start the service on an empty volume. A routine `make run` is therefore safe to run with a pending move outstanding; it just will not act on it.
 
+The hold-back is keyed on a fact set on the primary manager, so a `hosts=` limit that excludes it leaves that fact undefined. Undefined holds rather than reconciles: a limit can stop the move from being detected, but not lift the interlock.
+
 Volumes are all the role moves. Check the rest by hand before moving a label, because a service that lands on a host missing any of it fails to start, or starts and is unreachable:
 
 - **Host bind mounts** — `/var/docker/...` paths come from `project-files`, which is keyed by hostname, so the file tree and the `project_files` declaration move to the new host too.
