@@ -80,6 +80,10 @@ control4_director_stats_controllers:
   - name: core1
     address: 192.168.2.92
 
-# Empty drives the role to absent. The plugs stopped answering the legacy
-# unauthenticated protocol; restoring them needs credentials — see HL-23.
-tplink_plug_stats_ip_addresses: []
+# The washer drops off the wifi for long stretches; it stays listed so the metric
+# resumes on its own when it comes back. 192.168.2.7 is unplugged and dropped.
+tplink_plug_stats_ip_addresses:
+  - 192.168.2.5  # Dryer
+  - 192.168.2.6  # Projector Backlight Power
+  - 192.168.2.8  # Washer
+  - 192.168.2.9  # Astronaut Lamp
