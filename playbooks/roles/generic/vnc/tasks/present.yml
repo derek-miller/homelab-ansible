@@ -73,9 +73,19 @@
   when: not (vnc_compositor.stat.exists | default(false))
 
 # raspi-config picks wayvnc or vncserver-x11-serviced from `pgrep labwc`, so the
-# session has to be running before do_vnc, not merely selected.
+# session has to be running before do_vnc, not merely selected. lightdm is
+# Type=dbus, so its restart returns before the session has execed anything.
 - name: restart lightdm before choosing a vnc server
   meta: flush_handlers
+
+- name: wait for the compositor to come up
+  command: pgrep -x {{ vnc_compositor_process }}
+  register: vnc_compositor_up
+  until: vnc_compositor_up.rc == 0
+  retries: 15
+  delay: 2
+  changed_when: false
+  when: vnc_compositor.stat.exists | default(false)
 
 - name: read the built-in vnc server state
   command: systemctl is-enabled wayvnc
