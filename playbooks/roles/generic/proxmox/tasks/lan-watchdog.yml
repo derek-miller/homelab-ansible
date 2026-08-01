@@ -1,0 +1,59 @@
+---
+- assert:
+    that: proxmox_lan_watchdog_mode in ('off', 'monitor', 'drain')
+    fail_msg: >-
+      proxmox_lan_watchdog_mode must be off, monitor or drain, got
+      {{ proxmox_lan_watchdog_mode }}
+    quiet: yes
+
+# Draining relies on reaching the CRM while the LAN is dead, which only works
+# when corosync has a second ring. Without a fabric the node loses quorum with
+# the LAN and HA fences it correctly on its own, so there is nothing to add.
+- assert:
+    that: proxmox_fabric_address | default('') | length > 0
+    fail_msg: >-
+      the LAN watchdog needs a corosync fabric ring to be useful; set
+      proxmox_lan_watchdog_mode=off on a node without one
+    quiet: yes
+  when: proxmox_lan_watchdog_mode != 'off'
+
+- name: install the lan watchdog
+  copy:
+    src: pve-lan-watchdog
+    dest: /usr/local/sbin/pve-lan-watchdog
+    owner: root
+    group: root
+    mode: 0755
+  when: proxmox_lan_watchdog_mode != 'off'
+  notify: restart pve-lan-watchdog
+
+- name: configure the lan watchdog
+  template:
+    src: default/pve-lan-watchdog.jinja2
+    dest: /etc/default/pve-lan-watchdog
+    owner: root
+    group: root
+    mode: 0644
+  when: proxmox_lan_watchdog_mode != 'off'
+  notify: restart pve-lan-watchdog
+
+- name: create the lan watchdog service
+  template:
+    src: systemd/pve-lan-watchdog.service.jinja2
+    dest: /etc/systemd/system/pve-lan-watchdog.service
+    owner: root
+    group: root
+    mode: 0644
+  when: proxmox_lan_watchdog_mode != 'off'
+  notify: restart pve-lan-watchdog
+
+- name: enable the lan watchdog
+  systemd:
+    name: pve-lan-watchdog.service
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  when: proxmox_lan_watchdog_mode != 'off'
+
+- include_tasks: lan-watchdog-absent.yml
+  when: proxmox_lan_watchdog_mode == 'off'

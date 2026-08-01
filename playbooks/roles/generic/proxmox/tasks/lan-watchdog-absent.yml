@@ -1,0 +1,38 @@
+---
+# Removing the watchdog must not strand the node in maintenance. Only clear it
+# when our own state file says we are the one who set it — a maintenance window
+# somebody opened by hand is not ours to close.
+- name: read the lan watchdog state
+  slurp:
+    src: /var/lib/pve-lan-watchdog/state.json
+  register: _proxmox_lan_watchdog_state
+  failed_when: false
+
+- name: hand the node back before removing the lan watchdog
+  command: ha-manager crm-command node-maintenance disable {{ inventory_hostname }}
+  when:
+    - _proxmox_lan_watchdog_state.content is defined
+    - (_proxmox_lan_watchdog_state.content | b64decode | from_json).owns_maintenance | default(false)
+
+- name: stop and disable the lan watchdog
+  systemd:
+    name: pve-lan-watchdog.service
+    enabled: no
+    state: stopped
+  failed_when: false
+
+- name: remove the lan watchdog
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/pve-lan-watchdog.service
+    - /etc/default/pve-lan-watchdog
+    - /usr/local/sbin/pve-lan-watchdog
+    - /var/lib/pve-lan-watchdog
+  notify: reload systemd units
+
+- name: stop publishing lan health to the cluster
+  file:
+    path: "/etc/pve/lan-watchdog/{{ inventory_hostname }}"
+    state: absent
