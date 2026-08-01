@@ -3,18 +3,13 @@ gianos-raspi1
 harlan-raspi1
 mertins-raspi1
 quinn-raspi1
-rackpi[1:5]
 raspi1
-
-[uctronics-lcd]
-rackpi[1:5]
 
 [vnc]
 gianos-raspi1
 harlan-raspi1
 mertins-raspi1
 quinn-raspi1
-rackpi[1:5]
 raspi1
 
 [tailscale]
@@ -23,7 +18,6 @@ harlan-raspi1
 mertins-raspi1
 quinn-raspi1
 rackmini1
-rackpi[1:5]
 rackvm[1:5]
 raspi1
 
@@ -49,7 +43,6 @@ raspi1         cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"
 gianos-raspi1
 mertins-raspi1
 quinn-raspi1
-rackpi[1:5]
 rackvm[1:5]
 raspi1
 

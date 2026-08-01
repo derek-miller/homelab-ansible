@@ -81,12 +81,6 @@
   tags:
     - raspberry-pi
 
-- hosts: uctronics-lcd
-  roles:
-    - role: generic/uctronics-lcd
-  tags:
-    - uctronics-lcd
-
 - hosts: tailscale
   roles:
     - role: generic/tailscale
