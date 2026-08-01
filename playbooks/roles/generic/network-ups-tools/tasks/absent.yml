@@ -1,23 +1,53 @@
 ---
-# TODO: Properly delete systemd services
+# Stop first, apt runs the units' prerm while they are still live otherwise. The
+# enumerator is a path unit watching /etc/nut/ups.conf, so it has to go before
+# the file does or deleting the config trips it into the failed state cleared
+# at the bottom.
+- name: stop the nut units
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: no
+  loop:
+    - nut-driver-enumerator.path
+    - nut-monitor
+    - nut-server
+    - nut-driver.target
+    - nut.target
+  failed_when: false
+
+# The metapackages alone leave nut-server and nut-client behind, so their units
+# keep running against the configuration deleted below and the driver
+# enumerator fails on the missing ups.conf.
 - name: uninstall nut
   apt:
-    name: nut
+    name:
+      - nut
+      - nut-snmp
+      - nut-server
+      - nut-client
     state: absent
+    purge: yes
+    autoremove: yes
   register: uninstall_nut_result
-
-- name: uninstall nut-snmp
-  apt:
-    name: nut-snmp
-    state: absent
-  register: uninstall_nut_snmp_result
-
-- name: reload systemd
-  systemd:
-    daemon_reload: yes
-  when: uninstall_nut_result.changed or uninstall_nut_snmp_result.changed
 
 - name: delete nut configuration
   file:
     path: /etc/nut
     state: absent
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  when: uninstall_nut_result.changed
+
+# Removing the packages strands the enumerator and its per-device instances in
+# a failed state, and they outlive the apt change that produced them.
+- name: find failed nut units
+  command: systemctl list-units 'nut*' --state=failed --no-legend --plain
+  register: failed_nut_units
+  changed_when: false
+
+- name: clear the failed nut units
+  command: systemctl reset-failed 'nut*'
+  when: failed_nut_units.stdout | trim | length > 0

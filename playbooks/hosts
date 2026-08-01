@@ -3,18 +3,13 @@ gianos-raspi1
 harlan-raspi1
 mertins-raspi1
 quinn-raspi1
-rackpi[1:5]
 raspi1
 
-[uctronics-lcd]
-rackpi[1:5]
-
-[x11vnc]
+[vnc]
 gianos-raspi1
 harlan-raspi1
 mertins-raspi1
 quinn-raspi1
-rackpi[1:5]
 raspi1
 
 [tailscale]
@@ -23,73 +18,72 @@ harlan-raspi1
 mertins-raspi1
 quinn-raspi1
 rackmini1
-rackpi[1:5]
 rackvm[1:5]
 raspi1
 
 [tailscale:vars]
 create_cloudflare_ipv4_dns_record=yes
 
+[nas-subnet-router]
+rackvm[1:5]
+
 [cifs-shares]
 gianos-raspi1  cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 mertins-raspi1 cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 quinn-raspi1   cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
-rackpi1        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container"]'
-rackpi2        cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
-rackpi3        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Public"]'
-rackpi4        cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
-rackpi5        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container", "Public"]'
-rackvm[1:5]    cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
+rackvm1        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container"]'
+rackvm2        cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
+rackvm3        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Public"]'
+rackvm[4:5]    cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
 raspi1         cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 
 [docker]
 gianos-raspi1
 mertins-raspi1
 quinn-raspi1
-rackpi[1:5]
 rackvm[1:5]
 raspi1
 
 [docker-build-images]
-rackpi1 docker_images_to_build=openclaw-webhook-proxy
-rackpi5 docker_images_to_build=youtrack
+rackvm1 docker_images_to_build=openclaw-webhook-proxy
 rackvm5 docker_images_to_build=sourcebot,control4-driver-scraper,postgres-pgcron
 
 [control4-driver-scraper]
 rackvm5
 
 [docker_swarm_manager]
-rackpi1 docker_stack_name=rackpis
-rackvm1
+rackvm1 docker_stack_name=rackpis
 rackvm2
+rackvm3
 
 [docker_swarm_worker]
-rackpi[2:5]
-rackvm[3:5]
+rackvm[4:5]
+
+[docker_labels]
+rackvm1  docker_labels=identity,edge,webhooks
+rackvm2  docker_labels=home,mqtt,youtrack
+rackvm3  docker_labels=media
+rackvm4  docker_labels=grafana,metrics
+rackvm5  docker_labels=sourcebot
 
 [project-files]
-rackpi1
-rackpi4
+rackvm1
+rackvm2
 rackvm5
 raspi1
 
 [disk-mounts]
 rackvm[1:5]
 
-[ser2net]
-
 [network-ups-tools]
-rackpi2
+rackvm4
 raspi1
 
-[sysdweb]
-rackpi[1:5]
-
 [tplink-plug-stats]
-rackpi2
+rackvm4
 
 [control4-director-stats]
-rackpi2
+rackvm4
 
 [macos]
 rackmini1

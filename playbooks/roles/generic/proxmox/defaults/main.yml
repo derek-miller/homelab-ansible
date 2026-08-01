@@ -7,6 +7,12 @@ proxmox_lan_interface: nic0
 proxmox_fabric_interface: nic1
 proxmox_bridge_vlan_aware: yes
 
+# e1000e wedges its TX ring with segmentation offload on, taking the LAN down
+# while the link still reads UP. Empty to leave the driver defaults alone.
+proxmox_lan_offloads_disabled:
+  - tso
+  - gso
+
 proxmox_machine_id:
 proxmox_subscription_key:
 

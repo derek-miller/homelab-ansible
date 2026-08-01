@@ -12,7 +12,7 @@ control4_driver_scraper_image_tag: latest
 
 # Host paths bind-mounted into the container. sources_dir must be the same
 # tree sourcebot bind-mounts into /repos/* (see vault_docker_stack_definition
-# in host_vars/rackpi1/vault.yml); drivers_dir is a raw-download cache that
+# in host_vars/rackvm1/vault.yml); drivers_dir is a raw-download cache that
 # lets reruns skip drivers whose on-disk version is already current.
 control4_driver_scraper_drivers_dir: /mnt/data/Drivers
 control4_driver_scraper_sources_dir: /mnt/data/Source

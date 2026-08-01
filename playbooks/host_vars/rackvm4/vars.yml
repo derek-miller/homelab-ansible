@@ -57,3 +57,29 @@ disk_mounts:
 
 docker_daemon_options:
   data-root: /mnt/data/docker
+
+nut_stats_targets:
+  - wan-ups
+  - shelter-ups@192.168.1.193:3493
+
+nut_ups_devices:
+  - |
+    [wan-ups]
+        driver = snmp-ups
+        port = 192.168.2.18
+        community = private
+        snmp_version = v1
+        pollfreq = 15
+        desc = "WAN UPS"
+nut_ups_monitors:
+  - "MONITOR wan-ups@localhost 1 {{ nut_user_master_name }} {{ nut_user_master_password | mandatory }} master"
+
+control4_director_stats_controllers:
+  - name: ca10
+    address: 192.168.2.117
+  - name: core1
+    address: 192.168.2.92
+
+# Empty drives the role to absent. The plugs stopped answering the legacy
+# unauthenticated protocol; restoring them needs credentials — see HL-23.
+tplink_plug_stats_ip_addresses: []

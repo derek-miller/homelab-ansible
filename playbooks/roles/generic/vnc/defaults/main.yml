@@ -1,0 +1,12 @@
+---
+vnc_state: present
+
+# Session lightdm boots into. Both names are labwc; the Pi desktop was renamed
+# in trixie. Never applied unless the compositor it execs is actually present.
+vnc_session: "{{ 'rpd-labwc' if ansible_distribution_release == 'trixie' else 'LXDE-pi-labwc' }}"
+
+# The session execs labwc-pi, a wrapper script; the process that appears is labwc.
+vnc_compositor_process: labwc
+
+# Ships on both releases, unlike the session name.
+vnc_greeter: pi-greeter-labwc

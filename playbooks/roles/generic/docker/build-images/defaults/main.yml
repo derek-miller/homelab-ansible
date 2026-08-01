@@ -15,10 +15,6 @@ available_docker_images:
     dockerfile: postgres-pgcron/Dockerfile
     image_name: postgres-pgcron
     image_tag: "16-cron1.6.7"
-  youtrack:
-    dockerfile: youtrack/Dockerfile
-    image_name: youtrack
-    image_tag: 2026.1.12458-arm64
   openclaw-webhook-proxy:
     dockerfile: openclaw-webhook-proxy/Dockerfile
     build_files:

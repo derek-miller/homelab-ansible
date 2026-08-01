@@ -7,6 +7,6 @@
     state: restarted
   with_items:
     - nut-client
-    - nut-driver
+    - nut-driver.target
     - nut-monitor
     - nut-server

@@ -1,0 +1,104 @@
+---
+# Pi OS ships wayvnc and drives it from `raspi-config nonint do_vnc`, which
+# picks wayvnc or vncserver-x11-serviced to match the session. Authentication is
+# PAM over TLS, so there is no password for this role to place.
+
+- name: stop the legacy x11vnc service
+  systemd:
+    name: x11vnc
+    state: stopped
+    enabled: no
+  failed_when: false
+
+- name: remove the legacy x11vnc unit
+  file:
+    path: /etc/systemd/system/x11vnc.service
+    state: absent
+  notify: reload systemd
+
+- name: clear the failed x11vnc unit
+  command: systemctl reset-failed x11vnc
+  changed_when: false
+  failed_when: false
+
+- name: uninstall x11vnc
+  apt:
+    name: x11vnc
+    state: absent
+    autoremove: yes
+
+- name: remove the x11vnc password file
+  file:
+    path: /etc/x11vnc.pass
+    state: absent
+
+- name: find the session definition
+  stat:
+    path: "/usr/share/wayland-sessions/{{ vnc_session }}.desktop"
+  register: vnc_session_desktop
+
+- name: read the compositor the session execs
+  command: >-
+    sed -n 's/^Exec=\([^ ]*\).*/\1/p'
+    /usr/share/wayland-sessions/{{ vnc_session }}.desktop
+  register: vnc_session_exec
+  changed_when: false
+  when: vnc_session_desktop.stat.exists
+
+- name: check the compositor is installed
+  stat:
+    path: "{{ vnc_session_exec.stdout | trim }}"
+  register: vnc_compositor
+  when: vnc_session_desktop.stat.exists and (vnc_session_exec.stdout | trim | length) > 0
+
+# The .desktop file ships in a meta package ahead of the compositor itself, so
+# selecting a session on that evidence alone boots the host into a login loop.
+# insertafter only applies when the key is absent, and without it the line lands
+# at EOF under [VNCServer], where lightdm never reads it.
+- name: select the session
+  lineinfile:
+    path: /etc/lightdm/lightdm.conf
+    regexp: "^{{ item.key }}=.*"
+    line: "{{ item.key }}={{ item.value }}"
+    insertafter: '^\[Seat:\*\]'
+  loop:
+    - {key: user-session, value: "{{ vnc_session }}"}
+    - {key: autologin-session, value: "{{ vnc_session }}"}
+    - {key: greeter-session, value: "{{ vnc_greeter }}"}
+  loop_control: {label: "{{ item.key }}"}
+  when: vnc_compositor.stat.exists | default(false)
+  notify: restart lightdm
+
+- name: report a session that cannot be selected
+  debug:
+    msg: >-
+      {{ vnc_session }} is not usable here ({{ vnc_session_exec.stdout | default('no session file') | trim }}
+      missing), so the current session is left alone. Its desktop packages
+      predate labwc; upgrade raspberrypi-ui-mods to converge it.
+  when: not (vnc_compositor.stat.exists | default(false))
+
+# raspi-config picks wayvnc or vncserver-x11-serviced from `pgrep labwc`, so the
+# session has to be running before do_vnc, not merely selected. lightdm is
+# Type=dbus, so its restart returns before the session has execed anything.
+- name: restart lightdm before choosing a vnc server
+  meta: flush_handlers
+
+- name: wait for the compositor to come up
+  command: pgrep -x {{ vnc_compositor_process }}
+  register: vnc_compositor_up
+  until: vnc_compositor_up.rc == 0
+  retries: 15
+  delay: 2
+  changed_when: false
+  when: vnc_compositor.stat.exists | default(false)
+
+- name: read the built-in vnc server state
+  command: systemctl is-enabled wayvnc
+  register: vnc_enabled
+  changed_when: false
+  failed_when: false
+
+- name: enable the built-in vnc server
+  command: raspi-config nonint do_vnc 0
+  when: vnc_enabled.stdout | trim != 'enabled'
+  changed_when: true

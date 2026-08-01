@@ -1,0 +1,13 @@
+---
+# Restarting lightdm ends the desktop session, so it only fires when the
+# selected session actually changed.
+- name: restart lightdm
+  systemd:
+    name: lightdm
+    state: restarted
+  listen: restart lightdm
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  listen: reload systemd

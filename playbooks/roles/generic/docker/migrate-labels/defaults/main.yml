@@ -1,0 +1,4 @@
+---
+docker_migrate_labels: false
+docker_migrate_force: false
+docker_migrate_keep_transit: false

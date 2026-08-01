@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Ansible-managed homelab infrastructure. Docker Swarm cluster (rackpi1 manager + rackpi2-5 workers, all ARM64 Raspberry Pi 5s) running user-facing services (sourcebot, youtrack, home assistant, arr stack, etc.). A Mac mini (`rackmini1`) runs native-only services outside the swarm (Plex, Homebridge, Tailscale, SMB mounts). Single main playbook (`playbooks/default.yml`) with tag-based execution.
+Ansible-managed homelab infrastructure. Docker Swarm cluster (rackvm1-3 managers + rackvm4-5 workers, amd64 VMs on the pve1-5 Proxmox cluster) running user-facing services (sourcebot, youtrack, home assistant, arr stack, etc.). A Mac mini (`rackmini1`) runs native-only services outside the swarm (Plex, Homebridge, Tailscale, SMB mounts). Single main playbook (`playbooks/default.yml`) with tag-based execution.
 
 ## macOS hosts — required manual steps at bootstrap
 
@@ -19,7 +19,7 @@ macOS has a small number of operations that cannot be scripted without GUI inter
 ```bash
 make after-git-pull     # Install all deps after pulling
 make run                # Run default playbook against all hosts
-make run hosts=rackpi1  # Limit to specific host
+make run hosts=rackvm1  # Limit to specific host
 make run tags=docker    # Run specific tag (auto-skips base,common)
 make dry-run            # Check mode
 make check              # Syntax validation
@@ -65,10 +65,36 @@ make bootstrap hosts=<host> user=<user>
 
 ## Key Patterns
 
-- **Docker Swarm stacks** are defined entirely within `playbooks/host_vars/rackpi1/vault.yml` as the `vault_docker_stack_definition` variable. Services, volumes, networks, and all config live there.
+- **Docker Swarm stacks** are defined entirely within `playbooks/host_vars/rackvm1/vault.yml` as the `vault_docker_stack_definition` variable. Services, volumes, networks, and all config live there. The stack is still named `rackpis` and every volume is `rackpis_*`; renaming it would point all 41 services at empty volumes, so the name stays regardless of which hosts run it.
 - **Docker Compose** services for individual hosts are in their respective `host_vars/{hostname}/vault.yml` as `docker_compose_definition`.
 - **Vault encryption** is enforced by a pre-commit hook (`hooks/pre-commit` → `make vault-check`). The `.vault_pass` file in the repo root (git-ignored) holds the encryption key.
 - **Variable layering**: Role defaults → group_vars → host_vars. Vault variables are referenced indirectly (e.g., `docker_stack_definition: "{{ vault_docker_stack_definition }}"`).
-- Services on the swarm use placement constraints like `node.hostname == rackpi4` to pin to specific nodes.
+- Services on the swarm are placed by node label (`node.labels.metrics == true`), not by hostname. A label is declared on exactly one host as a comma-delimited `docker_labels` in the `[docker_labels]` inventory group, and `default.yml` reconciles those onto the nodes. `portainer-agent` is global; nothing else pins to a host.
 - Roles that install something follow a `present.yml` / `absent.yml` split routed from `tasks/main.yml` via a `<role>_state` variable — `absent` must fully reverse what `present` did (stop service, remove config, uninstall package, clear repo/keyring).
 - Traefik labels on swarm services handle routing, OAuth middleware, and TLS.
+
+## Moving a swarm workload to another host
+
+Swarm does not move local volumes, so a workload moves in two halves: the data has to be copied while the services are stopped, and only then may the label follow. `generic/docker/migrate-labels` does both, driven by the inventory.
+
+Move the label to the new host in `[docker_labels]`, then:
+
+```bash
+make run tags=docker-swarm ANSIBLE_FLAGS="-e docker_migrate_labels=yes"
+```
+
+Do not narrow this with `hosts=`: the role runs on the primary manager and reaches both nodes by delegation, so a limit has to name the source, the target and the manager, and omitting the manager means it never runs at all.
+
+For each label whose inventory host no longer matches the node carrying it, the role scales that label's services to 0, tars each of their volumes through `docker_migrate_transit_dir` onto the target, removes the source copy, and moves the label. The stack deploy then starts the services on the target, on top of their data. Services and volumes are read from the stack definition, so nothing needs listing by hand.
+
+Without `docker_migrate_labels=yes` the move is only reported, and the label reconcile is held back — moving a label while its data sits on the old host would start the service on an empty volume. A routine `make run` is therefore safe to run with a pending move outstanding; it just will not act on it.
+
+The hold-back is keyed on a fact set on the primary manager, so a `hosts=` limit that excludes it leaves that fact undefined. Undefined holds rather than reconciles: a limit can stop the move from being detected, but not lift the interlock.
+
+Volumes are all the role moves. Check the rest by hand before moving a label, because a service that lands on a host missing any of it fails to start, or starts and is unreachable:
+
+- **Host bind mounts** — `/var/docker/...` paths come from `project-files`, which is keyed by hostname, so the file tree and the `project_files` declaration move to the new host too.
+- **CIFS shares** — the target needs whatever the services mount beyond `Backups`.
+- **Locally built images** — `docker_images_to_build` moves with the workload, or the target has no image to run.
+- **Host-network services** — these are not on the overlay, so traefik routes them from `external-rules.yaml` by address rather than discovering them. That address is not a label and does not follow the move; repoint it or the service is reachable locally and 502s through traefik.
+- **Endpoints other hosts write to** — `influxdb3_url` follows the `metrics` label out of the inventory, but each telegraf agent only picks up the new address when its config is rewritten. Run `make run tags=telegraf` across every host after moving `metrics`, or the agents keep writing to the old one; nothing errors, the graphs just stop filling.

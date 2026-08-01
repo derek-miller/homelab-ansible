@@ -23,7 +23,6 @@ authorized_keys:
     state: present
 
 lightdm_autologin_user: pi
-lightdm_xorg_create_video_dummy: yes
 
 sudoers:
   - user: pi
