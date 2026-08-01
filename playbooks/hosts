@@ -9,7 +9,7 @@ raspi1
 [uctronics-lcd]
 rackpi[1:5]
 
-[x11vnc]
+[vnc]
 gianos-raspi1
 harlan-raspi1
 mertins-raspi1

@@ -364,11 +364,11 @@
   tags:
     - control4-director-stats
 
-- hosts: x11vnc
+- hosts: vnc
   roles:
-    - role: generic/x11vnc
+    - role: generic/vnc
   tags:
-    - x11vnc
+    - vnc
 
 - hosts: network-ups-tools
   roles:
