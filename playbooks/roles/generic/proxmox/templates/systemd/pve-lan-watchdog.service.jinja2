@@ -3,9 +3,12 @@
 Description=Proxmox LAN link watchdog
 Documentation=https://youtrack.dmiller.me/issue/HL-24
 # pve-cluster owns /etc/pve, which is where peers publish their LAN health.
+# Wants, not Requires: without /etc/pve the watchdog still probes and bounces,
+# and it counts zero healthy peers, so it declines to drain. Requires would stop
+# it whenever pve-cluster is restarted, which is exactly when a sick node is
+# being poked at and the watchdog is most wanted.
 After=pve-cluster.service network-online.target
-Wants=network-online.target
-Requires=pve-cluster.service
+Wants=pve-cluster.service network-online.target
 
 [Service]
 Type=simple
