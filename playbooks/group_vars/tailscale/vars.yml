@@ -17,5 +17,7 @@ tailscale_tags:
 # --accept-dns=false: we don't use MagicDNS, so keep tailscaled out of
 # /etc/resolv.conf. Hosts add their own flags via tailscale_host_args, not by
 # overriding tailscale_args (which would drop the common args).
-tailscale_common_args: --accept-dns=false
+# --reset: without it, dropping a flag from tailscale_host_args fails the play
+# instead of taking effect, so what is not declared here stays set on the host.
+tailscale_common_args: --reset --accept-dns=false
 tailscale_args: "{{ (tailscale_common_args ~ ' ' ~ (tailscale_host_args | default(''))) | trim }}"
