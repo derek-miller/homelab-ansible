@@ -56,11 +56,13 @@
 - name: select the session
   lineinfile:
     path: /etc/lightdm/lightdm.conf
-    regexp: "^{{ item }}=.*"
-    line: "{{ item }}={{ vnc_session }}"
+    regexp: "^{{ item.key }}=.*"
+    line: "{{ item.key }}={{ item.value }}"
   loop:
-    - user-session
-    - autologin-session
+    - {key: user-session, value: "{{ vnc_session }}"}
+    - {key: autologin-session, value: "{{ vnc_session }}"}
+    - {key: greeter-session, value: "{{ vnc_greeter }}"}
+  loop_control: {label: "{{ item.key }}"}
   when: vnc_compositor.stat.exists | default(false)
   notify: restart lightdm
 

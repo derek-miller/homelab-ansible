@@ -1,4 +1,17 @@
 ---
+# Stop first: apt runs the units' prerm while they are still live otherwise, and
+# a driver mid-poll leaves the enumerator failed before it is even removed.
+- name: stop the nut units
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: no
+  loop:
+    - nut-monitor
+    - nut-server
+    - nut-driver.target
+  failed_when: false
+
 # The metapackages alone leave nut-server and nut-client behind, so their units
 # keep running against the configuration deleted below and the driver
 # enumerator fails on the missing ups.conf.
@@ -10,6 +23,7 @@
       - nut-server
       - nut-client
     state: absent
+    purge: yes
     autoremove: yes
   register: uninstall_nut_result
 

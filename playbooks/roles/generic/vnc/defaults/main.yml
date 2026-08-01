@@ -7,3 +7,6 @@ vnc_session: "{{ 'rpd-labwc' if ansible_distribution_release == 'trixie' else 'L
 
 # The session execs labwc-pi, a wrapper script; the process that appears is labwc.
 vnc_compositor_process: labwc
+
+# Ships on both releases, unlike the session name.
+vnc_greeter: pi-greeter-labwc
