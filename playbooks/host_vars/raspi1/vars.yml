@@ -96,7 +96,6 @@ docker_compose_definition:
         - portainer-agent-data:/backup/portainer-agent-data:ro
 
 lightdm_autologin_user: pi
-lightdm_xorg_create_video_dummy: yes
 
 sudoers:
   - user: pi
