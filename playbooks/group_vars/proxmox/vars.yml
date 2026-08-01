@@ -90,6 +90,8 @@ proxmox_timezone: America/Chicago
 proxmox_keyboard: en-us
 
 proxmox_lan_driver: e1000e
+# e1000e wedges its TX ring with segmentation offload on, taking the LAN down while the link still reads UP.
+proxmox_lan_offloads_disabled: [tso, gso]
 proxmox_fabric_driver: r8152
 proxmox_fabric_mtu: 9000
 
