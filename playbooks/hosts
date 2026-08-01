@@ -30,6 +30,11 @@ raspi1
 [tailscale:vars]
 create_cloudflare_ipv4_dns_record=yes
 
+# Advertisers for the NAS 4via6 route. Tailscale runs one primary and promotes
+# a standby when it drops, so every member needs its route approved to count.
+[nas-subnet-router]
+rackvm[1:5]
+
 [cifs-shares]
 gianos-raspi1  cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 mertins-raspi1 cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
