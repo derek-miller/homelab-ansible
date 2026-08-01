@@ -5,12 +5,18 @@
 
 - when: tplink_plug_stats_state == 'present'
   block:
+    # python-kasa resolves the timezone the plug reports through zoneinfo, and the
+    # plugs report the legacy name CST6CDT. Debian 13 split those legacy names out
+    # of tzdata into tzdata-legacy, so zoneinfo raises ZoneInfoNotFoundError and
+    # every update() fails. Installing the tzdata wheel gives zoneinfo its fallback
+    # source inside the virtualenv, without depending on a host package.
     - name: install python dependencies
       pip:
         virtualenv: "{{ tplink_plug_stats_virtualenv_path }}"
         name:
           - click
           - python-kasa
+          - tzdata
         extra_args: --pre --upgrade-strategy only-if-needed
         state: latest
 
