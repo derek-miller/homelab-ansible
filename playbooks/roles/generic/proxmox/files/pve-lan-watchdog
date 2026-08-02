@@ -305,7 +305,13 @@ def read_peer_docs():
         try:
             with open(os.path.join(PEER_DIR, name)) as handle:
                 raw = handle.read()
-        except OSError:
+        except OSError as err:
+            # The name came from listdir, so the node IS publishing something;
+            # we just could not read the file. Same incident as an unreadable
+            # parse, so it joins the same set rather than being announced as
+            # if the node had never published at all.
+            log("err", "could not read document from %s: %s" % (name, err))
+            unreadable.add(name)
             continue
         try:
             doc = json.loads(raw)
@@ -315,8 +321,9 @@ def read_peer_docs():
                 # these three. Coerce them here, once, rather than guarding
                 # five call sites, and drop a document whose scalars a newer
                 # node changed the type of. A dropped document is not silence:
-                # the node has no doc, so `watchdog silent` announces it
-                # through the channel someone actually reads.
+                # the node joins `unreadable` and is announced through
+                # `watchdog unreadable`, distinct from a node that genuinely
+                # never published (`watchdog silent`) — see report().
                 try:
                     doc["ts"] = int(doc["ts"])  # presence is the branch condition
                     for key in ("seq", "v"):
@@ -574,9 +581,16 @@ def report(docs, members, announced, now=None, unreadable=frozenset()):
             # inquorate (publish fails there by design). The message claims only
             # what is known. Nothing else in the system can see this condition.
             doc_ts = doc.get("ts", 0) if doc else 0
+            # Both incidents below carry doc_ts == 0: there is no document to
+            # take a timestamp from either way. The timestamp alone cannot
+            # latch them apart, so whichever fires first would suppress the
+            # other permanently — neither path reaches the re-arm, which only
+            # runs for a fresh readable document.
+            kind = "unreadable" if node in unreadable else "silent"
             if online and now - doc_ts > PEER_FRESH_SECONDS:
-                if cursor["stale_ts"] != doc_ts:
+                if (cursor["stale_ts"], cursor.get("stale_kind")) != (doc_ts, kind):
                     cursor["stale_ts"] = doc_ts
+                    cursor["stale_kind"] = kind
                     # Two different incidents share this branch, and naming one
                     # as the other sends the operator hunting a dead unit or a
                     # stalled pmxcfs that does not exist: a node whose document
@@ -615,6 +629,7 @@ def report(docs, members, announced, now=None, unreadable=frozenset()):
                         )
                 continue
             cursor["stale_ts"] = -1  # publishing again; a future stall re-alerts
+            cursor["stale_kind"] = None
 
             # A node that left the cluster is HA's problem, and PVE sends its own
             # fencing notification; repeating it here would be noise.

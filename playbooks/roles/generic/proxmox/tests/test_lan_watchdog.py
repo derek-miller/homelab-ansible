@@ -877,6 +877,91 @@ results.append(
     check("36 raw title is a plain string", all(isinstance(t, str) for t in titles), True)
 )
 
+# 37. The stall latch is keyed on the document timestamp, and BOTH incidents
+#     that reach it carry doc_ts == 0: there is no document to take a stamp
+#     from. So whichever fires first must not suppress the other — neither
+#     path reaches the re-arm, which only runs for a fresh readable document.
+os.system("rm -rf /tmp/wd-peers && mkdir -p /tmp/wd-peers")
+mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
+MEMBERS = {"pve1": True, "pve2": True, "pve3": True}
+for name in ("pve1", "pve2"):
+    with open("/tmp/wd-peers/" + name, "w") as fh:
+        json.dump(doc(name), fh)
+loaded, unreadable = mod.read_peer_docs()
+out, cur = mod.report(loaded, MEMBERS, {}, now=NOW, unreadable=unreadable)
+results.append(
+    check(
+        "37 never-published announced first",
+        [(t, n) for _, t, n, _ in out],
+        [("watchdog silent", "pve3")],
+    )
+)
+with open("/tmp/wd-peers/pve3", "w") as fh:
+    json.dump(dict(doc("pve3", seq=4), events={"4": "a map, from some future node"}), fh)
+loaded, unreadable = mod.read_peer_docs()
+out, cur = mod.report(loaded, MEMBERS, cur, now=NOW + 60, unreadable=unreadable)
+results.append(
+    check(
+        "37 the unreadable document is announced too",
+        [(t, n) for _, t, n, _ in out],
+        [("watchdog unreadable", "pve3")],
+    )
+)
+out, cur = mod.report(loaded, MEMBERS, cur, now=NOW + 120, unreadable=unreadable)
+results.append(check("37 and then latched, not every tick", out, []))
+
+# 38. The same collision the other way: a node whose document was dropped,
+#     then removed entirely. The retained message must not go on claiming a
+#     version mismatch once the watchdog is simply gone.
+os.system("rm -rf /tmp/wd-peers && mkdir -p /tmp/wd-peers")
+mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
+for name in ("pve1", "pve2"):
+    with open("/tmp/wd-peers/" + name, "w") as fh:
+        json.dump(doc(name), fh)
+with open("/tmp/wd-peers/pve3", "w") as fh:
+    json.dump(dict(doc("pve3", seq=4), events={"4": "a map"}), fh)
+loaded, unreadable = mod.read_peer_docs()
+out, cur = mod.report(loaded, MEMBERS, {}, now=NOW, unreadable=unreadable)
+results.append(
+    check(
+        "38 unreadable announced first",
+        [(t, n) for _, t, n, _ in out],
+        [("watchdog unreadable", "pve3")],
+    )
+)
+os.remove("/tmp/wd-peers/pve3")
+loaded, unreadable = mod.read_peer_docs()
+out, cur = mod.report(loaded, MEMBERS, cur, now=NOW + 60, unreadable=unreadable)
+results.append(
+    check(
+        "38 the document going away is announced",
+        [(t, n) for _, t, n, _ in out],
+        [("watchdog silent", "pve3")],
+    )
+)
+results.append(
+    check("38 and it says never published", "never published" in (out[0][3] if out else ""), True)
+)
+os.system("rm -rf /tmp/wd-peers")
+
+# 39. An unreadable file (open() itself fails, not the parse) joins the same
+#     `unreadable` set as a bad parse, since the node IS publishing something.
+os.system("rm -rf /tmp/wd-peers && mkdir -p /tmp/wd-peers/pve3")  # a dir, not a file
+mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
+with open("/tmp/wd-peers/pve1", "w") as fh:
+    json.dump(doc("pve1"), fh)
+loaded, unreadable = mod.read_peer_docs()
+results.append(check("39 an unopenable entry joins unreadable", sorted(unreadable), ["pve3"]))
+out, _ = mod.report(loaded, {"pve1": True, "pve3": True}, {}, now=NOW, unreadable=unreadable)
+results.append(
+    check(
+        "39 announced as unreadable, not never-published",
+        [(t, n) for _, t, n, _ in out],
+        [("watchdog unreadable", "pve3")],
+    )
+)
+os.system("rm -rf /tmp/wd-peers")
+
 passed = sum(results)
 print("\n%d/%d passed" % (passed, len(results)))
 sys.exit(0 if all(results) else 1)
