@@ -538,6 +538,72 @@ sev, title, text = mod._RENDERERS["drained"](
 results.append(check("25 persisted drain does not warn", "WARNING" in text, False))
 os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members")
 
+# 26. A cursor frozen at an earlier reign is exactly as far behind as no
+#     cursor at all: without an unconditional floor, the next election replays
+#     every event the fleet recorded since. Three nodes, full rings, 11h old,
+#     cursor left at seq 2 from a brief earlier reign: nothing is news.
+mod = load({"NODE": "pve2"})
+members = {"pve1": True, "pve2": True, "pve3": True}
+old_rings = {}
+for n in members:
+    old_rings[n] = doc(
+        n,
+        seq=18,
+        events=[
+            dict(
+                ev(i, "lan_down" if i % 2 else "recovered", {"fails": 6, "bounces": 1}),
+                ts=NOW - 40_000,
+            )
+            for i in range(3, 19)
+        ],
+    )
+stale_cursor = {n: {"seq": 2, "stale_ts": -1} for n in members}
+out, _ = mod.report(old_rings, members, stale_cursor, now=NOW)
+results.append(check("26 stale cursor does not replay history", out, []))
+
+# 26b. The clamp must not eat the real signal: a live flap producing more
+#      transitions than the ring holds still raises `events missed`, measured
+#      from the cursor, and the fresh events are all announced.
+burst = doc(
+    "pve3",
+    seq=40,
+    events=[dict(ev(i, "recovered", {"bounces": 0}), ts=NOW - 10) for i in range(25, 41)],
+)
+out, _ = mod.report(
+    {"pve1": doc("pve1"), "pve3": burst},
+    {"pve1": True, "pve3": True},
+    {"pve3": {"seq": 20, "stale_ts": -1}},
+    now=NOW,
+)
+results.append(check("26b real gap still reported", out[0][1], "events missed"))
+results.append(
+    check("26b burst announced in full", len([t for _, t, _, _ in out if t == "LAN recovered"]), 16)
+)
+
+# 27. A peer's malformed event detail must not cost another node its
+#     messages: pve1's two real events are announced, pve3's unrenderable one
+#     is reported raw, and nothing is silently marked as announced.
+docs = {
+    "pve1": doc(
+        "pve1",
+        lan="down",
+        seq=2,
+        events=[
+            ev(1, "lan_down", {"fails": 6, "targets": ["192.168.1.1"]}),
+            ev(2, "drained", {"bounces": 2, "stable_seconds": 600}),
+        ],
+    ),
+    "pve3": doc("pve3", seq=1, events=[ev(1, "lan_down", {"fails": "6/6", "targets": ["x"]})]),
+}
+out, _ = mod.report(docs, {"pve1": True, "pve3": True}, {}, now=NOW)
+results.append(
+    check(
+        "27 a peer's bad event does not cost pve1 its messages",
+        [(n, t) for _, t, n, _ in out],
+        [("pve1", "LAN down"), ("pve1", "drained"), ("pve3", "lan_down")],
+    )
+)
+
 passed = sum(results)
 print("\n%d/%d passed" % (passed, len(results)))
 sys.exit(0 if all(results) else 1)

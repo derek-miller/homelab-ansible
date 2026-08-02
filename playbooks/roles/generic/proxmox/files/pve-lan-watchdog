@@ -472,6 +472,17 @@ def notify(severity, event_name, node, detail_text):
         log("err", "notification failed for %s/%s: %s" % (node, event_name, out))
 
 
+def _raw(node, event):
+    """An event this reporter cannot compose a message for: an unknown name,
+    or a known name whose detail shape a newer node changed."""
+    return (
+        "warning",
+        event.get("name", "unknown event"),
+        node,
+        "%s reported '%s': %s" % (node, event.get("name"), event.get("detail")),
+    )
+
+
 def report(docs, members, announced, now=None):
     """The reporter's whole decision, as a pure function so it is testable
     without a clock, a cluster, or a subprocess: given every node's document,
@@ -485,92 +496,111 @@ def report(docs, members, announced, now=None):
     now = int(now if now is not None else time.time())
     out = []
     for node, online in sorted(members.items()):
-        doc = docs.get(node)
-        if node not in announced:
-            # First sight of this node: a fresh state file, or a reporter that
-            # has just been elected. Its ring holds events a previous reporter
-            # has almost certainly already sent, so start from the freshness
-            # window rather than from zero — anything older than a peer can go
-            # stale is history, not news, and a handover gap is always shorter
-            # than the window.
+        # One node's unexpected bytes must not cost the others their
+        # messages: out already holds them, and an unwind here would
+        # discard it while their cursors have advanced. Rendering has its
+        # own guard; this catches what nobody predicted.
+        try:
+            doc = docs.get(node)
+            # The floor is what a reporter with no history should treat as already
+            # announced: everything older than the freshness window. Applied
+            # unconditionally, not only to a cold cursor — a cursor frozen at an
+            # earlier reign is exactly as far behind as none at all, and without
+            # the floor the next election replays every event since. A handover
+            # gap is always shorter than the window (the old reporter's document
+            # goes stale first), so nothing genuinely new is clamped away.
             ring = (doc or {}).get("events", []) or []
-            fresh = [e.get("seq", 0) for e in ring if now - e.get("ts", 0) <= PEER_FRESH_SECONDS]
-            announced[node] = {
-                "seq": (min(fresh) - 1) if fresh else (doc or {}).get("seq", 0),
-                "stale_ts": -1,
-            }
-        cursor = announced[node]
+            if not isinstance(ring, list):
+                ring = []
+            fresh = [
+                e.get("seq", 0)
+                for e in ring
+                if isinstance(e, dict) and now - e.get("ts", 0) <= PEER_FRESH_SECONDS
+            ]
+            floor = (min(fresh) - 1) if fresh else (doc or {}).get("seq", 0)
+            if node not in announced:
+                announced[node] = {"seq": floor, "stale_ts": -1}
+            cursor = announced[node]
 
-        # A node corosync sees online whose document is missing or stale has
-        # a dead or wedged watchdog — or a long pmxcfs stall, or it is
-        # inquorate (publish fails there by design). The message claims only
-        # what is known. Nothing else in the system can see this condition.
-        doc_ts = doc.get("ts", 0) if doc else 0
-        if online and now - doc_ts > PEER_FRESH_SECONDS:
-            if cursor["stale_ts"] != doc_ts:
-                cursor["stale_ts"] = doc_ts
-                out.append(
-                    (
-                        "warning",
-                        "watchdog silent",
-                        node,
-                        "%s is online in the cluster but its LAN watchdog has %s. The "
-                        "node's LAN is unwatched until pve-lan-watchdog runs there "
-                        "again — or the node is inquorate or pmxcfs is stalled, which "
-                        "look identical from here."
-                        % (
+            # A node corosync sees online whose document is missing or stale has
+            # a dead or wedged watchdog — or a long pmxcfs stall, or it is
+            # inquorate (publish fails there by design). The message claims only
+            # what is known. Nothing else in the system can see this condition.
+            doc_ts = doc.get("ts", 0) if doc else 0
+            if online and now - doc_ts > PEER_FRESH_SECONDS:
+                if cursor["stale_ts"] != doc_ts:
+                    cursor["stale_ts"] = doc_ts
+                    out.append(
+                        (
+                            "warning",
+                            "watchdog silent",
                             node,
-                            ("not published in %ds" % (now - doc_ts)) if doc else "never published",
-                        ),
+                            "%s is online in the cluster but its LAN watchdog has %s. The "
+                            "node's LAN is unwatched until pve-lan-watchdog runs there "
+                            "again — or the node is inquorate or pmxcfs is stalled, which "
+                            "look identical from here."
+                            % (
+                                node,
+                                (
+                                    ("not published in %ds" % (now - doc_ts))
+                                    if doc
+                                    else "never published"
+                                ),
+                            ),
+                        )
                     )
-                )
-            continue
-        cursor["stale_ts"] = -1  # publishing again; a future stall re-alerts
-
-        # A node that left the cluster is HA's problem, and PVE sends its own
-        # fencing notification; repeating it here would be noise.
-        if not online or not doc:
-            continue
-
-        # Everything newer than the cursor, oldest first, so a burst of
-        # transitions between reads is announced completely and in order. If
-        # more than DOC_EVENTS_KEPT events passed unseen, the gap is called
-        # out rather than silently skipped.
-        events = sorted(
-            (e for e in doc.get("events", []) if e.get("seq", 0) > cursor["seq"]),
-            key=lambda e: e.get("seq", 0),
-        )
-        if events and cursor["seq"] and events[0].get("seq", 0) > cursor["seq"] + 1:
-            out.append(
-                (
-                    "warning",
-                    "events missed",
-                    node,
-                    "%s advanced from event %d to %d while unreported; %d event(s) "
-                    "aged out of its document before any reporter announced them."
-                    % (
-                        node,
-                        cursor["seq"],
-                        events[0].get("seq", 0),
-                        events[0].get("seq", 0) - cursor["seq"] - 1,
-                    ),
-                )
-            )
-        for event in events:
-            cursor["seq"] = event.get("seq", cursor["seq"])
-            render = _RENDERERS.get(event.get("name"))
-            if render is None:
-                out.append(
-                    (
-                        "warning",
-                        event.get("name", "unknown event"),
-                        node,
-                        "%s reported '%s': %s" % (node, event.get("name"), event.get("detail")),
-                    )
-                )
                 continue
-            severity, title, text = render(node, event.get("detail") or {})
-            out.append((severity, title, node, text))
+            cursor["stale_ts"] = -1  # publishing again; a future stall re-alerts
+
+            # A node that left the cluster is HA's problem, and PVE sends its own
+            # fencing notification; repeating it here would be noise.
+            if not online or not doc:
+                continue
+
+            # Everything newer than the cursor AND the floor, oldest first, so a
+            # burst of transitions between reads is announced completely and in
+            # order. The gap check measures from the cursor, not the clamped
+            # start: a live flap that outruns the ring must still be called out,
+            # while a stale cursor skipping over old history must not be.
+            start = max(cursor["seq"], floor)
+            events = sorted(
+                (e for e in ring if isinstance(e, dict) and e.get("seq", 0) > start),
+                key=lambda e: e.get("seq", 0),
+            )
+            if events and cursor["seq"] and events[0].get("seq", 0) > cursor["seq"] + 1:
+                missed = events[0].get("seq", 0) - cursor["seq"] - 1
+                aged = [
+                    e
+                    for e in ring
+                    if isinstance(e, dict) and cursor["seq"] < e.get("seq", 0) <= start
+                ]
+                if not aged:  # the skipped range is truly gone, not merely old news
+                    out.append(
+                        (
+                            "warning",
+                            "events missed",
+                            node,
+                            "%s advanced from event %d to %d while unreported; %d event(s) "
+                            "aged out of its document before any reporter announced them."
+                            % (node, cursor["seq"], events[0].get("seq", 0), missed),
+                        )
+                    )
+            for event in events:
+                cursor["seq"] = event.get("seq", cursor["seq"])
+                render = _RENDERERS.get(event.get("name"))
+                if render is None:
+                    out.append(_raw(node, event))
+                    continue
+                try:
+                    severity, title, text = render(node, event.get("detail") or {})
+                except Exception as err:  # a newer node changed this event's shape
+                    log("err", "cannot render %s/%s: %s" % (node, event.get("name"), err))
+                    out.append(_raw(node, event))
+                    continue
+                out.append((severity, title, node, text))
+        except Exception as err:
+            log("err", "reporter skipped %s: %s: %s" % (node, type(err).__name__, err))
+            continue
     return out, announced
 
 
