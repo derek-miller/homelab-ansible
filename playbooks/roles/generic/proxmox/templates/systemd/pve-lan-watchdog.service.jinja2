@@ -1,0 +1,27 @@
+#jinja2:trim_blocks:True,lstrip_blocks:True
+[Unit]
+Description=Proxmox LAN link watchdog
+Documentation=https://youtrack.dmiller.me/issue/HL-24
+# pve-cluster owns /etc/pve, which is where peers publish their LAN health.
+# Wants, not Requires: without /etc/pve the watchdog still probes and bounces,
+# and it counts zero healthy peers, so it declines to drain. Requires would stop
+# it whenever pve-cluster is restarted, which is exactly when a sick node is
+# being poked at and the watchdog is most wanted.
+After=pve-cluster.service network-online.target
+Wants=pve-cluster.service network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/default/pve-lan-watchdog
+ExecStart=/usr/local/sbin/pve-lan-watchdog
+# It must come back on its own: the failure it exists to catch is exactly the
+# window in which nobody is watching the hypervisor.
+Restart=always
+RestartSec=10
+SyslogIdentifier=pve-lan-watchdog
+# Needs ip link and ha-manager, so no sandboxing beyond the obvious.
+ProtectHome=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

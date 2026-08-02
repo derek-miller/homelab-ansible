@@ -1,0 +1,20 @@
+#jinja2:trim_blocks:True,lstrip_blocks:True
+# Managed by Ansible (generic/proxmox). Edits are overwritten.
+MODE={{ proxmox_lan_watchdog_mode }}
+NODE={{ inventory_hostname }}
+LAN_INTERFACE={{ proxmox_lan_interface }}
+PROBE_INTERFACE=vmbr0
+# Quoted so the file stays safe to `source` when debugging by hand; systemd
+# strips the quotes either way.
+PROBE_TARGETS="{{ proxmox_lan_watchdog_targets }}"
+PROBE_INTERVAL={{ proxmox_lan_watchdog_probe_interval }}
+PROBE_TIMEOUT={{ proxmox_lan_watchdog_probe_timeout }}
+FAIL_THRESHOLD={{ proxmox_lan_watchdog_fail_threshold }}
+RECOVER_THRESHOLD={{ proxmox_lan_watchdog_recover_threshold }}
+BOUNCE_ENABLED={{ proxmox_lan_watchdog_bounce_enabled | ternary('yes', 'no') }}
+BOUNCE_ATTEMPTS={{ proxmox_lan_watchdog_bounce_attempts }}
+BOUNCE_SETTLE={{ proxmox_lan_watchdog_bounce_settle }}
+DRAIN_MIN_HEALTHY_PEERS={{ proxmox_lan_watchdog_min_healthy_peers }}
+DRAIN_STABLE_SECONDS={{ proxmox_lan_watchdog_stable_seconds }}
+FLAP_WINDOW_SECONDS={{ proxmox_lan_watchdog_flap_window }}
+FLAP_MAX_TRIPS={{ proxmox_lan_watchdog_flap_max_trips }}

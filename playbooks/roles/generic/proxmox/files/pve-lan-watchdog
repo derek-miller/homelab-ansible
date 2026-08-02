@@ -1,0 +1,375 @@
+#!/usr/bin/env python3
+"""Watch the LAN link and get HA resources off the node when it dies.
+
+Proxmox HA relocates on loss of quorum plus watchdog expiry. It watches node
+liveness, not service reachability. A node whose LAN NIC wedges its TX ring
+keeps quorum over the corosync fabric ring, so HA sees a healthy node while
+everything bridged to vmbr0 is dark. This closes that gap.
+
+Escalation is deliberate, cheapest first:
+
+  1. probe   several LAN targets, not just the gateway, so a gateway reboot
+             cannot trip anything
+  2. bounce  ip link down/up on the LAN NIC, which is local, takes seconds and
+             is what has actually resolved this in practice
+  3. drain   ha-manager node-maintenance, which live-migrates HA resources off
+             over the fabric with no data loss
+
+Step 3 only runs when peers report their own LAN is fine. Peers publish health
+into /etc/pve, which replicates over corosync and therefore over the fabric,
+so the signal survives exactly the failure being diagnosed. If the whole LAN is
+down, every node sees every peer unhealthy and nobody drains.
+"""
+
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+
+# --- configuration, supplied by the systemd EnvironmentFile ----------------
+
+
+def _env(name, default):
+    value = os.environ.get(name, "").strip()
+    return value if value else default
+
+
+def _int(name, default):
+    try:
+        return int(_env(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _bool(name, default):
+    return _env(name, "yes" if default else "no").lower() in ("yes", "true", "1", "on")
+
+
+MODE = _env("MODE", "monitor")  # monitor | drain
+NODE = _env("NODE", os.uname().nodename)
+LAN_INTERFACE = _env("LAN_INTERFACE", "nic0")
+PROBE_INTERFACE = _env("PROBE_INTERFACE", "vmbr0")
+PROBE_TARGETS = _env("PROBE_TARGETS", "").split()
+PROBE_INTERVAL = _int("PROBE_INTERVAL", 5)
+PROBE_TIMEOUT = _int("PROBE_TIMEOUT", 2)
+
+FAIL_THRESHOLD = _int("FAIL_THRESHOLD", 6)
+RECOVER_THRESHOLD = _int("RECOVER_THRESHOLD", 3)
+
+BOUNCE_ENABLED = _bool("BOUNCE_ENABLED", True)
+BOUNCE_ATTEMPTS = _int("BOUNCE_ATTEMPTS", 2)
+BOUNCE_SETTLE = _int("BOUNCE_SETTLE", 15)
+
+PEER_DIR = _env("PEER_DIR", "/etc/pve/lan-watchdog")
+PEER_FRESH_SECONDS = _int("PEER_FRESH_SECONDS", 180)
+PEER_KEEPALIVE_SECONDS = _int("PEER_KEEPALIVE_SECONDS", 60)
+DRAIN_MIN_HEALTHY_PEERS = _int("DRAIN_MIN_HEALTHY_PEERS", 1)
+DRAIN_STABLE_SECONDS = _int("DRAIN_STABLE_SECONDS", 600)
+
+FLAP_WINDOW_SECONDS = _int("FLAP_WINDOW_SECONDS", 21600)
+FLAP_MAX_TRIPS = _int("FLAP_MAX_TRIPS", 2)
+
+STATE_DIR = _env("STATE_DIR", "/var/lib/pve-lan-watchdog")
+STATE_FILE = os.path.join(STATE_DIR, "state.json")
+
+# How often to repeat a "still down, still not draining" line, so a long outage
+# does not write one every probe interval.
+NAG_SECONDS = _int("NAG_SECONDS", 300)
+
+HEALTHY, DEGRADED, DRAINED = "healthy", "degraded", "drained"
+
+
+def log(level, message):
+    print("%s: %s" % (level, message), flush=True)
+
+
+# --- shelling out ----------------------------------------------------------
+
+
+def run(argv, timeout=30):
+    """Return (rc, stdout). Never raises; a timeout or missing binary is rc 1."""
+    try:
+        done = subprocess.run(
+            argv,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=timeout,
+            text=True,
+        )
+        return done.returncode, done.stdout.strip()
+    except subprocess.TimeoutExpired:
+        return 1, "timed out after %ss" % timeout
+    except OSError as err:
+        return 1, str(err)
+
+
+def probe():
+    """True if any LAN target answers. A dead NIC fails all of them; a single
+    dead peer, or a gateway mid-reboot, fails only its own."""
+    for target in PROBE_TARGETS:
+        rc, _ = run(
+            [
+                "ping",
+                "-n",
+                "-q",
+                "-c",
+                "1",
+                "-W",
+                str(PROBE_TIMEOUT),
+                "-I",
+                PROBE_INTERFACE,
+                target,
+            ],
+            timeout=PROBE_TIMEOUT + 3,
+        )
+        if rc == 0:
+            return True
+    return False
+
+
+def bounce():
+    log("info", "bouncing %s" % LAN_INTERFACE)
+    for action in ("down", "up"):
+        rc, out = run(["ip", "link", "set", LAN_INTERFACE, action])
+        if rc != 0:
+            log("err", "ip link set %s %s failed: %s" % (LAN_INTERFACE, action, out))
+            return False
+    return True
+
+
+def set_maintenance(enabled):
+    action = "enable" if enabled else "disable"
+    rc, out = run(["ha-manager", "crm-command", "node-maintenance", action, NODE])
+    if rc != 0:
+        log("err", "node-maintenance %s failed: %s" % (action, out))
+        return False
+    log("warning", "node-maintenance %s requested for %s" % (action, NODE))
+    return True
+
+
+# --- peer health over pmxcfs ----------------------------------------------
+
+
+_last_publish_warning = [0.0]
+
+
+def publish(healthy):
+    """Write our LAN health where peers can see it. /etc/pve goes read-only when
+    the node is inquorate, so a failed write doubles as the quorum check."""
+    try:
+        os.makedirs(PEER_DIR, exist_ok=True)
+        with open(os.path.join(PEER_DIR, NODE), "w") as handle:
+            handle.write("%d %s\n" % (int(time.time()), "healthy" if healthy else "down"))
+        return True
+    except OSError as err:
+        # Throttled: an inquorate node would otherwise log this every interval
+        # for the whole outage.
+        now = time.time()
+        if now - _last_publish_warning[0] >= NAG_SECONDS:
+            log("warning", "could not publish health to %s: %s" % (PEER_DIR, err))
+            _last_publish_warning[0] = now
+        return False
+
+
+def healthy_peers():
+    """Count peers whose last published report is recent and says healthy."""
+    count = 0
+    try:
+        names = os.listdir(PEER_DIR)
+    except OSError:
+        return 0
+    now = int(time.time())
+    for name in names:
+        if name == NODE:
+            continue
+        try:
+            with open(os.path.join(PEER_DIR, name)) as handle:
+                stamp, state = handle.read().split()
+        except (OSError, ValueError):
+            continue
+        if state == "healthy" and 0 <= now - int(stamp) <= PEER_FRESH_SECONDS:
+            count += 1
+    return count
+
+
+# --- durable state ---------------------------------------------------------
+
+
+def load_state():
+    try:
+        with open(STATE_FILE) as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return {"phase": HEALTHY, "owns_maintenance": False, "trips": []}
+
+
+def save_state(state):
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        tmp = STATE_FILE + ".tmp"
+        with open(tmp, "w") as handle:
+            json.dump(state, handle)
+        os.replace(tmp, STATE_FILE)
+    except OSError as err:
+        log("err", "could not persist state: %s" % err)
+
+
+def recent_trips(state):
+    cutoff = int(time.time()) - FLAP_WINDOW_SECONDS
+    state["trips"] = [t for t in state.get("trips", []) if t >= cutoff]
+    return len(state["trips"])
+
+
+# --- main loop -------------------------------------------------------------
+
+
+class Stopped(Exception):
+    pass
+
+
+def _stop(_signum, _frame):
+    raise Stopped()
+
+
+def main():
+    signal.signal(signal.SIGTERM, _stop)
+    signal.signal(signal.SIGINT, _stop)
+
+    if not PROBE_TARGETS:
+        log("err", "no PROBE_TARGETS configured, refusing to run")
+        return 1
+    if MODE not in ("monitor", "drain"):
+        log("err", "unknown MODE %r, expected monitor or drain" % MODE)
+        return 1
+
+    state = load_state()
+    log(
+        "info",
+        "started in %s mode on %s, probing %s via %s every %ss"
+        % (MODE, NODE, ",".join(PROBE_TARGETS), PROBE_INTERFACE, PROBE_INTERVAL),
+    )
+    if state.get("owns_maintenance"):
+        log("warning", "resuming with %s still drained by a previous run" % NODE)
+
+    fails = 0
+    goods = 0
+    bounces = 0
+    healthy_since = None
+    published = None
+    last_publish = 0.0
+    last_nag = 0.0
+    quorate = True
+
+    while True:
+        healthy = probe()
+        now = time.time()
+
+        if healthy:
+            goods += 1
+            fails = 0
+            if healthy_since is None:
+                healthy_since = now
+        else:
+            fails += 1
+            goods = 0
+            healthy_since = None
+
+        # Tell the peers, on change or on keepalive. A failed write means /etc/pve
+        # is read-only, which means we are inquorate.
+        if healthy != published or now - last_publish >= PEER_KEEPALIVE_SECONDS:
+            quorate = publish(healthy)
+            if quorate:
+                published, last_publish = healthy, now
+
+        phase = state["phase"]
+
+        if phase == HEALTHY and healthy:
+            bounces = 0
+
+        elif phase == HEALTHY and fails >= FAIL_THRESHOLD:
+            log(
+                "warning",
+                "LAN down: %d consecutive failed probes of %s" % (fails, ",".join(PROBE_TARGETS)),
+            )
+            state["phase"] = DEGRADED
+            save_state(state)
+
+        elif phase == DEGRADED and healthy and goods >= RECOVER_THRESHOLD:
+            log("warning", "LAN recovered after %d bounce(s), no drain needed" % bounces)
+            state["phase"] = HEALTHY
+            save_state(state)
+            bounces = 0
+
+        # Still down. Re-confirm across the full threshold between escalations so
+        # a bounce is followed by a real measurement, not an instant retry.
+        elif phase == DEGRADED and fails >= FAIL_THRESHOLD:
+            if BOUNCE_ENABLED and bounces < BOUNCE_ATTEMPTS:
+                bounces += 1
+                log("warning", "bounce attempt %d of %d" % (bounces, BOUNCE_ATTEMPTS))
+                bounce()
+                time.sleep(BOUNCE_SETTLE)
+                fails = 0
+                continue
+
+            peers = healthy_peers()
+            trips = recent_trips(state)
+            nagging = now - last_nag >= NAG_SECONDS
+
+            if not quorate:
+                if nagging:
+                    log("err", "LAN down and inquorate; HA will handle this, standing by")
+                    last_nag = now
+            elif peers < DRAIN_MIN_HEALTHY_PEERS:
+                if nagging:
+                    log(
+                        "warning",
+                        "not draining: %d peer(s) report a healthy LAN, need %d. "
+                        "Looks LAN-wide rather than local to %s."
+                        % (peers, DRAIN_MIN_HEALTHY_PEERS, NODE),
+                    )
+                    last_nag = now
+            elif trips >= FLAP_MAX_TRIPS:
+                if nagging:
+                    log(
+                        "err",
+                        "refusing to drain %s: %d trips already in the last %ds. "
+                        "Fix the NIC, then delete %s."
+                        % (NODE, trips, FLAP_WINDOW_SECONDS, STATE_FILE),
+                    )
+                    last_nag = now
+            elif MODE != "drain":
+                if nagging:
+                    log(
+                        "warning",
+                        "would drain %s now (%d healthy peer(s)) but MODE is %s"
+                        % (NODE, peers, MODE),
+                    )
+                    last_nag = now
+            elif set_maintenance(True):
+                state["phase"] = DRAINED
+                state["owns_maintenance"] = True
+                state["trips"].append(int(now))
+                save_state(state)
+
+        # Drained. Come back only after a long clean stretch: leaving maintenance
+        # migrates the guests straight back here, so a flap costs two migrations.
+        elif phase == DRAINED and healthy and goods >= RECOVER_THRESHOLD:
+            stable = now - (healthy_since or now)
+            if stable >= DRAIN_STABLE_SECONDS and set_maintenance(False):
+                log("warning", "LAN clean for %ds, %s back in service" % (stable, NODE))
+                state["phase"] = HEALTHY
+                state["owns_maintenance"] = False
+                save_state(state)
+                bounces = 0
+
+        time.sleep(PROBE_INTERVAL)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except Stopped:
+        log("info", "stopping on signal; leaving maintenance state as-is")
+        sys.exit(0)

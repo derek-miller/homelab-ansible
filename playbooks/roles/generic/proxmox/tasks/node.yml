@@ -163,3 +163,8 @@
     name: "{{ proxmox_time_sync_service }}"
     enabled: yes
     state: started
+
+# HA reacts to a dead node, not a dead LAN. This closes the gap for the case
+# where corosync keeps the node quorate over the fabric while everything
+# bridged to vmbr0 is unreachable.
+- include_tasks: lan-watchdog.yml

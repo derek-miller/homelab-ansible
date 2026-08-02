@@ -27,6 +27,39 @@ proxmox_replication_schedule: "*/15"
 proxmox_zfs_arc_fraction: 0.10
 proxmox_time_sync_service: chrony
 
+# LAN link watchdog. HA watches node liveness, not service reachability, so a
+# node whose LAN NIC wedges while corosync keeps talking over the fabric stays
+# "healthy" to HA with every guest on it unreachable.
+#
+#   off      not installed
+#   monitor  probe, bounce the NIC, log; never touches HA
+#   drain    monitor, plus ha-manager node-maintenance when the bounce fails
+#
+# Starts at monitor deliberately. The bounce alone resolved the 2026-07-31
+# outage, and monitor produces the false-positive record needed before letting
+# it move guests on its own.
+proxmox_lan_watchdog_mode: monitor
+proxmox_lan_watchdog_targets: "{{ _proxmox_lan_watchdog_targets }}"
+# A failing round costs up to (targets x timeout), so a threshold of 6 is around
+# 30s on a healthy LAN and up to ~2min when every target is timing out.
+proxmox_lan_watchdog_probe_interval: 5
+proxmox_lan_watchdog_probe_timeout: 2
+proxmox_lan_watchdog_fail_threshold: 6
+proxmox_lan_watchdog_recover_threshold: 3
+proxmox_lan_watchdog_bounce_enabled: yes
+proxmox_lan_watchdog_bounce_attempts: 2
+proxmox_lan_watchdog_bounce_settle: 15
+# At least this many peers must report a healthy LAN before draining. Zero peers
+# healthy means the LAN itself is down, and draining onto an equally blind node
+# helps nobody.
+proxmox_lan_watchdog_min_healthy_peers: 1
+# Leaving maintenance migrates the guests straight back, so a flap costs two
+# live migrations. Require a long clean stretch, and stop re-arming after a
+# couple of trips rather than ping-ponging guests all night.
+proxmox_lan_watchdog_stable_seconds: 600
+proxmox_lan_watchdog_flap_window: 21600
+proxmox_lan_watchdog_flap_max_trips: 2
+
 proxmox_acls: []
 proxmox_storages: []
 proxmox_notification_targets: []

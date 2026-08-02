@@ -21,6 +21,20 @@ _proxmox_corosync_link1: >-
   {{ ('--link1 ' ~ proxmox_fabric_address.split('/')[0])
      if proxmox_fabric_address | default('') | length > 0 else '' }}
 
+# The gateway plus every peer's LAN address, space separated for the unit's
+# EnvironmentFile. Probing the gateway alone would make a router reboot look
+# identical to a dead NIC; the peers keep answering while the gateway is away.
+# `sort` and `reject` rather than `difference`: the latter is a set operation and
+# returns an arbitrary order, which would make the rendered file differ run to
+# run and report changed every time.
+_proxmox_lan_watchdog_targets: >-
+  {{ ([proxmox_lan_gateway]
+      + (groups['proxmox'] | reject('equalto', inventory_hostname)
+         | map('extract', hostvars, 'proxmox_lan_address')
+         | select('string') | map('regex_replace', '/.*$', '')
+         | sort | list))
+     | unique | join(' ') }}
+
 # Every node answers on ring0; only fabric-equipped nodes also answer on ring1.
 _proxmox_corosync_peers_expected: >-
   {{ (groups['proxmox'] | length)

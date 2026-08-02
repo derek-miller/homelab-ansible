@@ -34,3 +34,5 @@
 # /etc/network/interfaces is deliberately left in place. Removing it would strand
 # the node, and there is no meaningful "absent" state for a hypervisor's
 # management network.
+
+- include_tasks: lan-watchdog-absent.yml
