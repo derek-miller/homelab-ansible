@@ -18,3 +18,4 @@ DRAIN_MIN_HEALTHY_PEERS={{ proxmox_lan_watchdog_min_healthy_peers }}
 DRAIN_STABLE_SECONDS={{ proxmox_lan_watchdog_stable_seconds }}
 FLAP_WINDOW_SECONDS={{ proxmox_lan_watchdog_flap_window }}
 FLAP_MAX_TRIPS={{ proxmox_lan_watchdog_flap_max_trips }}
+NOTIFY_ENABLED={{ proxmox_lan_watchdog_notify | ternary('yes', 'no') }}

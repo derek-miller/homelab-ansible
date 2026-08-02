@@ -88,8 +88,17 @@ fmt:
 lint:
 	yamllint --strict .
 
+# Role test suites are plain-stdlib scripts, so they run in the same minimal
+# venv CI's lint job builds. Three review rounds of watchdog findings were all
+# expressible in this suite; it is a gate, not a courtesy.
+.PHONY: test
+test:
+	@set -e; found=0; for t in $$(find playbooks/roles -path '*/tests/test_*.py' | sort); do \
+		echo "== $$t"; python3 "$$t"; found=1; \
+	done; [ "$$found" = 1 ] || { echo "no test suites found"; exit 1; }
+
 .PHONY: check
-check: lint
+check: lint test
 	$(ansible_playbook_cmd) --syntax-check
 
 .PHONY: bootstrap

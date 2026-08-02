@@ -37,6 +37,22 @@
   when: proxmox_lan_watchdog_mode != 'off'
   notify: restart pve-lan-watchdog
 
+# PVE resolves notification templates only from its own package directory, so
+# these land in a path pve-manager owns and an upgrade will remove them. Copied
+# every run for the same reason proxmox_patch_influxdb_storage_type is.
+- name: install the lan watchdog notification templates
+  copy:
+    src: "notification-templates/{{ item }}"
+    dest: "/usr/share/pve-manager/templates/default/{{ item }}"
+    owner: root
+    group: root
+    mode: 0644
+  loop:
+    - lan-watchdog-subject.txt.hbs
+    - lan-watchdog-body.txt.hbs
+    - lan-watchdog-body.html.hbs
+  when: proxmox_lan_watchdog_mode != 'off'
+
 - name: create the lan watchdog service
   template:
     src: systemd/pve-lan-watchdog.service.jinja2

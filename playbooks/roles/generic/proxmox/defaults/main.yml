@@ -59,6 +59,9 @@ proxmox_lan_watchdog_min_healthy_peers: 1
 proxmox_lan_watchdog_stable_seconds: 600
 proxmox_lan_watchdog_flap_window: 21600
 proxmox_lan_watchdog_flap_max_trips: 2
+# Emitted through PVE's own notification system, so trips follow whatever
+# proxmox_notification_matchers already route rather than a second channel.
+proxmox_lan_watchdog_notify: yes
 
 proxmox_acls: []
 proxmox_storages: []

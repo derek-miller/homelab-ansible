@@ -30,6 +30,9 @@
     - /etc/default/pve-lan-watchdog
     - /usr/local/sbin/pve-lan-watchdog
     - /var/lib/pve-lan-watchdog
+    - /usr/share/pve-manager/templates/default/lan-watchdog-subject.txt.hbs
+    - /usr/share/pve-manager/templates/default/lan-watchdog-body.txt.hbs
+    - /usr/share/pve-manager/templates/default/lan-watchdog-body.html.hbs
   notify: reload systemd units
 
 - name: stop publishing lan health to the cluster

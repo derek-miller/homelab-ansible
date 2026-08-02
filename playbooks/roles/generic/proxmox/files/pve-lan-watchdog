@@ -1,24 +1,51 @@
 #!/usr/bin/env python3
-"""Watch the LAN link and get HA resources off the node when it dies.
+"""Watch the LAN link, get HA resources off a node whose LAN dies, and report
+the whole fleet's LAN health from a node that can actually deliver a message.
 
 Proxmox HA relocates on loss of quorum plus watchdog expiry. It watches node
 liveness, not service reachability. A node whose LAN NIC wedges its TX ring
 keeps quorum over the corosync fabric ring, so HA sees a healthy node while
-everything bridged to vmbr0 is dark. This closes that gap.
+everything bridged to vmbr0 is dark. Officially acknowledged and unhandled
+(Bugzilla #7354); maintenance-mode evacuation is one of the two approaches the
+PVE developers suggest, and the one that live-migrates instead of fencing.
 
-Escalation is deliberate, cheapest first:
+The watchdog is two independent halves joined only by a published state
+document in /etc/pve/lan-watchdog/<node>, which pmxcfs replicates over
+corosync and therefore over the fabric — the one channel that survives
+exactly the failure being diagnosed.
+
+LOCAL half (every node): probe -> bounce -> drain, all strictly about this
+node, escalating cheapest-first:
 
   1. probe   several LAN targets, not just the gateway, so a gateway reboot
              cannot trip anything
-  2. bounce  ip link down/up on the LAN NIC, which is local, takes seconds and
-             is what has actually resolved this in practice
-  3. drain   ha-manager node-maintenance, which live-migrates HA resources off
-             over the fabric with no data loss
+  2. bounce  ip link down/up on the LAN NIC: local, seconds, and what actually
+             cleared the 2026-07-31 e1000e TX hang
+  3. drain   ha-manager node-maintenance, live-migrating HA resources off over
+             the fabric — gated on peers reporting a healthy LAN, so a
+             switch-wide failure drains nobody
 
-Step 3 only runs when peers report their own LAN is fine. Peers publish health
-into /etc/pve, which replicates over corosync and therefore over the fabric,
-so the signal survives exactly the failure being diagnosed. If the whole LAN is
-down, every node sees every peer unhealthy and nobody drains.
+The local half NEVER notifies. A node whose LAN is down cannot reach the
+notification target (it egresses over vmbr0), so a self-reporting design
+loses precisely the messages that matter. Instead every transition is written
+into the published document as a monotonically sequenced event.
+
+REPORTER half (every node runs it; at most one acts): reads every peer's
+document plus corosync's own membership view (/etc/pve/.members) and sends
+notifications on the whole fleet's behalf. The reporter is the lowest-sorted
+node currently publishing a fresh healthy document — eligibility is exactly
+the capability the job needs, so failover is automatic: a reporter whose LAN
+dies publishes 'down' and disqualifies itself, and the next healthy node
+takes over on its next tick. No lock, no lease; every node computes the same
+answer from the same replicated data. Brief double-sends during a handover
+are possible and accepted; deduplicating would need writable shared state,
+which costs more than a repeated alert.
+
+Reporting is by sequence number, not by current state, so a fault that
+bounces clean between reporter ticks is still reported afterwards rather
+than lost. The reporter also flags a node that corosync says is online but
+whose document has gone stale — a dead or wedged watchdog, which nothing
+else in the system can see.
 """
 
 import json
@@ -62,8 +89,17 @@ BOUNCE_ENABLED = _bool("BOUNCE_ENABLED", True)
 BOUNCE_ATTEMPTS = _int("BOUNCE_ATTEMPTS", 2)
 BOUNCE_SETTLE = _int("BOUNCE_SETTLE", 15)
 
+NOTIFY_ENABLED = _bool("NOTIFY_ENABLED", True)
+NOTIFY_TEMPLATE = _env("NOTIFY_TEMPLATE", "lan-watchdog")
+
 PEER_DIR = _env("PEER_DIR", "/etc/pve/lan-watchdog")
+MEMBERS_FILE = _env("MEMBERS_FILE", "/etc/pve/.members")
 PEER_FRESH_SECONDS = _int("PEER_FRESH_SECONDS", 180)
+# How far back a reporter with no usable cursor treats events as already
+# announced. Strictly wider than PEER_FRESH_SECONDS — see report() — and the
+# max() holds that invariant against an env override, since a floor at or
+# under the eligibility window silently clamps a handover's opening event.
+FLOOR_SECONDS = max(_int("FLOOR_SECONDS", PEER_FRESH_SECONDS * 2), PEER_FRESH_SECONDS * 2)
 PEER_KEEPALIVE_SECONDS = _int("PEER_KEEPALIVE_SECONDS", 60)
 DRAIN_MIN_HEALTHY_PEERS = _int("DRAIN_MIN_HEALTHY_PEERS", 1)
 DRAIN_STABLE_SECONDS = _int("DRAIN_STABLE_SECONDS", 600)
@@ -71,14 +107,23 @@ DRAIN_STABLE_SECONDS = _int("DRAIN_STABLE_SECONDS", 600)
 FLAP_WINDOW_SECONDS = _int("FLAP_WINDOW_SECONDS", 21600)
 FLAP_MAX_TRIPS = _int("FLAP_MAX_TRIPS", 2)
 
+# Events kept in the published document. The reporter announces everything
+# newer than its cursor, so this is how much lag or reporter downtime can pass
+# before history is lost. 16 events at ~200 bytes is ~3KB, far under pmxcfs
+# file limits, and 16 transitions with no working reporter means something
+# much bigger is wrong.
+DOC_EVENTS_KEPT = _int("DOC_EVENTS_KEPT", 16)
+
 STATE_DIR = _env("STATE_DIR", "/var/lib/pve-lan-watchdog")
 STATE_FILE = os.path.join(STATE_DIR, "state.json")
 
-# How often to repeat a "still down, still not draining" line, so a long outage
-# does not write one every probe interval.
+# How often a still-down node repeats its refusal event, so a long outage is
+# re-announced occasionally rather than every probe interval or only once.
 NAG_SECONDS = _int("NAG_SECONDS", 300)
 
 HEALTHY, DEGRADED, DRAINED = "healthy", "degraded", "drained"
+
+DOC_VERSION = 1
 
 
 def log(level, message):
@@ -149,52 +194,7 @@ def set_maintenance(enabled):
     return True
 
 
-# --- peer health over pmxcfs ----------------------------------------------
-
-
-_last_publish_warning = [0.0]
-
-
-def publish(healthy):
-    """Write our LAN health where peers can see it. /etc/pve goes read-only when
-    the node is inquorate, so a failed write doubles as the quorum check."""
-    try:
-        os.makedirs(PEER_DIR, exist_ok=True)
-        with open(os.path.join(PEER_DIR, NODE), "w") as handle:
-            handle.write("%d %s\n" % (int(time.time()), "healthy" if healthy else "down"))
-        return True
-    except OSError as err:
-        # Throttled: an inquorate node would otherwise log this every interval
-        # for the whole outage.
-        now = time.time()
-        if now - _last_publish_warning[0] >= NAG_SECONDS:
-            log("warning", "could not publish health to %s: %s" % (PEER_DIR, err))
-            _last_publish_warning[0] = now
-        return False
-
-
-def healthy_peers():
-    """Count peers whose last published report is recent and says healthy."""
-    count = 0
-    try:
-        names = os.listdir(PEER_DIR)
-    except OSError:
-        return 0
-    now = int(time.time())
-    for name in names:
-        if name == NODE:
-            continue
-        try:
-            with open(os.path.join(PEER_DIR, name)) as handle:
-                stamp, state = handle.read().split()
-        except (OSError, ValueError):
-            continue
-        if state == "healthy" and 0 <= now - int(stamp) <= PEER_FRESH_SECONDS:
-            count += 1
-    return count
-
-
-# --- durable state ---------------------------------------------------------
+# --- local state -----------------------------------------------------------
 
 
 def load_state():
@@ -202,7 +202,7 @@ def load_state():
         with open(STATE_FILE) as handle:
             return json.load(handle)
     except (OSError, ValueError):
-        return {"phase": HEALTHY, "owns_maintenance": False, "trips": []}
+        return {"phase": HEALTHY, "owns_maintenance": False, "trips": [], "seq": 0}
 
 
 def save_state(state):
@@ -212,14 +212,573 @@ def save_state(state):
         with open(tmp, "w") as handle:
             json.dump(state, handle)
         os.replace(tmp, STATE_FILE)
+        return True
     except OSError as err:
         log("err", "could not persist state: %s" % err)
+        return False
 
 
 def recent_trips(state):
     cutoff = int(time.time()) - FLAP_WINDOW_SECONDS
     state["trips"] = [t for t in state.get("trips", []) if t >= cutoff]
     return len(state["trips"])
+
+
+# --- the published document ------------------------------------------------
+#
+# The sole interface between the two halves, and between nodes. The local
+# half owns writing its own; the reporter half reads everyone's. `seq`
+# increments once per event and `events` keeps the last DOC_EVENTS_KEPT of
+# them, so a reporter that was slow, restarted, or freshly elected announces
+# every event it has not yet announced rather than only the latest — two
+# transitions between reporter reads lose nothing. `detail` is structured
+# data, not prose: the reporter owns the wording, so messages can improve
+# without touching every node's local half.
+
+
+def publish(state, lan_healthy, event=None):
+    """Write this node's document. /etc/pve goes read-only when the node is
+    inquorate, so a failed write doubles as the quorum check: False means
+    inquorate (or pmxcfs is wedged), and the caller must not drain, because
+    HA is already handling a node in that condition."""
+    if event is not None:
+        state["seq"] = state.get("seq", 0) + 1
+        state.setdefault("events", []).append(
+            {
+                "seq": state["seq"],
+                "ts": int(time.time()),
+                "name": event[0],
+                "detail": event[1],
+            }
+        )
+        state["events"] = state["events"][-DOC_EVENTS_KEPT:]
+    doc = {
+        "v": DOC_VERSION,
+        "node": NODE,
+        "ts": int(time.time()),
+        "seq": state.get("seq", 0),
+        "lan": "healthy" if lan_healthy else "down",
+        "phase": state.get("phase", HEALTHY),
+        "mode": MODE,
+        "events": state.get("events", []),
+    }
+    try:
+        os.makedirs(PEER_DIR, exist_ok=True)
+        tmp = os.path.join(PEER_DIR, ".%s.tmp" % NODE)
+        with open(tmp, "w") as handle:
+            json.dump(doc, handle)
+        os.replace(tmp, os.path.join(PEER_DIR, NODE))
+        return True
+    except OSError as err:
+        _throttled_publish_warning(err)
+        return False
+
+
+_last_publish_warning = [0.0]
+
+
+def _throttled_publish_warning(err):
+    now = time.time()
+    if now - _last_publish_warning[0] >= NAG_SECONDS:
+        log("warning", "could not publish to %s: %s" % (PEER_DIR, err))
+        _last_publish_warning[0] = now
+
+
+def read_peer_docs():
+    """Every node's published document, keyed by node name, plus the set of
+    nodes that ARE publishing but whose document cannot be read. The two are
+    different incidents — a dead watchdog versus a version mismatch — and
+    announcing one as the other sends the operator hunting for a stalled
+    pmxcfs that does not exist. Tolerates the v0 format ('<ts>
+    <healthy|down>') from nodes not yet upgraded: those become minimal
+    documents with no event history, which the reporter treats as
+    state-only."""
+    docs = {}
+    unreadable = set()
+    try:
+        names = os.listdir(PEER_DIR)
+    except OSError:
+        return docs, unreadable
+    for name in names:
+        if name.startswith("."):
+            continue
+        try:
+            with open(os.path.join(PEER_DIR, name)) as handle:
+                raw = handle.read()
+        except OSError as err:
+            # The name came from listdir, so the node IS publishing something;
+            # we just could not read the file. Same incident as an unreadable
+            # parse, so it joins the same set rather than being announced as
+            # if the node had never published at all.
+            log("err", "could not read document from %s: %s" % (name, err))
+            unreadable.add(name)
+            continue
+        try:
+            doc = json.loads(raw)
+            if isinstance(doc, dict) and "ts" in doc:
+                # This is the trust boundary: everything downstream — the
+                # election, the drain gate, the reporter — does arithmetic on
+                # these three. Coerce them here, once, rather than guarding
+                # five call sites, and drop a document whose scalars a newer
+                # node changed the type of. A dropped document is not silence:
+                # the node joins `unreadable` and is announced through
+                # `watchdog unreadable`, distinct from a node that genuinely
+                # never published (`watchdog silent`) — see report().
+                try:
+                    doc["ts"] = int(doc["ts"])  # presence is the branch condition
+                    for key in ("seq", "v"):
+                        doc[key] = int(doc.get(key, 0))
+                    # A wrong container type is as unreadable as a wrong scalar
+                    # type: kept-but-mute would be the silent-and-permanent
+                    # failure the drop-and-announce contract exists to prevent.
+                    if not isinstance(doc.get("events", []), list):
+                        raise TypeError("events is not a list")
+                    # The ring's scalars cross the same boundary, and report()
+                    # does the same arithmetic on them once per event.
+                    for event in doc.get("events") or []:
+                        if isinstance(event, dict):
+                            for key in ("ts", "seq"):
+                                if key in event:
+                                    event[key] = int(event[key])
+                except (TypeError, ValueError):
+                    log("err", "ignoring unreadable document from %s" % name)
+                    unreadable.add(name)
+                    continue
+                docs[name] = doc
+                continue
+        except ValueError:
+            pass
+        try:  # v0 fallback
+            stamp, lan = raw.split()[:2]
+            docs[name] = {"v": 0, "node": name, "ts": int(stamp), "seq": 0, "lan": lan}
+        except (ValueError, IndexError):
+            unreadable.add(name)
+            continue
+    return docs, unreadable
+
+
+def cluster_nodes():
+    """Corosync's own membership view: {node: online_bool}. This, not a
+    directory listing, is the expected-node list — a node whose document was
+    never created is invisible in a listing, and noticing that absence is the
+    point."""
+    try:
+        with open(MEMBERS_FILE) as handle:
+            members = json.load(handle)
+        return {
+            name: bool(info.get("online")) for name, info in members.get("nodelist", {}).items()
+        }
+    except (OSError, ValueError):
+        return {}
+
+
+def healthy_peers(docs=None):
+    """Count of OTHER nodes publishing a fresh healthy document. Gates the
+    drain: zero healthy peers means the fault looks LAN-wide, and draining
+    onto an equally dark node helps nobody."""
+    docs = docs if docs is not None else read_peer_docs()[0]
+    now = int(time.time())
+    return sum(
+        1
+        for name, doc in docs.items()
+        if name != NODE
+        and doc.get("lan") == "healthy"
+        and now - doc.get("ts", 0) <= PEER_FRESH_SECONDS
+    )
+
+
+# --- reporter half ---------------------------------------------------------
+
+
+def elect_reporter(docs, now=None):
+    """The lowest-sorted node publishing a fresh healthy document. A pure
+    function of replicated data, so every node computes the same answer
+    without coordinating. Eligibility is exactly the capability the job
+    needs — a working LAN — so a reporter that goes dark disqualifies itself
+    and the next node takes over with no handoff protocol."""
+    now = int(now if now is not None else time.time())
+    eligible = [
+        name
+        for name, doc in docs.items()
+        # A working LAN is one required capability; carrying the reporter
+        # code (v1+) is the other. A v0 node that won would silence everyone.
+        if doc.get("v", 0) >= 1
+        and doc.get("lan") == "healthy"
+        and now - doc.get("ts", 0) <= PEER_FRESH_SECONDS
+    ]
+    return min(eligible) if eligible else None
+
+
+# Message composition lives entirely on the reporter, keyed by event name.
+# severity 'warning' is routed by the cluster's critical matcher, 'notice' by
+# the non-critical one. Unknown event names (from a newer node) are reported
+# raw rather than dropped.
+
+
+def _fmt_targets(detail):
+    return ", ".join(detail.get("targets", [])) or "its probe targets"
+
+
+_RENDERERS = {
+    "lan_down": lambda n, d: (
+        "warning",
+        "LAN down",
+        "%s failed %d consecutive probes of %s and is escalating."
+        % (n, d.get("fails", 0), _fmt_targets(d)),
+    ),
+    "recovered": lambda n, d: (
+        "notice",
+        "LAN recovered",
+        "%s recovered after %d bounce(s). No drain was needed." % (n, d.get("bounces", 0)),
+    ),
+    "drained": lambda n, d: (
+        "warning",
+        "drained",
+        "%s had no LAN after %d bounce attempt(s) and entered HA maintenance; its HA "
+        "guests are migrating away. It returns automatically after %ds of clean LAN."
+        % (n, d.get("bounces", 0), d.get("stable_seconds", DRAIN_STABLE_SECONDS))
+        + (
+            ""
+            if d.get("persisted", True)
+            else " WARNING: it could not record that it owns this maintenance (local "
+            "state write failed). If its watchdog restarts before recovery, the node "
+            "stays in maintenance until someone runs `ha-manager crm-command "
+            "node-maintenance disable %s` by hand." % n
+        ),
+    ),
+    "back_in_service": lambda n, d: (
+        "notice",
+        "back in service",
+        "%s had a clean LAN for %ds and left HA maintenance; guests migrate back "
+        "automatically. It recorded %d trip(s) in the current flap window."
+        % (n, d.get("stable", 0), d.get("trips_in_window", 0)),
+    ),
+    "refused_lan_wide": lambda n, d: (
+        "warning",
+        "not draining, LAN-wide fault suspected",
+        "%s has no LAN, but only %d peer(s) report a healthy LAN (need %d). This looks "
+        "like a switch or uplink fault rather than one NIC, so draining would move "
+        "guests nowhere useful. Staying put."
+        % (n, d.get("healthy_peers", 0), d.get("needed", DRAIN_MIN_HEALTHY_PEERS)),
+    ),
+    "refused_flapping": lambda n, d: (
+        "warning",
+        "refusing to drain, flapping",
+        "%s has tripped %d time(s) in the last %ds and will not drain again. Fix the "
+        "NIC, then run `pve-lan-watchdog --rearm` on it; the guard also clears itself "
+        "once the trips age out."
+        % (n, d.get("trips_in_window", 0), d.get("window", FLAP_WINDOW_SECONDS)),
+    ),
+    "would_drain": lambda n, d: (
+        "warning",
+        "would drain (monitor mode)",
+        "%s has no LAN and %d healthy peer(s), so it would drain now, but its mode is "
+        "monitor. No action taken." % (n, d.get("healthy_peers", 0)),
+    ),
+    "inquorate": lambda n, d: (
+        "warning",
+        "LAN down and inquorate",
+        "%s had no LAN while inquorate; HA handles that condition on its own and the "
+        "watchdog stood by. (Visible only after quorum returned.)" % n,
+    ),
+}
+
+
+def notify(severity, event_name, node, detail_text):
+    """Deliver one notification through PVE's own system, so it follows the
+    matchers the cluster already routes (node-red -> Discord today). Runs only
+    on the elected reporter, whose LAN is verified working by its own
+    election, so the transport does not share fate with the fault being
+    reported. Never fatal: a lost notification must not affect the watchdog."""
+    if not NOTIFY_ENABLED:
+        return
+    payload = json.dumps(
+        {
+            "data": {"node": node, "event": event_name, "detail": detail_text, "reporter": NODE},
+            "fields": {"type": "lan-watchdog", "hostname": node},
+        }
+    )
+    rc, out = run(
+        [
+            "perl",
+            "-MPVE::Notify",
+            "-MJSON::PP",
+            "-e",
+            "my ($sev, $tmpl, $json) = @ARGV;"
+            " my $p = JSON::PP::decode_json($json);"
+            " PVE::Notify::notify($sev, $tmpl, $p->{data}, $p->{fields});",
+            severity,
+            NOTIFY_TEMPLATE,
+            payload,
+        ],
+        timeout=20,
+    )
+    if rc != 0:
+        log("err", "notification failed for %s/%s: %s" % (node, event_name, out))
+
+
+def _raw(node, event):
+    """An event this reporter cannot compose a message for: an unknown name,
+    a non-string name, or a known name whose detail shape a newer node
+    changed. The title is always a plain string, so the notification's event
+    field never goes out as serialized JSON."""
+    name = event.get("name")
+    return (
+        "warning",
+        str(name) if name is not None else "unknown event",
+        node,
+        "%s reported '%s': %s" % (node, name, event.get("detail")),
+    )
+
+
+def report(docs, members, announced, now=None, unreadable=frozenset()):
+    """The reporter's whole decision, as a pure function so it is testable
+    without a clock, a cluster, or a subprocess: given every node's document,
+    corosync's membership view, and a cursor of what has already been
+    announced, return the notifications due and the updated cursor.
+
+    announced: {node: {"seq": int, "stale_ts": int}} — seq is the last event
+    sequence announced for that node; stale_ts is the document timestamp a
+    staleness alert was last sent for, so one stall alerts once rather than
+    every tick, and a recovery re-arms it."""
+    now = int(now if now is not None else time.time())
+    out = []
+    for node, online in sorted(members.items()):
+        # One node's unexpected bytes must not cost the others their
+        # messages: out already holds them, and an unwind here would
+        # discard it while their cursors have advanced. Rendering has its
+        # own guard; this catches what nobody predicted.
+        try:
+            doc = docs.get(node)
+            # The floor is what a reporter with no history should treat as already
+            # announced: everything older than the freshness window. Applied
+            # unconditionally, not only to a cold cursor — a cursor frozen at an
+            # earlier reign is exactly as far behind as none at all, and without
+            # the floor the next election replays every event since.
+            #
+            # The window is deliberately wider than the eligibility window, not
+            # equal to it. A dead reporter keeps its document — and so its
+            # eligibility — for PEER_FRESH_SECONDS after its last publish, so
+            # the successor's first tick lands just *past* that mark: with one
+            # constant for both, the opening event of the incident is aged out
+            # by the few seconds of tick latency, which is the event that says
+            # why. Doubling costs nothing; the case it clamps is hours old.
+            ring = (doc or {}).get("events", []) or []
+            if not isinstance(ring, list):
+                ring = []
+            fresh = [
+                e.get("seq", 0)
+                for e in ring
+                if isinstance(e, dict) and now - e.get("ts", 0) <= FLOOR_SECONDS
+            ]
+            floor = (min(fresh) - 1) if fresh else (doc or {}).get("seq", 0)
+            if node not in announced:
+                announced[node] = {"seq": floor, "stale_ts": -1}
+            cursor = announced[node]
+
+            # A node corosync sees online whose document is missing or stale has
+            # a dead or wedged watchdog — or a long pmxcfs stall, or it is
+            # inquorate (publish fails there by design). The message claims only
+            # what is known. Nothing else in the system can see this condition.
+            doc_ts = doc.get("ts", 0) if doc else 0
+            # Both incidents below carry doc_ts == 0: there is no document to
+            # take a timestamp from either way. The timestamp alone cannot
+            # latch them apart, so whichever fires first would suppress the
+            # other permanently — neither path reaches the re-arm, which only
+            # runs for a fresh readable document.
+            kind = "unreadable" if node in unreadable else "silent"
+            if online and now - doc_ts > PEER_FRESH_SECONDS:
+                if (cursor["stale_ts"], cursor.get("stale_kind")) != (doc_ts, kind):
+                    cursor["stale_ts"] = doc_ts
+                    cursor["stale_kind"] = kind
+                    # Two different incidents share this branch, and naming one
+                    # as the other sends the operator hunting a dead unit or a
+                    # stalled pmxcfs that does not exist: a node whose document
+                    # was DROPPED is publishing fine, we just cannot read it.
+                    if node in unreadable:
+                        out.append(
+                            (
+                                "warning",
+                                "watchdog unreadable",
+                                node,
+                                "%s is publishing a document this reporter cannot read — "
+                                "a version mismatch or corruption, not a dead watchdog. "
+                                "Its events are not announced until it publishes a "
+                                "readable document again." % node,
+                            )
+                        )
+                    else:
+                        out.append(
+                            (
+                                "warning",
+                                "watchdog silent",
+                                node,
+                                "%s is online in the cluster but its LAN watchdog has %s. The "
+                                "node's LAN is unwatched until pve-lan-watchdog runs there "
+                                "again — or the node is inquorate or pmxcfs is stalled, which "
+                                "look identical from here."
+                                % (
+                                    node,
+                                    (
+                                        ("not published in %ds" % (now - doc_ts))
+                                        if doc
+                                        else "never published"
+                                    ),
+                                ),
+                            )
+                        )
+                continue
+            cursor["stale_ts"] = -1  # publishing again; a future stall re-alerts
+            cursor["stale_kind"] = None
+
+            # A node that left the cluster is HA's problem, and PVE sends its own
+            # fencing notification; repeating it here would be noise.
+            if not online or not doc:
+                continue
+
+            # max() below can only push a cursor forward, so it cannot help a
+            # cursor that is too far *ahead*: a node whose /var/lib was lost
+            # (reimage, or the `rm state.json` this script's --rearm exists to
+            # replace) restarts its counter at zero, and every event it will
+            # ever publish sorts below the high-water mark from its last life.
+            # Silent and permanent — its document stays fresh and healthy, so
+            # `watchdog silent` never fires either. A seq that went backwards
+            # is proof of the state loss, and the same loss discards
+            # owns_maintenance, so say so rather than only resyncing. Below the
+            # offline gate on purpose: a reimaged node that then left the
+            # cluster is fencing's story, and this message becomes actionable
+            # when it returns and republishes.
+            if doc.get("seq", 0) < cursor["seq"]:
+                out.append(
+                    (
+                        "warning",
+                        "watchdog state lost",
+                        node,
+                        "%s restarted its event counter at %d, below the %d already "
+                        "reported: its local state was lost. Reporting resumes from "
+                        "the restarted counter. If it was in HA maintenance it no "
+                        "longer records owning it — check `ha-manager status`."
+                        % (node, doc.get("seq", 0), cursor["seq"]),
+                    )
+                )
+                cursor["seq"] = floor
+
+            # Everything newer than the cursor AND the floor, oldest first, so a
+            # burst of transitions between reads is announced completely and in
+            # order. The gap check measures from the cursor, not the clamped
+            # start: a live flap that outruns the ring must still be called out,
+            # while a stale cursor skipping over old history must not be.
+            start = max(cursor["seq"], floor)
+            events = sorted(
+                (e for e in ring if isinstance(e, dict) and e.get("seq", 0) > start),
+                key=lambda e: e.get("seq", 0),
+            )
+            if events and cursor["seq"] and events[0].get("seq", 0) > cursor["seq"] + 1:
+                missed = events[0].get("seq", 0) - cursor["seq"] - 1
+                # Suppress only when the WHOLE skipped range is still retained
+                # — i.e. it is old news a previous reign delivered. Testing
+                # whether *any* of it survives hides a partial gap: a ring that
+                # overflowed and then went quiet keeps its oldest retained
+                # events past the window, and those alone silenced the report
+                # of the ones that really aged out. The ring is contiguous, so
+                # the whole range is retained exactly when cursor+1 is in it.
+                retained = {e.get("seq") for e in ring if isinstance(e, dict)}
+                if cursor["seq"] + 1 not in retained:
+                    out.append(
+                        (
+                            "warning",
+                            "events missed",
+                            node,
+                            "%s advanced from event %d to %d while unreported; %d event(s) "
+                            "aged out of its document before any reporter announced them."
+                            % (node, cursor["seq"], events[0].get("seq", 0), missed),
+                        )
+                    )
+            for event in events:
+                cursor["seq"] = event.get("seq", cursor["seq"])
+                # name is the one peer-supplied value used as a dict key; an
+                # unhashable one must land in _raw like every other event this
+                # reporter cannot compose, not in the per-node except.
+                name = event.get("name")
+                render = _RENDERERS.get(name) if isinstance(name, str) else None
+                if render is None:
+                    out.append(_raw(node, event))
+                    continue
+                try:
+                    severity, title, text = render(node, event.get("detail") or {})
+                except Exception as err:  # a newer node changed this event's shape
+                    log("err", "cannot render %s/%s: %s" % (node, event.get("name"), err))
+                    out.append(_raw(node, event))
+                    continue
+                out.append((severity, title, node, text))
+        except Exception as err:
+            log("err", "reporter skipped %s: %s: %s" % (node, type(err).__name__, err))
+            continue
+    return out, announced
+
+
+def reporter_tick(state):
+    """Run the reporter half once. A cheap no-op on every node but the
+    elected one. The announced cursor persists in local state so a restarted
+    reporter does not replay history. A newly elected reporter announces
+    whatever it has not itself announced, which after a handover may repeat
+    the previous reporter's last message: duplicate beats silent."""
+    docs, unreadable = read_peer_docs()
+    if elect_reporter(docs) != NODE:
+        return
+    members = cluster_nodes()
+    if not members:
+        return
+    cursors = state.get("announced", {})
+    before = json.dumps(cursors, sort_keys=True)
+    due, announced = report(docs, members, cursors, unreadable=unreadable)
+    state["announced"] = announced
+    for severity, title, node, text in due:
+        log("info", "reporting for %s: %s" % (node, title))
+        notify(severity, title, node, text)
+    # Persisted after the sends: a crash mid-loop re-announces on restart
+    # rather than losing what was never delivered — duplicate beats silent,
+    # except for a notification that reports its own failure. notify() logs
+    # rc != 0 and returns without rolling the cursor back, so a broken
+    # delivery path is not retried; only a process crash gets the replay.
+    #
+    # A cursor that moved without producing a notification has to persist
+    # too. The re-arm under a resolved stall is exactly that: it is what
+    # lets the NEXT stall alert, and both no-document incidents latch on
+    # the same (0, kind), so dropping it re-latches the next one out for
+    # its whole duration. The unit restarts on every deploy of this role,
+    # so a restarted reporter is routine, not an outage. Compared rather
+    # than saved unconditionally: in steady state no cursor moves, so this
+    # writes nothing.
+    if due or json.dumps(announced, sort_keys=True) != before:
+        save_state(state)
+
+
+# --- rearm -----------------------------------------------------------------
+
+
+def rearm():
+    """Clear the flap counter only. Deleting the whole state file would also
+    discard owns_maintenance, and nothing else records that we drained the
+    node, so a drained node would sit in maintenance forever. Restarts the
+    service so the running loop reloads rather than saving its stale copy
+    back."""
+    state = load_state()
+    cleared = len(state.get("trips", []))
+    state["trips"] = []
+    if not save_state(state):
+        log("err", "could not clear the flap counter; the guard is still armed")
+        return 1
+    rc, out = run(["systemctl", "restart", "pve-lan-watchdog"])
+    if rc != 0:
+        log("err", "state cleared but restart failed: %s" % out)
+        return 1
+    log(
+        "info",
+        "re-armed %s: cleared %d trip(s), phase=%s owns_maintenance=%s"
+        % (NODE, cleared, state.get("phase"), state.get("owns_maintenance")),
+    )
+    return 0
 
 
 # --- main loop -------------------------------------------------------------
@@ -229,7 +788,7 @@ class Stopped(Exception):
     pass
 
 
-def _stop(_signum, _frame):
+def _stop(signum, frame):
     raise Stopped()
 
 
@@ -241,7 +800,7 @@ def main():
         log("err", "no PROBE_TARGETS configured, refusing to run")
         return 1
     if MODE not in ("monitor", "drain"):
-        log("err", "unknown MODE %r, expected monitor or drain" % MODE)
+        log("err", "MODE must be monitor or drain, got %r" % MODE)
         return 1
 
     state = load_state()
@@ -257,7 +816,7 @@ def main():
     goods = 0
     bounces = 0
     healthy_since = None
-    published = None
+    published_lan = None
     last_publish = 0.0
     last_nag = 0.0
     quorate = True
@@ -267,21 +826,19 @@ def main():
         now = time.time()
 
         if healthy:
-            goods += 1
             fails = 0
+            goods += 1
             if healthy_since is None:
                 healthy_since = now
         else:
-            fails += 1
             goods = 0
+            fails += 1
             healthy_since = None
 
-        # Tell the peers, on change or on keepalive. A failed write means /etc/pve
-        # is read-only, which means we are inquorate.
-        if healthy != published or now - last_publish >= PEER_KEEPALIVE_SECONDS:
-            quorate = publish(healthy)
-            if quorate:
-                published, last_publish = healthy, now
+        # Transitions attach an event; the publish at the bottom of the loop
+        # carries it into the shared document, where the reporter finds it.
+        # Nothing in this loop sends a notification.
+        pending_event = None
 
         phase = state["phase"]
 
@@ -295,15 +852,17 @@ def main():
             )
             state["phase"] = DEGRADED
             save_state(state)
+            pending_event = ("lan_down", {"fails": fails, "targets": PROBE_TARGETS})
 
         elif phase == DEGRADED and healthy and goods >= RECOVER_THRESHOLD:
             log("warning", "LAN recovered after %d bounce(s), no drain needed" % bounces)
             state["phase"] = HEALTHY
             save_state(state)
+            pending_event = ("recovered", {"bounces": bounces})
             bounces = 0
 
-        # Still down. Re-confirm across the full threshold between escalations so
-        # a bounce is followed by a real measurement, not an instant retry.
+        # Still down. Re-confirm across the full threshold between escalations
+        # so a bounce is followed by a real measurement, not an instant retry.
         elif phase == DEGRADED and fails >= FAIL_THRESHOLD:
             if BOUNCE_ENABLED and bounces < BOUNCE_ATTEMPTS:
                 bounces += 1
@@ -313,13 +872,17 @@ def main():
                 fails = 0
                 continue
 
-            peers = healthy_peers()
+            docs, _ = read_peer_docs()
+            peers = healthy_peers(docs)
             trips = recent_trips(state)
             nagging = now - last_nag >= NAG_SECONDS
 
             if not quorate:
                 if nagging:
                     log("err", "LAN down and inquorate; HA will handle this, standing by")
+                    # The publish below fails while inquorate, so this event
+                    # surfaces only if quorum returns with the LAN still dead.
+                    pending_event = ("inquorate", {})
                     last_nag = now
             elif peers < DRAIN_MIN_HEALTHY_PEERS:
                 if nagging:
@@ -329,14 +892,23 @@ def main():
                         "Looks LAN-wide rather than local to %s."
                         % (peers, DRAIN_MIN_HEALTHY_PEERS, NODE),
                     )
+                    pending_event = (
+                        "refused_lan_wide",
+                        {"healthy_peers": peers, "needed": DRAIN_MIN_HEALTHY_PEERS},
+                    )
                     last_nag = now
             elif trips >= FLAP_MAX_TRIPS:
                 if nagging:
                     log(
                         "err",
                         "refusing to drain %s: %d trips already in the last %ds. "
-                        "Fix the NIC, then delete %s."
-                        % (NODE, trips, FLAP_WINDOW_SECONDS, STATE_FILE),
+                        "Run `pve-lan-watchdog --rearm` after fixing the NIC; the "
+                        "guard also clears itself once the trips age out."
+                        % (NODE, trips, FLAP_WINDOW_SECONDS),
+                    )
+                    pending_event = (
+                        "refused_flapping",
+                        {"trips_in_window": trips, "window": FLAP_WINDOW_SECONDS},
                     )
                     last_nag = now
             elif MODE != "drain":
@@ -346,15 +918,31 @@ def main():
                         "would drain %s now (%d healthy peer(s)) but MODE is %s"
                         % (NODE, peers, MODE),
                     )
+                    pending_event = ("would_drain", {"healthy_peers": peers})
                     last_nag = now
             elif set_maintenance(True):
                 state["phase"] = DRAINED
                 state["owns_maintenance"] = True
                 state["trips"].append(int(now))
-                save_state(state)
+                # state.json is on /var/lib and the published document is on
+                # /etc/pve — different filesystems, so a failed local write
+                # can still be reported through the working channel. The
+                # in-memory state stays correct; the danger is a restart
+                # forgetting we own the maintenance, which the event warns
+                # a human about with the exact recovery command.
+                persisted = save_state(state)
+                pending_event = (
+                    "drained",
+                    {
+                        "bounces": bounces,
+                        "stable_seconds": DRAIN_STABLE_SECONDS,
+                        "persisted": persisted,
+                    },
+                )
 
-        # Drained. Come back only after a long clean stretch: leaving maintenance
-        # migrates the guests straight back here, so a flap costs two migrations.
+        # Drained. Come back only after a long clean stretch: leaving
+        # maintenance migrates the guests straight back, so a flap costs two
+        # live migrations.
         elif phase == DRAINED and healthy and goods >= RECOVER_THRESHOLD:
             stable = now - (healthy_since or now)
             if stable >= DRAIN_STABLE_SECONDS and set_maintenance(False):
@@ -362,12 +950,42 @@ def main():
                 state["phase"] = HEALTHY
                 state["owns_maintenance"] = False
                 save_state(state)
+                pending_event = (
+                    "back_in_service",
+                    {"stable": int(stable), "trips_in_window": recent_trips(state)},
+                )
                 bounces = 0
+
+        if (
+            pending_event is not None
+            or healthy != published_lan
+            or now - last_publish >= PEER_KEEPALIVE_SECONDS
+        ):
+            quorate = publish(state, healthy, pending_event)
+            if quorate:
+                published_lan, last_publish = healthy, now
+                if pending_event is not None:
+                    save_state(state)  # seq and last_event advanced
+
+        try:
+            reporter_tick(state)
+        except Exception as err:  # never let the reporting half stop the acting half
+            log("err", "reporter tick failed: %s: %s" % (type(err).__name__, err))
 
         time.sleep(PROBE_INTERVAL)
 
 
 if __name__ == "__main__":
+    # Only systemd starts the loop. Anything else on the command line is a
+    # typo, and falling through would run a second watchdog beside the unit,
+    # sharing the state file and free to bounce the NIC on a node set to
+    # drain.
+    args = sys.argv[1:]
+    if args == ["--rearm"]:
+        sys.exit(rearm())
+    if args:
+        print("usage: pve-lan-watchdog [--rearm]", file=sys.stderr)
+        sys.exit(2)
     try:
         sys.exit(main())
     except Stopped:
