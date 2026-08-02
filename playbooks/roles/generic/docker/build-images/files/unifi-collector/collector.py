@@ -329,7 +329,10 @@ def collect_events(lines, window_seconds):
 
     # Written every successful poll, event or not, so a quiet window and a
     # missed poll are distinguishable on a graph instead of both being a gap.
-    lines.append(line("unifi_events", {"key": "_heartbeat"}, {"count": len(events)}))
+    # Field is "polls", not "count": a different name from the per-key rows
+    # below so a bare sum(count) can't silently double itself against this
+    # sentinel series.
+    lines.append(line("unifi_events", {"key": "_heartbeat"}, {"polls": len(events)}))
     for (key, client), count in counts.items():
         tags = {"key": key}
         if client:
