@@ -285,15 +285,20 @@ def _throttled_publish_warning(err):
 
 
 def read_peer_docs():
-    """Every node's published document, keyed by node name. Tolerates the v0
-    format ('<ts> <healthy|down>') from nodes not yet upgraded: those become
-    minimal documents with no event history, which the reporter treats as
+    """Every node's published document, keyed by node name, plus the set of
+    nodes that ARE publishing but whose document cannot be read. The two are
+    different incidents — a dead watchdog versus a version mismatch — and
+    announcing one as the other sends the operator hunting for a stalled
+    pmxcfs that does not exist. Tolerates the v0 format ('<ts>
+    <healthy|down>') from nodes not yet upgraded: those become minimal
+    documents with no event history, which the reporter treats as
     state-only."""
     docs = {}
+    unreadable = set()
     try:
         names = os.listdir(PEER_DIR)
     except OSError:
-        return docs
+        return docs, unreadable
     for name in names:
         if name.startswith("."):
             continue
@@ -330,6 +335,7 @@ def read_peer_docs():
                                     event[key] = int(event[key])
                 except (TypeError, ValueError):
                     log("err", "ignoring unreadable document from %s" % name)
+                    unreadable.add(name)
                     continue
                 docs[name] = doc
                 continue
@@ -339,8 +345,9 @@ def read_peer_docs():
             stamp, lan = raw.split()[:2]
             docs[name] = {"v": 0, "node": name, "ts": int(stamp), "seq": 0, "lan": lan}
         except (ValueError, IndexError):
+            unreadable.add(name)
             continue
-    return docs
+    return docs, unreadable
 
 
 def cluster_nodes():
@@ -362,7 +369,7 @@ def healthy_peers(docs=None):
     """Count of OTHER nodes publishing a fresh healthy document. Gates the
     drain: zero healthy peers means the fault looks LAN-wide, and draining
     onto an equally dark node helps nobody."""
-    docs = docs if docs is not None else read_peer_docs()
+    docs = docs if docs is not None else read_peer_docs()[0]
     now = int(time.time())
     return sum(
         1
@@ -505,16 +512,19 @@ def notify(severity, event_name, node, detail_text):
 
 def _raw(node, event):
     """An event this reporter cannot compose a message for: an unknown name,
-    or a known name whose detail shape a newer node changed."""
+    a non-string name, or a known name whose detail shape a newer node
+    changed. The title is always a plain string, so the notification's event
+    field never goes out as serialized JSON."""
+    name = event.get("name")
     return (
         "warning",
-        event.get("name", "unknown event"),
+        str(name) if name is not None else "unknown event",
         node,
-        "%s reported '%s': %s" % (node, event.get("name"), event.get("detail")),
+        "%s reported '%s': %s" % (node, name, event.get("detail")),
     )
 
 
-def report(docs, members, announced, now=None):
+def report(docs, members, announced, now=None, unreadable=frozenset()):
     """The reporter's whole decision, as a pure function so it is testable
     without a clock, a cluster, or a subprocess: given every node's document,
     corosync's membership view, and a cursor of what has already been
@@ -567,25 +577,42 @@ def report(docs, members, announced, now=None):
             if online and now - doc_ts > PEER_FRESH_SECONDS:
                 if cursor["stale_ts"] != doc_ts:
                     cursor["stale_ts"] = doc_ts
-                    out.append(
-                        (
-                            "warning",
-                            "watchdog silent",
-                            node,
-                            "%s is online in the cluster but its LAN watchdog has %s. The "
-                            "node's LAN is unwatched until pve-lan-watchdog runs there "
-                            "again — or the node is inquorate or pmxcfs is stalled, which "
-                            "look identical from here."
-                            % (
+                    # Two different incidents share this branch, and naming one
+                    # as the other sends the operator hunting a dead unit or a
+                    # stalled pmxcfs that does not exist: a node whose document
+                    # was DROPPED is publishing fine, we just cannot read it.
+                    if node in unreadable:
+                        out.append(
+                            (
+                                "warning",
+                                "watchdog unreadable",
                                 node,
-                                (
-                                    ("not published in %ds" % (now - doc_ts))
-                                    if doc
-                                    else "never published"
-                                ),
-                            ),
+                                "%s is publishing a document this reporter cannot read — "
+                                "a version mismatch or corruption, not a dead watchdog. "
+                                "Its events are not announced until it publishes a "
+                                "readable document again." % node,
+                            )
                         )
-                    )
+                    else:
+                        out.append(
+                            (
+                                "warning",
+                                "watchdog silent",
+                                node,
+                                "%s is online in the cluster but its LAN watchdog has %s. The "
+                                "node's LAN is unwatched until pve-lan-watchdog runs there "
+                                "again — or the node is inquorate or pmxcfs is stalled, which "
+                                "look identical from here."
+                                % (
+                                    node,
+                                    (
+                                        ("not published in %ds" % (now - doc_ts))
+                                        if doc
+                                        else "never published"
+                                    ),
+                                ),
+                            )
+                        )
                 continue
             cursor["stale_ts"] = -1  # publishing again; a future stall re-alerts
 
@@ -654,7 +681,11 @@ def report(docs, members, announced, now=None):
                     )
             for event in events:
                 cursor["seq"] = event.get("seq", cursor["seq"])
-                render = _RENDERERS.get(event.get("name"))
+                # name is the one peer-supplied value used as a dict key; an
+                # unhashable one must land in _raw like every other event this
+                # reporter cannot compose, not in the per-node except.
+                name = event.get("name")
+                render = _RENDERERS.get(name) if isinstance(name, str) else None
                 if render is None:
                     out.append(_raw(node, event))
                     continue
@@ -677,13 +708,13 @@ def reporter_tick(state):
     reporter does not replay history. A newly elected reporter announces
     whatever it has not itself announced, which after a handover may repeat
     the previous reporter's last message: duplicate beats silent."""
-    docs = read_peer_docs()
+    docs, unreadable = read_peer_docs()
     if elect_reporter(docs) != NODE:
         return
     members = cluster_nodes()
     if not members:
         return
-    due, announced = report(docs, members, state.get("announced", {}))
+    due, announced = report(docs, members, state.get("announced", {}), unreadable=unreadable)
     state["announced"] = announced
     for severity, title, node, text in due:
         log("info", "reporting for %s: %s" % (node, title))
@@ -812,7 +843,7 @@ def main():
                 fails = 0
                 continue
 
-            docs = read_peer_docs()
+            docs, _ = read_peer_docs()
             peers = healthy_peers(docs)
             trips = recent_trips(state)
             nagging = now - last_nag >= NAG_SECONDS

@@ -97,7 +97,7 @@ class Harness:
         m.bounce = self.bounce
         m.set_maintenance = self.set_maintenance
         m.publish = self.publish
-        m.read_peer_docs = lambda: {}
+        m.read_peer_docs = lambda: ({}, set())
         m.healthy_peers = lambda docs=None: self.peers
         m.reporter_tick = lambda state: None
         m.log = self.log
@@ -379,7 +379,7 @@ with open("/tmp/wd-peers/pve7", "w") as fh:
     json.dump(doc("pve7", seq=2, events=[ev(2, "recovered", {"bounces": 0})]), fh)
 with open("/tmp/wd-peers/pve8", "w") as fh:
     fh.write("1999999 down\n")
-parsed = mod.read_peer_docs()
+parsed, _ = mod.read_peer_docs()
 results.append(check("19 v1 parsed", parsed["pve7"]["seq"], 2))
 results.append(check("19 v0 parsed", (parsed["pve8"]["v"], parsed["pve8"]["lan"]), (0, "down")))
 os.system("rm -rf /tmp/wd-peers")
@@ -643,7 +643,7 @@ mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
 for name, stamp in (("pve1", NOW), ("pve3", str(NOW)), ("pve4", "2026-08-02T05:00:00Z")):
     with open("/tmp/wd-peers/" + name, "w") as fh:
         json.dump(dict(doc(name, seq=1), ts=stamp), fh)
-loaded = mod.read_peer_docs()
+loaded, _unreadable = mod.read_peer_docs()
 try:
     peers, crash = mod.healthy_peers(loaded), None
 except Exception as err:
@@ -741,7 +741,7 @@ with open("/tmp/wd-peers/pve1", "w") as fh:
     json.dump(doc("pve1"), fh)
 with open("/tmp/wd-peers/pve3", "w") as fh:
     json.dump(good, fh)
-loaded = mod.read_peer_docs()
+loaded, _unreadable = mod.read_peer_docs()
 out, _ = mod.report(loaded, {"pve1": True, "pve3": True}, {}, now=NOW)
 results.append(
     check(
@@ -754,7 +754,7 @@ bad = dict(good)
 bad["events"] = [dict(ev(11, "lan_down", {"fails": 6}), ts={"nested": True})]
 with open("/tmp/wd-peers/pve3", "w") as fh:
     json.dump(bad, fh)
-loaded = mod.read_peer_docs()
+loaded, _unreadable = mod.read_peer_docs()
 results.append(check("32 unreadable ring scalar drops the doc", sorted(loaded), ["pve1"]))
 out, _ = mod.report(loaded, {"pve1": True, "pve3": True}, {}, now=NOW)
 results.append(
@@ -797,7 +797,7 @@ with open("/tmp/wd-peers/pve1", "w") as fh:
     json.dump(doc("pve1"), fh)
 with open("/tmp/wd-peers/pve3", "w") as fh:
     json.dump(dict(doc("pve3", seq=1), events={"not": "a list"}), fh)
-loaded = mod.read_peer_docs()
+loaded, _unreadable = mod.read_peer_docs()
 results.append(check("34 non-list events drops the doc", sorted(loaded), ["pve1"]))
 out, _ = mod.report(loaded, {"pve1": True, "pve3": True}, {}, now=NOW)
 results.append(
@@ -811,7 +811,7 @@ with open("/tmp/wd-peers/pve3", "w") as fh:
     json.dump(
         dict(doc("pve3", seq=1, events=[None, "junk", ev(1, "recovered", {"bounces": 0})])), fh
     )
-loaded = mod.read_peer_docs()
+loaded, _unreadable = mod.read_peer_docs()
 results.append(
     check("34 junk entries inside a real list are kept", sorted(loaded), ["pve1", "pve3"])
 )
@@ -824,6 +824,58 @@ results.append(
     )
 )
 os.system("rm -rf /tmp/wd-peers")
+
+# 35. A dropped document is announced as what it IS: a version mismatch, not a
+#     dead watchdog. The old text sent the operator hunting for a stalled
+#     pmxcfs that did not exist while a real drain went unannounced.
+os.system("rm -rf /tmp/wd-peers && mkdir -p /tmp/wd-peers")
+mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
+with open("/tmp/wd-peers/pve1", "w") as fh:
+    json.dump(doc("pve1"), fh)
+with open("/tmp/wd-peers/pve3", "w") as fh:
+    json.dump(dict(doc("pve3", seq=2), events={"2": "a map, from some future node"}), fh)
+docs_u, unreadable = mod.read_peer_docs()
+results.append(check("35 unreadable set carries the node", sorted(unreadable), ["pve3"]))
+out, cur = mod.report(docs_u, {"pve1": True, "pve3": True}, {}, now=NOW, unreadable=unreadable)
+results.append(
+    check(
+        "35 announced as unreadable, not silent",
+        [(t, n) for _, t, n, _ in out],
+        [("watchdog unreadable", "pve3")],
+    )
+)
+results.append(
+    check("35 text does not claim never published", "never published" in out[0][3], False)
+)
+out2, _ = mod.report(docs_u, {"pve1": True, "pve3": True}, cur, now=NOW + 60, unreadable=unreadable)
+results.append(check("35 announced once, latched", out2, []))
+os.system("rm -rf /tmp/wd-peers")
+
+# 36. `name` is the one peer-supplied value used as a dict key. An unhashable
+#     name must land in _raw like every other uncomposable event, not in the
+#     per-node except where it silences the events around it.
+mod = load({"NODE": "pve2"})
+weird = doc(
+    "pve3",
+    seq=3,
+    events=[
+        ev(1, "lan_down", {"fails": 6, "targets": ["192.168.1.1"]}),
+        dict(ev(2, "x"), name=["not", "hashable"]),
+        ev(3, "drained", {"bounces": 2, "stable_seconds": 600}),
+    ],
+)
+out, _ = mod.report({"pve1": doc("pve1"), "pve3": weird}, {"pve1": True, "pve3": True}, {}, now=NOW)
+titles = [t for _, t, n, _ in out if n == "pve3"]
+results.append(
+    check(
+        "36 unhashable name reported raw, neighbours intact",
+        titles,
+        ["LAN down", "['not', 'hashable']", "drained"],
+    )
+)
+results.append(
+    check("36 raw title is a plain string", all(isinstance(t, str) for t in titles), True)
+)
 
 passed = sum(results)
 print("\n%d/%d passed" % (passed, len(results)))
