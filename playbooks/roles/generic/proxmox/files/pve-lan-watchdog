@@ -257,6 +257,28 @@ def recent_trips(state):
     return len(state["trips"])
 
 
+def rearm():
+    """Clear the flap counter only. Deleting the whole state file would also
+    discard owns_maintenance, and nothing else records that we drained the
+    node, so a drained node would sit in maintenance forever. Restarts the
+    service so the running loop reloads rather than saving its stale copy back.
+    """
+    state = load_state()
+    cleared = len(state.get("trips", []))
+    state["trips"] = []
+    save_state(state)
+    rc, out = run(["systemctl", "restart", "pve-lan-watchdog"])
+    if rc != 0:
+        log("err", "state cleared but restart failed: %s" % out)
+        return 1
+    log(
+        "info",
+        "re-armed %s: cleared %d trip(s), phase=%s owns_maintenance=%s"
+        % (NODE, cleared, state.get("phase"), state.get("owns_maintenance")),
+    )
+    return 0
+
+
 # --- main loop -------------------------------------------------------------
 
 
@@ -389,15 +411,18 @@ def main():
                     log(
                         "err",
                         "refusing to drain %s: %d trips already in the last %ds. "
-                        "Fix the NIC, then delete %s."
-                        % (NODE, trips, FLAP_WINDOW_SECONDS, STATE_FILE),
+                        "Fix the NIC, then run `pve-lan-watchdog --rearm`; the "
+                        "guard also clears itself once the trips age out."
+                        % (NODE, trips, FLAP_WINDOW_SECONDS),
                     )
                     notify(
                         "warning",
                         "refusing to drain, flapping",
                         "%s has already tripped %d time(s) in the last %ds, so it will "
-                        "not drain again. Fix the NIC, then delete %s to re-arm."
-                        % (NODE, trips, FLAP_WINDOW_SECONDS, STATE_FILE),
+                        "not drain again. Fix the NIC, then run "
+                        "`pve-lan-watchdog --rearm` on it. The guard also clears "
+                        "itself once those trips age past the window."
+                        % (NODE, trips, FLAP_WINDOW_SECONDS),
                     )
                     last_nag = now
             elif MODE != "drain":
@@ -448,6 +473,8 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--rearm" in sys.argv[1:]:
+        sys.exit(rearm())
     try:
         sys.exit(main())
     except Stopped:
