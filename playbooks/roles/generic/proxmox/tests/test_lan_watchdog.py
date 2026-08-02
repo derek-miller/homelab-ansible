@@ -1,9 +1,28 @@
 #!/usr/bin/env python3
-"""Drive pve-lan-watchdog's state machine through scenarios with a fake clock."""
+"""Tests for pve-lan-watchdog, structured like the program itself: the local
+half is driven as a state machine with a fake clock, and the reporter half is
+tested as the pure function it is — (docs, members, cursor) in, notifications
+out. No clock or filesystem stubbing is needed for the reporter tests, which
+is the point of the design."""
 
-import importlib.util, importlib.machinery, os, sys
+import importlib.machinery
+import importlib.util
+import json
+import os
+import sys
 
 SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files", "pve-lan-watchdog")
+
+results = []
+
+
+def check(name, got, want):
+    ok = got == want
+    print("%s %s" % ("PASS" if ok else "FAIL", name))
+    if not ok:
+        print("      got:  %r" % (got,))
+        print("      want: %r" % (want,))
+    return ok
 
 
 class FakeClock:
@@ -35,8 +54,10 @@ def load(env):
         "FLAP_MAX_TRIPS": "2",
         "FLAP_WINDOW_SECONDS": "21600",
         "NAG_SECONDS": "300",
+        "PEER_FRESH_SECONDS": "180",
         "STATE_DIR": "/tmp/wd-state",
         "PEER_DIR": "/tmp/wd-peers",
+        "MEMBERS_FILE": "/tmp/wd-members",
     }
     base.update(env)
     os.environ.clear()
@@ -47,9 +68,16 @@ def load(env):
     return mod
 
 
+# ===========================================================================
+# Local half: the escalation state machine, driven with a fake clock. The
+# published document is captured, not written to /etc/pve; notifications do
+# not exist in this half, so none are stubbed.
+# ===========================================================================
+
+
 class Harness:
     def __init__(self, env=None, link_script=None, peers=1, bounce_fixes=False, initial_state=None):
-        os.system("rm -rf /tmp/wd-state /tmp/wd-peers")
+        os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members")
         self.mod = load(env or {})
         self.clock = FakeClock()
         self.mod.time = self.clock
@@ -58,30 +86,46 @@ class Harness:
         self.bounce_fixes = bounce_fixes
         self.link_up = True
         self.events = []
+        self.docs = []  # every published document, in order
         self.maint = None
         self.iters = 0
-        if initial_state:
-            self.mod.save_state(initial_state)
 
         m = self.mod
+        if initial_state:
+            m.save_state(initial_state)
         m.probe = self.probe
         m.bounce = self.bounce
         m.set_maintenance = self.set_maintenance
-        m.publish = lambda healthy: True
-        m.healthy_peers = lambda: self.peers
+        m.publish = self.publish
+        m.read_peer_docs = lambda: {}
+        m.healthy_peers = lambda docs=None: self.peers
+        m.reporter_tick = lambda state: None
         m.log = self.log
 
     def log(self, level, msg):
         self.events.append((level, msg))
+
+    def publish(self, state, lan_healthy, event=None):
+        # Mirror the real seq/event bookkeeping without touching /etc/pve.
+        if event is not None:
+            state["seq"] = state.get("seq", 0) + 1
+            state.setdefault("events", []).append(
+                {
+                    "seq": state["seq"],
+                    "ts": int(self.clock.t),
+                    "name": event[0],
+                    "detail": event[1],
+                }
+            )
+            state["events"] = state["events"][-self.mod.DOC_EVENTS_KEPT :]
+        self.docs.append({"lan": "healthy" if lan_healthy else "down", "event": event and event[0]})
+        return True
 
     def probe(self):
         # Each scripted event fires once, so a bounce that repairs the link is
         # not immediately undone by replaying the same "link died" entry.
         while self.link_script and self.clock.t - 1_000_000.0 >= self.link_script[0][0]:
             self.link_up = self.link_script.pop(0)[1]
-        self.iters += 1
-        if self.iters > 4000:
-            raise SystemExit("loop guard")
         return self.link_up
 
     def bounce(self):
@@ -91,154 +135,299 @@ class Harness:
         return True
 
     def set_maintenance(self, enabled):
-        self.events.append(("act", "maintenance %s" % ("enable" if enabled else "disable")))
         self.maint = enabled
+        self.events.append(("act", "maintenance %s" % ("enable" if enabled else "disable")))
         return True
 
-    def run(self, seconds):
-        limit = 1_000_000.0 + seconds
+    def run(self, seconds, max_iters=100_000):
+        deadline = self.clock.t + seconds
+
+        class Halt(Exception):
+            pass
+
         real_sleep = self.clock.sleep
 
-        def guarded(n):
+        def sleep(n):
             real_sleep(n)
-            if self.clock.t > limit:
-                raise SystemExit("done")
+            self.iters += 1
+            if self.clock.t >= deadline or self.iters >= max_iters:
+                raise Halt()
 
-        self.clock.sleep = guarded
+        self.mod.time = type(
+            "T", (), {"time": staticmethod(self.clock.time), "sleep": staticmethod(sleep)}
+        )
         try:
             self.mod.main()
-        except SystemExit:
+        except Halt:
             pass
         return self
 
     def acts(self):
-        return [m for lvl, m in self.events if lvl == "act"]
+        return [m for level, m in self.events if level == "act"]
+
+    def emitted(self):
+        return [d["event"] for d in self.docs if d["event"]]
 
     def phase(self):
         return self.mod.load_state()["phase"]
 
 
-def check(name, got, want):
-    ok = got == want
-    print("%s %s" % ("PASS" if ok else "FAIL", name))
-    if not ok:
-        print("     got:  %r\n     want: %r" % (got, want))
-    return ok
+# 1. Healthy LAN: no actions, no events, keepalive publishes only.
+h = Harness(link_script=[(0, True)]).run(300)
+results.append(check("1 healthy is inert", h.acts(), []))
+results.append(check("1 no events emitted", h.emitted(), []))
 
-
-results = []
-
-# 1. Healthy link: nothing ever happens.
-h = Harness().run(3600)
-results.append(check("1 healthy link is inert", h.acts(), []))
-results.append(check("1 stays healthy", h.phase(), "healthy"))
-
-# 2. Link dies, first bounce fixes it. No drain.
-h = Harness(link_script=[(60, False)], bounce_fixes=True).run(1200)
+# 2. Link dies, first bounce fixes it: lan_down then recovered, no drain.
+h = Harness(link_script=[(10, False)], bounce_fixes=True).run(600)
 results.append(check("2 bounce fixes it", h.acts(), ["bounce"]))
-results.append(check("2 no maintenance", h.maint, None))
-results.append(check("2 back to healthy", h.phase(), "healthy"))
+results.append(check("2 events tell the story", h.emitted(), ["lan_down", "recovered"]))
+results.append(check("2 ends healthy", h.phase(), "healthy"))
 
-# 3. Link dies for good, peers healthy, MODE=drain -> drains after 2 bounces.
-h = Harness(link_script=[(60, False)]).run(1200)
+# 3. Bounces fail, peers healthy: drains, and the events say so in order.
+h = Harness(link_script=[(10, False)]).run(1200)
 results.append(
-    check("3 two bounces then drain", h.acts(), ["bounce", "bounce", "maintenance enable"])
+    check("3 drains after failed bounces", h.acts(), ["bounce", "bounce", "maintenance enable"])
 )
-results.append(check("3 phase drained", h.phase(), "drained"))
+results.append(check("3 events tell the story", h.emitted(), ["lan_down", "drained"]))
+results.append(check("3 ends drained", h.phase(), "drained"))
 
-# 4. Same failure but no healthy peers -> LAN-wide, must NOT drain.
-h = Harness(link_script=[(60, False)], peers=0).run(3600)
-results.append(check("4 no drain when peers also down", h.acts(), ["bounce", "bounce"]))
-results.append(check("4 phase stays degraded", h.phase(), "degraded"))
+# 4. LAN-wide (no healthy peers): refuses to drain, emits the refusal.
+h = Harness(link_script=[(10, False)], peers=0).run(1200)
+results.append(check("4 no drain without peers", h.acts(), ["bounce", "bounce"]))
+results.append(check("4 refusal emitted", "refused_lan_wide" in h.emitted(), True))
+results.append(check("4 still degraded", h.phase(), "degraded"))
 
-# 5. MODE=monitor never drains.
-h = Harness(env={"MODE": "monitor"}, link_script=[(60, False)]).run(3600)
-results.append(check("5 monitor mode never drains", h.acts(), ["bounce", "bounce"]))
+# 5. Monitor mode: would_drain emitted, nothing done.
+h = Harness(env={"MODE": "monitor"}, link_script=[(10, False)]).run(1200)
+results.append(check("5 monitor never drains", h.acts(), ["bounce", "bounce"]))
+results.append(check("5 would_drain emitted", "would_drain" in h.emitted(), True))
 
-# 6. Flap guard: two trips already on record -> third is refused.
-past = [1_000_000 - 100, 1_000_000 - 200]
+# 6. Flap guard: two prior trips refuse the third, and say so.
 h = Harness(
-    link_script=[(60, False)],
-    initial_state={"phase": "healthy", "owns_maintenance": False, "trips": past},
-).run(3600)
-results.append(check("6 flap guard blocks third trip", h.acts(), ["bounce", "bounce"]))
-results.append(check("6 no maintenance call", h.maint, None))
+    link_script=[(10, False)],
+    initial_state={
+        "phase": "healthy",
+        "owns_maintenance": False,
+        "trips": [999_000, 999_500],
+        "seq": 0,
+    },
+).run(1200)
+results.append(check("6 flap guard holds", h.acts(), ["bounce", "bounce"]))
+results.append(check("6 refusal emitted", "refused_flapping" in h.emitted(), True))
 
-# 7. Drained node recovers: maintenance cleared only after the stable window.
-h = Harness(link_script=[(60, False), (900, True)]).run(1400)
-results.append(check("7 drains then waits", h.acts(), ["bounce", "bounce", "maintenance enable"]))
-h = Harness(link_script=[(60, False), (900, True)]).run(2200)
+# 7. Drain, then recovery after the stable window, with the full event story.
+h = Harness(link_script=[(10, False), (700, True)]).run(2400)
 results.append(
     check(
-        "7 clears after stable window",
+        "7 full cycle acts",
         h.acts(),
         ["bounce", "bounce", "maintenance enable", "maintenance disable"],
     )
 )
-results.append(check("7 phase healthy again", h.phase(), "healthy"))
+results.append(
+    check("7 events tell the story", h.emitted(), ["lan_down", "drained", "back_in_service"])
+)
+results.append(check("7 ends healthy", h.phase(), "healthy"))
 
-# 8. Inquorate: publish fails -> stand by, never drain.
-h = Harness(link_script=[(60, False)])
-h.mod.publish = lambda healthy: False
-h.run(3600)
+# 8. Inquorate (publish fails): stands by, never drains.
+h = Harness(link_script=[(10, False)])
+h.mod.publish = lambda state, healthy, event=None: False
+h.run(1200)
 results.append(check("8 inquorate does not drain", h.acts(), ["bounce", "bounce"]))
 
-# 9. Restart while drained: state survives and is not re-tripped.
+# 9. Restart while drained: state survives, clears only after the window.
 h = Harness(
     link_script=[(0, True)],
-    initial_state={"phase": "drained", "owns_maintenance": True, "trips": []},
-)
-h.run(200)
+    initial_state={"phase": "drained", "owns_maintenance": True, "trips": [], "seq": 5},
+).run(200)
 results.append(check("9 resumes drained, holds", h.acts(), []))
 h = Harness(
     link_script=[(0, True)],
-    initial_state={"phase": "drained", "owns_maintenance": True, "trips": []},
-)
-h.run(900)
+    initial_state={"phase": "drained", "owns_maintenance": True, "trips": [], "seq": 5},
+).run(900)
 results.append(check("9 clears after stable window", h.acts(), ["maintenance disable"]))
 
-# 10. --rearm clears the flap counter, keeps the drain bookkeeping, and the next
-#     real fault is allowed to drain again. The last assertion is the point: it
-#     proves re-arming restores the behaviour test 6 blocks.
-past = [1_000_000 - 100, 1_000_000 - 200]
-h = Harness(initial_state={"phase": "drained", "owns_maintenance": True, "trips": past})
-calls = []
-h.mod.run = lambda argv, timeout=30: (calls.append(argv), (0, ""))[1]
-rc = h.mod.rearm()
-after = h.mod.load_state()
-results.append(check("10 rearm exits clean", rc, 0))
-results.append(
-    check("10 restarts the service", calls, [["systemctl", "restart", "pve-lan-watchdog"]])
+# ===========================================================================
+# Reporter half: pure-function tests, no clock or filesystem stubbing.
+# ===========================================================================
+
+mod = load({"NODE": "pve1"})
+NOW = 2_000_000
+
+
+def doc(node, lan="healthy", ts=NOW, seq=0, events=(), v=1):
+    return {
+        "v": v,
+        "node": node,
+        "ts": ts,
+        "seq": seq,
+        "lan": lan,
+        "phase": "healthy",
+        "mode": "drain",
+        "events": list(events),
+    }
+
+
+def ev(seq, name, detail=None):
+    return {"seq": seq, "ts": NOW - 5, "name": name, "detail": detail or {}}
+
+
+# 10. Election: lowest-sorted fresh healthy node; down and stale excluded.
+docs = {"pve1": doc("pve1"), "pve2": doc("pve2"), "pve3": doc("pve3", lan="down")}
+results.append(check("10 lowest healthy wins", mod.elect_reporter(docs, now=NOW), "pve1"))
+docs["pve1"]["lan"] = "down"
+results.append(check("10 down node disqualified", mod.elect_reporter(docs, now=NOW), "pve2"))
+docs["pve2"]["ts"] = NOW - 10_000
+results.append(check("10 stale node disqualified", mod.elect_reporter(docs, now=NOW), None))
+
+# 11. A new event is announced once, with rich wording, then never again.
+members = {"pve1": True, "pve2": True, "pve3": True}
+docs = {
+    "pve1": doc("pve1"),
+    "pve2": doc("pve2"),
+    "pve3": doc(
+        "pve3",
+        lan="down",
+        seq=1,
+        events=[ev(1, "lan_down", {"fails": 6, "targets": ["192.168.1.1"]})],
+    ),
+}
+out, cursor = mod.report(docs, members, {}, now=NOW)
+results.append(check("11 one notification", len(out), 1))
+sev, title, node, text = out[0]
+results.append(check("11 severity", sev, "warning"))
+results.append(check("11 node attributed", node, "pve3"))
+results.append(check("11 rich text", "failed 6 consecutive probes of 192.168.1.1" in text, True))
+out2, _ = mod.report(docs, members, cursor, now=NOW)
+results.append(check("11 not announced twice", out2, []))
+
+# 12. A burst of events between reads is announced completely, in order. This
+#     is why the document carries a ring rather than only the latest event.
+docs["pve3"] = doc(
+    "pve3",
+    seq=3,
+    events=[
+        ev(1, "lan_down", {"fails": 6, "targets": ["192.168.1.1"]}),
+        ev(2, "recovered", {"bounces": 1}),
+        ev(3, "lan_down", {"fails": 6, "targets": ["192.168.1.1"]}),
+    ],
 )
-results.append(check("10 trips cleared", after["trips"], []))
+out, cursor = mod.report(docs, members, {}, now=NOW)
 results.append(
     check(
-        "10 drain bookkeeping kept",
-        (after["phase"], after["owns_maintenance"]),
-        ("drained", True),
+        "12 whole burst announced",
+        [t for _, t, _, _ in out],
+        ["LAN down", "LAN recovered", "LAN down"],
     )
 )
+results.append(check("12 recovery is notice severity", out[1][0], "notice"))
 
-h = Harness(
-    link_script=[(60, False)],
-    initial_state={"phase": "healthy", "owns_maintenance": False, "trips": []},
-).run(3600)
+# 13. Events that aged out of the ring are called out as a gap, not skipped.
+docs["pve3"] = doc("pve3", seq=40, events=[ev(40, "recovered", {"bounces": 1})])
+out, cursor = mod.report(docs, members, {"pve3": {"seq": 3, "stale_ts": -1}}, now=NOW)
+results.append(check("13 gap reported", [t for _, t, _, _ in out][0], "events missed"))
+results.append(check("13 then the surviving event", [t for _, t, _, _ in out][1], "LAN recovered"))
+results.append(check("13 gap counted", "36 event(s)" in out[0][3], True))
+
+# 14. Online node with a stale document: watchdog-silent alert, once per stall.
+docs = {"pve1": doc("pve1"), "pve2": doc("pve2", ts=NOW - 10_000), "pve3": doc("pve3")}
+out, cursor = mod.report(docs, members, {}, now=NOW)
+results.append(check("14 silent watchdog flagged", [t for _, t, _, _ in out], ["watchdog silent"]))
+out2, cursor = mod.report(docs, members, cursor, now=NOW + 60)
+results.append(check("14 flagged once, not every tick", out2, []))
+docs["pve2"]["ts"] = NOW + 100  # publishes again...
+out3, cursor = mod.report(docs, members, cursor, now=NOW + 120)
+results.append(check("14 recovery clears the latch", out3, []))
+docs["pve1"]["ts"] = NOW + 20_000  # keep the others fresh so only pve2 is stale
+docs["pve3"]["ts"] = NOW + 20_000
+out4, cursor = mod.report(docs, members, cursor, now=NOW + 20_000)  # ...then stalls again
+results.append(
+    check("14 a second stall re-alerts", [t for _, t, _, _ in out4], ["watchdog silent"])
+)
+results.append(check("14 and it is pve2", out4[0][2], "pve2"))
+
+# 15. A node with NO document at all is caught via the membership list, which
+#     a directory listing could never do.
+docs = {"pve1": doc("pve1")}
+out, cursor = mod.report(docs, {"pve1": True, "pve9": True}, {}, now=NOW)
+results.append(check("15 never-published flagged", [t for _, t, _, _ in out], ["watchdog silent"]))
+results.append(check("15 says never", "never published" in out[0][3], True))
+
+# 16. An offline node is HA's problem, and PVE sends its own fencing
+#     notification: quiet here.
+docs = {"pve1": doc("pve1")}
+out, cursor = mod.report(docs, {"pve1": True, "pve4": False}, {}, now=NOW)
+results.append(check("16 offline node is quiet", out, []))
+
+# 17. v0 documents (pre-upgrade nodes) participate in election and health but
+#     carry no events; they must neither crash nor spam the reporter.
+v0 = {"v": 0, "node": "pve5", "ts": NOW, "seq": 0, "lan": "healthy"}
+docs = {"pve1": doc("pve1"), "pve5": v0}
+out, cursor = mod.report(docs, {"pve1": True, "pve5": True}, {}, now=NOW)
+results.append(check("17 v0 doc is quiet", out, []))
+results.append(check("17 v0 eligible for election", mod.elect_reporter(docs, now=NOW), "pve1"))
+
+# 18. Unknown event from a newer node is reported raw, not dropped.
+docs = {"pve1": doc("pve1"), "pve3": doc("pve3", seq=1, events=[ev(1, "something_new", {"x": 1})])}
+out, cursor = mod.report(docs, {"pve1": True, "pve3": True}, {}, now=NOW)
+results.append(check("18 unknown event surfaces", len(out), 1))
+results.append(check("18 raw detail included", "something_new" in out[0][3], True))
+
+# 19. read_peer_docs parses v1 JSON and falls back to the v0 line format.
+os.makedirs("/tmp/wd-peers", exist_ok=True)
+with open("/tmp/wd-peers/pve7", "w") as fh:
+    json.dump(doc("pve7", seq=2, events=[ev(2, "recovered", {"bounces": 0})]), fh)
+with open("/tmp/wd-peers/pve8", "w") as fh:
+    fh.write("1999999 down\n")
+parsed = mod.read_peer_docs()
+results.append(check("19 v1 parsed", parsed["pve7"]["seq"], 2))
+results.append(check("19 v0 parsed", (parsed["pve8"]["v"], parsed["pve8"]["lan"]), (0, "down")))
+os.system("rm -rf /tmp/wd-peers")
+
+# ===========================================================================
+# rearm: the one operator entry point.
+# ===========================================================================
+
+# 20. Clears the flap counter, keeps drain bookkeeping, restarts the service,
+#     and the next real fault is allowed to drain again.
+os.system("rm -rf /tmp/wd-state")
+mod = load({"NODE": "pve1"})
+mod.save_state({"phase": "drained", "owns_maintenance": True, "trips": [1, 2], "seq": 9})
+calls = []
+mod.run = lambda argv, timeout=30: (calls.append(argv), (0, ""))[1]
+rc = mod.rearm()
+after = mod.load_state()
+results.append(check("20 rearm exits clean", rc, 0))
+results.append(
+    check("20 restarts the service", calls, [["systemctl", "restart", "pve-lan-watchdog"]])
+)
+results.append(check("20 trips cleared", after["trips"], []))
 results.append(
     check(
-        "10 re-armed guard allows the next drain",
+        "20 drain bookkeeping kept", (after["phase"], after["owns_maintenance"]), ("drained", True)
+    )
+)
+h = Harness(link_script=[(10, False)]).run(1200)
+results.append(
+    check(
+        "20 re-armed guard allows the next drain",
         h.acts(),
         ["bounce", "bounce", "maintenance enable"],
     )
 )
 
-# 11. A failed state write must not report success, and must not restart: the
-#     daemon would come back still flap-guarded while the operator saw exit 0.
-h = Harness(initial_state={"phase": "degraded", "owns_maintenance": False, "trips": past})
+# 21. A failed state write fails loudly and does not restart: the daemon would
+#     come back still flap-guarded while the operator saw exit 0.
+os.system("rm -rf /tmp/wd-state")
+mod = load({"NODE": "pve1"})
+mod.save_state({"phase": "degraded", "owns_maintenance": False, "trips": [1, 2], "seq": 0})
 calls = []
-h.mod.run = lambda argv, timeout=30: (calls.append(argv), (0, ""))[1]
-h.mod.save_state = lambda state: False
-results.append(check("11 rearm fails loudly", h.mod.rearm(), 1))
-results.append(check("11 no restart on failed write", calls, []))
+mod.run = lambda argv, timeout=30: (calls.append(argv), (0, ""))[1]
+mod.save_state = lambda state: False
+results.append(check("21 rearm fails loudly", mod.rearm(), 1))
+results.append(check("21 no restart on failed write", calls, []))
+os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members")
 
-print("\n%d/%d passed" % (sum(results), len(results)))
+passed = sum(results)
+print("\n%d/%d passed" % (passed, len(results)))
 sys.exit(0 if all(results) else 1)
