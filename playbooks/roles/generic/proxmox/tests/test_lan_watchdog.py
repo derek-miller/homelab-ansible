@@ -604,6 +604,124 @@ results.append(
     )
 )
 
+# 28. A node whose /var/lib was lost restarts its counter at zero. max() can
+#     only push a cursor forward, so every event of its new life sorts below
+#     the high-water mark of its old one and is dropped — silently, forever,
+#     with a fresh healthy document that `watchdog silent` will never flag.
+mod = load({"NODE": "pve2"})
+members = {"pve1": True, "pve2": True, "pve3": True}
+rebuilt = {
+    "pve1": doc("pve1", seq=100),
+    "pve2": doc("pve2", seq=100),
+    "pve3": doc(
+        "pve3",
+        lan="down",
+        seq=2,
+        events=[
+            ev(1, "lan_down", {"fails": 6, "targets": ["192.168.1.1"]}),
+            ev(2, "drained", {"bounces": 2, "stable_seconds": 600}),
+        ],
+    ),
+}
+warm = {n: {"seq": 100, "stale_ts": -1} for n in members}
+out, warm = mod.report(rebuilt, members, warm, now=NOW)
+results.append(
+    check(
+        "28 a restarted counter is reported and resynced",
+        [t for _, t, n, _ in out if n == "pve3"],
+        ["watchdog state lost", "LAN down", "drained"],
+    )
+)
+out, _ = mod.report(rebuilt, members, warm, now=NOW)
+results.append(check("28 resync happens once", out, []))
+
+# 29. A peer document whose scalars a newer node changed the type of must not
+#     reach the arithmetic. healthy_peers() gates the drain and is called from
+#     the local half, outside every guard report() carries.
+os.system("rm -rf /tmp/wd-peers && mkdir -p /tmp/wd-peers")
+mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
+for name, stamp in (("pve1", NOW), ("pve3", str(NOW)), ("pve4", "2026-08-02T05:00:00Z")):
+    with open("/tmp/wd-peers/" + name, "w") as fh:
+        json.dump(dict(doc(name, seq=1), ts=stamp), fh)
+loaded = mod.read_peer_docs()
+try:
+    peers, crash = mod.healthy_peers(loaded), None
+except Exception as err:
+    peers, crash = None, type(err).__name__
+results.append(check("29 the drain gate survives a bad peer doc", crash, None))
+try:
+    elected, crash = mod.elect_reporter(loaded, now=NOW), None
+except Exception as err:
+    elected, crash = None, type(err).__name__
+results.append(check("29 the election survives a bad peer doc", crash, None))
+results.append(
+    check("29 a numeric string is coerced, not dropped", sorted(loaded), ["pve1", "pve3"])
+)
+out, _ = mod.report(loaded, {"pve1": True, "pve3": True, "pve4": True}, {}, now=NOW)
+results.append(
+    check(
+        "29 a dropped doc surfaces as watchdog silent",
+        [(t, n) for _, t, n, _ in out],
+        [("watchdog silent", "pve4")],
+    )
+)
+os.system("rm -rf /tmp/wd-peers")
+
+# 30. A partial gap: seq 21-24 aged out of the ring for good, while 25-30 are
+#     merely old. Suppressing on "any of the range survives" hides the real
+#     loss behind the old news sitting next to it.
+mod = load({"NODE": "pve2"})
+partial = [dict(ev(s, "lan_down", {"fails": 6}), ts=NOW - 400) for s in range(25, 31)]
+partial += [dict(ev(s, "recovered", {"bounces": 1}), ts=NOW - 10) for s in range(31, 41)]
+out, _ = mod.report(
+    {"pve1": doc("pve1", seq=1), "pve3": doc("pve3", seq=40, events=partial)},
+    {"pve1": True, "pve3": True},
+    {"pve3": {"seq": 20, "stale_ts": -1}},
+    now=NOW,
+)
+results.append(check("30 a partial gap is still reported", out[0][1], "events missed"))
+
+# 30b. The other direction, unchanged: a stale cursor clamping over history
+#      the ring still holds in full must stay quiet.
+whole = [dict(ev(s, "lan_down", {"fails": 6}), ts=NOW - 400) for s in range(21, 41)]
+out, _ = mod.report(
+    {"pve1": doc("pve1", seq=1), "pve3": doc("pve3", seq=40, events=whole)},
+    {"pve1": True, "pve3": True},
+    {"pve3": {"seq": 20, "stale_ts": -1}},
+    now=NOW,
+)
+results.append(check("30b retained history stays quiet", out, []))
+
+# 31. Failover from a reporter that died without publishing 'down': it holds
+#     its eligibility for the full freshness window, so the successor's first
+#     tick lands just past it. With one constant for both windows the opening
+#     event of the incident is clamped away by tick latency alone.
+mod = load({"NODE": "pve2"})
+dead_at = NOW - 185  # pve1 killed 185s ago, having just published
+failover = {
+    "pve1": doc("pve1", ts=dead_at, seq=5),
+    "pve2": doc("pve2", seq=3),
+    "pve3": doc(
+        "pve3",
+        lan="down",
+        ts=NOW - 40,
+        seq=12,
+        events=[
+            dict(ev(11, "lan_down", {"fails": 6, "targets": ["192.168.1.1"]}), ts=dead_at + 1),
+            dict(ev(12, "drained", {"bounces": 2, "stable_seconds": 600}), ts=NOW - 40),
+        ],
+    ),
+}
+results.append(check("31 pve2 has taken over", mod.elect_reporter(failover, now=NOW), "pve2"))
+out, _ = mod.report(failover, {"pve1": True, "pve2": True, "pve3": True}, {}, now=NOW)
+results.append(
+    check(
+        "31 the opening event survives the handover",
+        [t for _, t, n, _ in out if n == "pve3"],
+        ["LAN down", "drained"],
+    )
+)
+
 passed = sum(results)
 print("\n%d/%d passed" % (passed, len(results)))
 sys.exit(0 if all(results) else 1)

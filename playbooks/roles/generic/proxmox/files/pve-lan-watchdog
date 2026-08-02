@@ -95,6 +95,9 @@ NOTIFY_TEMPLATE = _env("NOTIFY_TEMPLATE", "lan-watchdog")
 PEER_DIR = _env("PEER_DIR", "/etc/pve/lan-watchdog")
 MEMBERS_FILE = _env("MEMBERS_FILE", "/etc/pve/.members")
 PEER_FRESH_SECONDS = _int("PEER_FRESH_SECONDS", 180)
+# How far back a reporter with no usable cursor treats events as already
+# announced. Strictly wider than PEER_FRESH_SECONDS: see report().
+FLOOR_SECONDS = _int("FLOOR_SECONDS", PEER_FRESH_SECONDS * 2)
 PEER_KEEPALIVE_SECONDS = _int("PEER_KEEPALIVE_SECONDS", 60)
 DRAIN_MIN_HEALTHY_PEERS = _int("DRAIN_MIN_HEALTHY_PEERS", 1)
 DRAIN_STABLE_SECONDS = _int("DRAIN_STABLE_SECONDS", 600)
@@ -300,6 +303,19 @@ def read_peer_docs():
         try:
             doc = json.loads(raw)
             if isinstance(doc, dict) and "ts" in doc:
+                # This is the trust boundary: everything downstream — the
+                # election, the drain gate, the reporter — does arithmetic on
+                # these three. Coerce them here, once, rather than guarding
+                # five call sites, and drop a document whose scalars a newer
+                # node changed the type of. A dropped document is not silence:
+                # the node has no doc, so `watchdog silent` announces it
+                # through the channel someone actually reads.
+                try:
+                    for key, default in (("ts", None), ("seq", 0), ("v", 0)):
+                        doc[key] = int(doc[key]) if key in doc else default
+                except (TypeError, ValueError):
+                    log("err", "ignoring unreadable document from %s" % name)
+                    continue
                 docs[name] = doc
                 continue
         except ValueError:
@@ -506,21 +522,51 @@ def report(docs, members, announced, now=None):
             # announced: everything older than the freshness window. Applied
             # unconditionally, not only to a cold cursor — a cursor frozen at an
             # earlier reign is exactly as far behind as none at all, and without
-            # the floor the next election replays every event since. A handover
-            # gap is always shorter than the window (the old reporter's document
-            # goes stale first), so nothing genuinely new is clamped away.
+            # the floor the next election replays every event since.
+            #
+            # The window is deliberately wider than the eligibility window, not
+            # equal to it. A dead reporter keeps its document — and so its
+            # eligibility — for PEER_FRESH_SECONDS after its last publish, so
+            # the successor's first tick lands just *past* that mark: with one
+            # constant for both, the opening event of the incident is aged out
+            # by the few seconds of tick latency, which is the event that says
+            # why. Doubling costs nothing; the case it clamps is hours old.
             ring = (doc or {}).get("events", []) or []
             if not isinstance(ring, list):
                 ring = []
             fresh = [
                 e.get("seq", 0)
                 for e in ring
-                if isinstance(e, dict) and now - e.get("ts", 0) <= PEER_FRESH_SECONDS
+                if isinstance(e, dict) and now - e.get("ts", 0) <= FLOOR_SECONDS
             ]
             floor = (min(fresh) - 1) if fresh else (doc or {}).get("seq", 0)
             if node not in announced:
                 announced[node] = {"seq": floor, "stale_ts": -1}
             cursor = announced[node]
+
+            # max() below can only push a cursor forward, so it cannot help a
+            # cursor that is too far *ahead*: a node whose /var/lib was lost
+            # (reimage, or the `rm state.json` this script's --rearm exists to
+            # replace) restarts its counter at zero, and every event it will
+            # ever publish sorts below the high-water mark from its last life.
+            # Silent and permanent — its document stays fresh and healthy, so
+            # `watchdog silent` never fires either. A seq that went backwards
+            # is proof of the state loss, and the same loss discards
+            # owns_maintenance, so say so rather than only resyncing.
+            if doc and doc.get("seq", 0) < cursor["seq"]:
+                out.append(
+                    (
+                        "warning",
+                        "watchdog state lost",
+                        node,
+                        "%s restarted its event counter at %d, below the %d already "
+                        "reported: its local state was lost. Reporting resumes from "
+                        "the restarted counter. If it was in HA maintenance it no "
+                        "longer records owning it — check `ha-manager status`."
+                        % (node, doc.get("seq", 0), cursor["seq"]),
+                    )
+                )
+                cursor["seq"] = floor
 
             # A node corosync sees online whose document is missing or stale has
             # a dead or wedged watchdog — or a long pmxcfs stall, or it is
@@ -569,12 +615,15 @@ def report(docs, members, announced, now=None):
             )
             if events and cursor["seq"] and events[0].get("seq", 0) > cursor["seq"] + 1:
                 missed = events[0].get("seq", 0) - cursor["seq"] - 1
-                aged = [
-                    e
-                    for e in ring
-                    if isinstance(e, dict) and cursor["seq"] < e.get("seq", 0) <= start
-                ]
-                if not aged:  # the skipped range is truly gone, not merely old news
+                # Suppress only when the WHOLE skipped range is still retained
+                # — i.e. it is old news a previous reign delivered. Testing
+                # whether *any* of it survives hides a partial gap: a ring that
+                # overflowed and then went quiet keeps its oldest retained
+                # events past the window, and those alone silenced the report
+                # of the ones that really aged out. The ring is contiguous, so
+                # the whole range is retained exactly when cursor+1 is in it.
+                retained = {e.get("seq") for e in ring if isinstance(e, dict)}
+                if cursor["seq"] + 1 not in retained:
                     out.append(
                         (
                             "warning",
