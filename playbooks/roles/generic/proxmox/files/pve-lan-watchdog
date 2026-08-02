@@ -355,7 +355,11 @@ def elect_reporter(docs, now=None):
     eligible = [
         name
         for name, doc in docs.items()
-        if doc.get("lan") == "healthy" and now - doc.get("ts", 0) <= PEER_FRESH_SECONDS
+        # A working LAN is one required capability; carrying the reporter
+        # code (v1+) is the other. A v0 node that won would silence everyone.
+        if doc.get("v", 0) >= 1
+        and doc.get("lan") == "healthy"
+        and now - doc.get("ts", 0) <= PEER_FRESH_SECONDS
     ]
     return min(eligible) if eligible else None
 
@@ -473,8 +477,21 @@ def report(docs, members, announced, now=None):
     now = int(now if now is not None else time.time())
     out = []
     for node, online in sorted(members.items()):
-        cursor = announced.setdefault(node, {"seq": 0, "stale_ts": -1})
         doc = docs.get(node)
+        if node not in announced:
+            # First sight of this node: a fresh state file, or a reporter that
+            # has just been elected. Its ring holds events a previous reporter
+            # has almost certainly already sent, so start from the freshness
+            # window rather than from zero — anything older than a peer can go
+            # stale is history, not news, and a handover gap is always shorter
+            # than the window.
+            ring = (doc or {}).get("events", []) or []
+            fresh = [e.get("seq", 0) for e in ring if now - e.get("ts", 0) <= PEER_FRESH_SECONDS]
+            announced[node] = {
+                "seq": (min(fresh) - 1) if fresh else (doc or {}).get("seq", 0),
+                "stale_ts": -1,
+            }
+        cursor = announced[node]
 
         # A node corosync sees online whose document is missing or stale has
         # a dead or wedged watchdog — or a long pmxcfs stall, or it is
@@ -563,11 +580,13 @@ def reporter_tick(state):
         return
     due, announced = report(docs, members, state.get("announced", {}))
     state["announced"] = announced
-    if due:
-        save_state(state)
     for severity, title, node, text in due:
         log("info", "reporting for %s: %s" % (node, title))
         notify(severity, title, node, text)
+    # Persisted after the sends: a crash mid-loop re-announces on restart
+    # rather than losing what was never delivered. Duplicate beats silent.
+    if due:
+        save_state(state)
 
 
 # --- rearm -----------------------------------------------------------------
@@ -773,7 +792,10 @@ def main():
                 if pending_event is not None:
                     save_state(state)  # seq and last_event advanced
 
-        reporter_tick(state)
+        try:
+            reporter_tick(state)
+        except Exception as err:  # never let the reporting half stop the acting half
+            log("err", "reporter tick failed: %s: %s" % (type(err).__name__, err))
 
         time.sleep(PROBE_INTERVAL)
 

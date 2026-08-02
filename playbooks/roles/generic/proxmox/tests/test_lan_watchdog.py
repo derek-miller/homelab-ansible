@@ -428,6 +428,95 @@ results.append(check("21 rearm fails loudly", mod.rearm(), 1))
 results.append(check("21 no restart on failed write", calls, []))
 os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members")
 
+# 22. A newly elected reporter has an empty cursor. It must not re-announce a
+#     peer's whole ring: those events were delivered by the reporter it is
+#     replacing, and the wording carries no hint that they are history.
+mod = load({"NODE": "pve2"})
+members = {"pve1": True, "pve2": True, "pve3": True}
+old = NOW - 40_000  # yesterday's already-reported incident, still in the ring
+docs = {
+    "pve1": doc(
+        "pve1",
+        lan="down",
+        seq=1,
+        events=[ev(1, "lan_down", {"fails": 6, "targets": ["192.168.1.1"]})],
+    ),
+    "pve2": doc("pve2"),
+    "pve3": doc(
+        "pve3",
+        seq=3,
+        events=[
+            dict(ev(1, "lan_down", {"fails": 6, "targets": ["192.0.2.1"]}), ts=old),
+            dict(ev(2, "would_drain", {"healthy_peers": 4}), ts=old + 9),
+            dict(ev(3, "recovered", {"bounces": 0}), ts=old + 61),
+        ],
+    ),
+}
+out, _ = mod.report(docs, members, {}, now=NOW)
+results.append(
+    check(
+        "22 cold cursor announces only what is new",
+        [(n, t) for _, t, n, _ in out],
+        [("pve1", "LAN down")],
+    )
+)
+
+# 23. A node still on the v0 format cannot report, so it must not win the
+#     election and silence the fleet.
+v0 = {"v": 0, "node": "pve1", "ts": NOW, "seq": 0, "lan": "healthy"}
+results.append(
+    check(
+        "23 v0 node cannot be elected",
+        mod.elect_reporter({"pve1": v0, "pve2": doc("pve2")}, now=NOW),
+        "pve2",
+    )
+)
+results.append(
+    check("23 all-v0 cluster elects nobody", mod.elect_reporter({"pve1": v0}, now=NOW), None)
+)
+
+# 24. One malformed peer document must not stop the acting half. /etc/pve is
+#     replicated, so a doc that kills report() kills it on every node at once.
+os.makedirs("/tmp/wd-peers", exist_ok=True)
+json.dump(
+    {"v": 1, "node": "pve1", "ts": NOW, "seq": 0, "lan": "healthy", "events": []},
+    open("/tmp/wd-peers/pve1", "w"),
+)
+json.dump(
+    {
+        "v": 2,
+        "node": "pve3",
+        "ts": NOW,
+        "seq": 1,
+        "lan": "down",
+        "events": [ev(1, "lan_down", {"fails": "6/6", "targets": ["192.168.1.1"]})],
+    },
+    open("/tmp/wd-peers/pve3", "w"),
+)
+json.dump(
+    {"nodelist": {"pve1": {"online": 1}, "pve3": {"online": 1}}}, open("/tmp/wd-members", "w")
+)
+m = load({"NODE": "pve1", "NOTIFY_ENABLED": "no"})
+m.time = type(
+    "T",
+    (),
+    {
+        "time": staticmethod(lambda: float(NOW)),
+        "sleep": staticmethod(lambda n: (_ for _ in ()).throw(SystemExit(0))),
+    },
+)
+m.probe = lambda: True
+m.publish = lambda state, healthy, event=None: True
+raised = None
+try:
+    m.main()
+except SystemExit:
+    pass
+except Exception as err:
+    raised = "%s: %s" % (type(err).__name__, err)
+results.append(check("24 a bad peer doc does not stop the acting half", raised, None))
+os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members")
+
 passed = sum(results)
 print("\n%d/%d passed" % (passed, len(results)))
 sys.exit(0 if all(results) else 1)
