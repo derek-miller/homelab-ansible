@@ -22,3 +22,4 @@ jobs:
           source .venv/bin/activate
           pip install "$pin"
           make lint
+          make test

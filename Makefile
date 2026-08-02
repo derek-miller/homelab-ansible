@@ -88,6 +88,13 @@ fmt:
 lint:
 	yamllint --strict .
 
+# Role test suites are plain-stdlib scripts, so they run in the same minimal
+# venv CI's lint job builds. Three review rounds of watchdog findings were all
+# expressible in this suite; it is a gate, not a courtesy.
+.PHONY: test
+test:
+	python3 playbooks/roles/generic/proxmox/tests/test_lan_watchdog.py
+
 .PHONY: check
 check: lint
 	$(ansible_playbook_cmd) --syntax-check
