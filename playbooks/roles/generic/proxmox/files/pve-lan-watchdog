@@ -146,6 +146,12 @@ def bounce():
 # so it lands wherever the cluster's matchers already route. warning is matched
 # by the critical matcher, notice by the non-critical one. Never fatal: losing a
 # notification must not stop the watchdog reacting to the thing it is reporting.
+#
+# The transport does NOT survive the failure this reports. The target resolves
+# off-site and egresses over vmbr0, so a node whose LAN is dead cannot deliver.
+# Only `LAN recovered` and `back in service` are guaranteed to arrive; the other
+# five fire while the LAN is down. Peer health deliberately uses /etc/pve for
+# this reason, and notifications have no equivalent property.
 def notify(severity, event, detail):
     if not NOTIFY_ENABLED:
         return
@@ -247,8 +253,10 @@ def save_state(state):
         with open(tmp, "w") as handle:
             json.dump(state, handle)
         os.replace(tmp, STATE_FILE)
+        return True
     except OSError as err:
         log("err", "could not persist state: %s" % err)
+        return False
 
 
 def recent_trips(state):
@@ -266,7 +274,9 @@ def rearm():
     state = load_state()
     cleared = len(state.get("trips", []))
     state["trips"] = []
-    save_state(state)
+    if not save_state(state):
+        log("err", "could not clear the flap counter; the guard is still armed")
+        return 1
     rc, out = run(["systemctl", "restart", "pve-lan-watchdog"])
     if rc != 0:
         log("err", "state cleared but restart failed: %s" % out)
@@ -350,14 +360,16 @@ def main():
                 "warning",
                 "LAN down: %d consecutive failed probes of %s" % (fails, ",".join(PROBE_TARGETS)),
             )
+            state["phase"] = DEGRADED
+            save_state(state)
+            # After the state write, not before: proxmox-notify enforces its own
+            # 10s global timeout, and on a dead LAN it will spend all of it.
             notify(
                 "warning",
                 "LAN down",
                 "%s failed %d consecutive probes of %s. Escalating."
                 % (NODE, fails, ", ".join(PROBE_TARGETS)),
             )
-            state["phase"] = DEGRADED
-            save_state(state)
 
         elif phase == DEGRADED and healthy and goods >= RECOVER_THRESHOLD:
             log("warning", "LAN recovered after %d bounce(s), no drain needed" % bounces)
@@ -473,8 +485,15 @@ def main():
 
 
 if __name__ == "__main__":
-    if "--rearm" in sys.argv[1:]:
+    # Only systemd starts the loop. Anything else on the command line is a typo,
+    # and falling through would run a second watchdog beside the unit, sharing
+    # the state file and free to bounce the NIC on a node set to drain.
+    args = sys.argv[1:]
+    if args == ["--rearm"]:
         sys.exit(rearm())
+    if args:
+        print("usage: pve-lan-watchdog [--rearm]", file=sys.stderr)
+        sys.exit(2)
     try:
         sys.exit(main())
     except Stopped:

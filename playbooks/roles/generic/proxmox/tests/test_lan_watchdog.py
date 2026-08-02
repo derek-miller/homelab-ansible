@@ -197,5 +197,48 @@ h = Harness(
 h.run(900)
 results.append(check("9 clears after stable window", h.acts(), ["maintenance disable"]))
 
+# 10. --rearm clears the flap counter, keeps the drain bookkeeping, and the next
+#     real fault is allowed to drain again. The last assertion is the point: it
+#     proves re-arming restores the behaviour test 6 blocks.
+past = [1_000_000 - 100, 1_000_000 - 200]
+h = Harness(initial_state={"phase": "drained", "owns_maintenance": True, "trips": past})
+calls = []
+h.mod.run = lambda argv, timeout=30: (calls.append(argv), (0, ""))[1]
+rc = h.mod.rearm()
+after = h.mod.load_state()
+results.append(check("10 rearm exits clean", rc, 0))
+results.append(
+    check("10 restarts the service", calls, [["systemctl", "restart", "pve-lan-watchdog"]])
+)
+results.append(check("10 trips cleared", after["trips"], []))
+results.append(
+    check(
+        "10 drain bookkeeping kept",
+        (after["phase"], after["owns_maintenance"]),
+        ("drained", True),
+    )
+)
+
+h = Harness(
+    link_script=[(60, False)],
+    initial_state={"phase": "healthy", "owns_maintenance": False, "trips": []},
+).run(3600)
+results.append(
+    check(
+        "10 re-armed guard allows the next drain",
+        h.acts(),
+        ["bounce", "bounce", "maintenance enable"],
+    )
+)
+
+# 11. A failed state write must not report success, and must not restart: the
+#     daemon would come back still flap-guarded while the operator saw exit 0.
+h = Harness(initial_state={"phase": "degraded", "owns_maintenance": False, "trips": past})
+calls = []
+h.mod.run = lambda argv, timeout=30: (calls.append(argv), (0, ""))[1]
+h.mod.save_state = lambda state: False
+results.append(check("11 rearm fails loudly", h.mod.rearm(), 1))
+results.append(check("11 no restart on failed write", calls, []))
+
 print("\n%d/%d passed" % (sum(results), len(results)))
 sys.exit(0 if all(results) else 1)
