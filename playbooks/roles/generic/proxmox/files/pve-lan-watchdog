@@ -62,6 +62,9 @@ BOUNCE_ENABLED = _bool("BOUNCE_ENABLED", True)
 BOUNCE_ATTEMPTS = _int("BOUNCE_ATTEMPTS", 2)
 BOUNCE_SETTLE = _int("BOUNCE_SETTLE", 15)
 
+NOTIFY_ENABLED = _bool("NOTIFY_ENABLED", True)
+NOTIFY_TEMPLATE = _env("NOTIFY_TEMPLATE", "lan-watchdog")
+
 PEER_DIR = _env("PEER_DIR", "/etc/pve/lan-watchdog")
 PEER_FRESH_SECONDS = _int("PEER_FRESH_SECONDS", 180)
 PEER_KEEPALIVE_SECONDS = _int("PEER_KEEPALIVE_SECONDS", 60)
@@ -137,6 +140,38 @@ def bounce():
             log("err", "ip link set %s %s failed: %s" % (LAN_INTERFACE, action, out))
             return False
     return True
+
+
+# Goes through PVE's own notification system rather than a webhook of its own,
+# so it lands wherever the cluster's matchers already route. warning is matched
+# by the critical matcher, notice by the non-critical one. Never fatal: losing a
+# notification must not stop the watchdog reacting to the thing it is reporting.
+def notify(severity, event, detail):
+    if not NOTIFY_ENABLED:
+        return
+    payload = json.dumps(
+        {
+            "data": {"node": NODE, "mode": MODE, "event": event, "detail": detail},
+            "fields": {"type": "lan-watchdog", "hostname": NODE},
+        }
+    )
+    rc, out = run(
+        [
+            "perl",
+            "-MPVE::Notify",
+            "-MJSON::PP",
+            "-e",
+            "my ($sev, $tmpl, $json) = @ARGV;"
+            " my $p = JSON::PP::decode_json($json);"
+            " PVE::Notify::notify($sev, $tmpl, $p->{data}, $p->{fields});",
+            severity,
+            NOTIFY_TEMPLATE,
+            payload,
+        ],
+        timeout=20,
+    )
+    if rc != 0:
+        log("err", "notification failed for %s: %s" % (event, out))
 
 
 def set_maintenance(enabled):
@@ -293,11 +328,22 @@ def main():
                 "warning",
                 "LAN down: %d consecutive failed probes of %s" % (fails, ",".join(PROBE_TARGETS)),
             )
+            notify(
+                "warning",
+                "LAN down",
+                "%s failed %d consecutive probes of %s. Escalating."
+                % (NODE, fails, ", ".join(PROBE_TARGETS)),
+            )
             state["phase"] = DEGRADED
             save_state(state)
 
         elif phase == DEGRADED and healthy and goods >= RECOVER_THRESHOLD:
             log("warning", "LAN recovered after %d bounce(s), no drain needed" % bounces)
+            notify(
+                "notice",
+                "LAN recovered",
+                "%s recovered after %d bounce(s). No drain was needed." % (NODE, bounces),
+            )
             state["phase"] = HEALTHY
             save_state(state)
             bounces = 0
@@ -329,6 +375,14 @@ def main():
                         "Looks LAN-wide rather than local to %s."
                         % (peers, DRAIN_MIN_HEALTHY_PEERS, NODE),
                     )
+                    notify(
+                        "warning",
+                        "not draining, LAN-wide fault suspected",
+                        "%s has no LAN, but only %d peer(s) report a healthy LAN "
+                        "(need %d). This looks like a switch or uplink fault rather "
+                        "than one NIC, so draining would move guests nowhere useful. "
+                        "Staying put." % (NODE, peers, DRAIN_MIN_HEALTHY_PEERS),
+                    )
                     last_nag = now
             elif trips >= FLAP_MAX_TRIPS:
                 if nagging:
@@ -336,6 +390,13 @@ def main():
                         "err",
                         "refusing to drain %s: %d trips already in the last %ds. "
                         "Fix the NIC, then delete %s."
+                        % (NODE, trips, FLAP_WINDOW_SECONDS, STATE_FILE),
+                    )
+                    notify(
+                        "warning",
+                        "refusing to drain, flapping",
+                        "%s has already tripped %d time(s) in the last %ds, so it will "
+                        "not drain again. Fix the NIC, then delete %s to re-arm."
                         % (NODE, trips, FLAP_WINDOW_SECONDS, STATE_FILE),
                     )
                     last_nag = now
@@ -346,8 +407,21 @@ def main():
                         "would drain %s now (%d healthy peer(s)) but MODE is %s"
                         % (NODE, peers, MODE),
                     )
+                    notify(
+                        "warning",
+                        "would drain (monitor mode)",
+                        "%s has no LAN and %d healthy peer(s), so it would drain now, "
+                        "but MODE is %s. No action taken." % (NODE, peers, MODE),
+                    )
                     last_nag = now
             elif set_maintenance(True):
+                notify(
+                    "warning",
+                    "drained",
+                    "%s has no LAN after %d bounce attempt(s). Put into HA maintenance; "
+                    "its HA guests are migrating away. It returns automatically after "
+                    "%ds of clean LAN." % (NODE, bounces, DRAIN_STABLE_SECONDS),
+                )
                 state["phase"] = DRAINED
                 state["owns_maintenance"] = True
                 state["trips"].append(int(now))
@@ -359,6 +433,12 @@ def main():
             stable = now - (healthy_since or now)
             if stable >= DRAIN_STABLE_SECONDS and set_maintenance(False):
                 log("warning", "LAN clean for %ds, %s back in service" % (stable, NODE))
+                notify(
+                    "notice",
+                    "back in service",
+                    "%s had a clean LAN for %ds and has left HA maintenance. Guests "
+                    "migrate back automatically." % (NODE, stable),
+                )
                 state["phase"] = HEALTHY
                 state["owns_maintenance"] = False
                 save_state(state)
