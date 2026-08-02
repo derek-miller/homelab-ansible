@@ -739,8 +739,11 @@ def reporter_tick(state):
     # Persisted after the sends: a crash mid-loop re-announces on restart
     # rather than losing what was never delivered — duplicate beats silent,
     # except for a notification that reports its own failure. notify() logs
-    # rc != 0 and returns without rolling the cursor back, so a broken
-    # delivery path is not retried; only a process crash gets the replay.
+    # rc != 0 and returns without rolling the cursor back, so a failed send
+    # is lost permanently, not merely delayed: the cursor has already moved
+    # past it, and nothing later replays it. Delivery is best-effort on
+    # purpose; a per-node rollback on failed sends would close this gap if
+    # it's ever worth the added complexity.
     #
     # A cursor that moved without producing a notification has to persist
     # too. The re-arm under a resolved stall is exactly that: it is what
