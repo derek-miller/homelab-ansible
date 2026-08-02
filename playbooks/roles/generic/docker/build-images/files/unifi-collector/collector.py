@@ -6,12 +6,17 @@ dashboards can select them directly instead of computing deltas in SQL.
 
 Measurements and their tags:
   unifi_gw      site        gateway cpu/mem, client counts, WAN throughput
-  unifi_wan     wan         per-uplink latency and availability
+  unifi_wan     wan         the controller's 24h rolling latency/availability
+                            aggregate, sampled on the EVENTS_INTERVAL cadence
+                            since it is not an instantaneous reading; an
+                            actual uplink transition lands in unifi_events
   unifi_device  device,type switch/AP cpu, mem, uptime, satisfaction
   unifi_port    switch,port,name  rates, link speed, PoE draw, error totals
   unifi_radio   ap,band     channel, utilization, tx power, client count
   unifi_client  client,mac,type   signal, negotiated rates, satisfaction
-  unifi_events  key[,client]      event counts per poll window
+  unifi_events  key[,client]      event counts per poll window, plus a
+                            _heartbeat row every poll so a quiet window
+                            reads differently from a missed one
 
 Every measurement carries at least one tag: InfluxDB 3 drops rows from
 tagless tables when the write-ahead log is persisted to parquet.
@@ -144,22 +149,35 @@ def collect_health(lines):
                 "unifi_gw",
                 {"site": UNIFI_SITE},
                 {
-                    "cpu": float(stats.get("cpu", 0)),
-                    "mem": float(stats.get("mem", 0)),
+                    "cpu": float(stats.get("cpu") or 0),
+                    "mem": float(stats.get("mem") or 0),
                     "clients": int(subsystem.get("num_sta") or 0),
                     "wan_tx_bps": int(subsystem.get("tx_bytes-r") or 0) * 8,
                     "wan_rx_bps": int(subsystem.get("rx_bytes-r") or 0) * 8,
                 },
             )
         )
+
+
+def collect_wan_health(lines):
+    """Emit the controller's 24-hour rolling WAN aggregate.
+
+    uptime_stats carries its own time_period (86400 seconds): a single event
+    moves it and it stays moved for the following day, so it is sampled on
+    the EVENTS_INTERVAL cadence rather than every poll, and the fields are
+    named for what they are rather than implying an instantaneous reading.
+    """
+    for subsystem in api_get("stat/health"):
+        if subsystem.get("subsystem") != "wan":
+            continue
         for wan_name, monitor in (subsystem.get("uptime_stats") or {}).items():
             lines.append(
                 line(
                     "unifi_wan",
                     {"wan": wan_name},
                     {
-                        "latency": int(monitor.get("latency_average") or 0),
-                        "availability": float(monitor.get("availability") or 0),
+                        "latency_avg_24h": int(monitor.get("latency_average") or 0),
+                        "availability_24h": float(monitor.get("availability") or 0),
                     },
                 )
             )
@@ -189,6 +207,12 @@ def collect_devices(lines, previous, now):
             index = port.get("port_idx")
             if not port.get("up") or index is None:
                 continue
+            # A few port_table entries (Shelter UPS among them) carry only the
+            # instantaneous bytes-r fields with no lifetime byte counters at
+            # all, which would otherwise read as a port permanently idle
+            # rather than one that simply isn't measured.
+            if "rx_bytes" not in port or "tx_bytes" not in port:
+                continue
             key = (device.get("mac"), index)
             counters = {name_: int(port.get(name_) or 0) for name_ in PORT_RATES}
             fields = {
@@ -196,10 +220,15 @@ def collect_devices(lines, previous, now):
                 "poe_w": float(port.get("poe_power") or 0),
                 # Lifetime totals: the rates above show what is happening now,
                 # these show what a cable has done since the switch booted.
+                # Kept for both directions of both error and drop counters.
                 "rx_errors_total": counters["rx_errors"],
+                "tx_errors_total": counters["tx_errors"],
+                "rx_dropped_total": counters["rx_dropped"],
                 "tx_dropped_total": counters["tx_dropped"],
             }
-            # Each port carries the time its counters were read so a rate spans
+            # Each port carries the loop's start time as an approximation of
+            # when its counters were read (jitter is at most however long
+            # collect_health took earlier in the same cycle), so a rate spans
             # the gap that actually elapsed, even when a poll was skipped by a
             # failed request.
             sampled_at, earlier = previous.get(key, (None, None))
@@ -282,8 +311,14 @@ def collect_events(lines, window_seconds):
             "pageSize": 500,
         },
     )
+    events = events or []
+    if len(events) >= 500:
+        log(
+            "collect events: hit the 500-row page size, some events in this window were not counted"
+        )
+
     counts = {}
-    for event in events or []:
+    for event in events:
         key = event.get("key", "unknown")
         # Roams are the one event worth attributing per client: a single device
         # ping-ponging between APs is the signature of a coverage problem.
@@ -291,6 +326,10 @@ def collect_events(lines, window_seconds):
         if key == "CLIENT_ROAMED_2":
             client = ((event.get("parameters") or {}).get("CLIENT") or {}).get("name", "unknown")
         counts[(key, client)] = counts.get((key, client), 0) + 1
+
+    # Written every successful poll, event or not, so a quiet window and a
+    # missed poll are distinguishable on a graph instead of both being a gap.
+    lines.append(line("unifi_events", {"key": "_heartbeat"}, {"count": len(events)}))
     for (key, client), count in counts.items():
         tags = {"key": key}
         if client:
@@ -360,6 +399,7 @@ def main():
     backfill()
     previous_ports = {}
     last_events = 0.0
+    last_wan_health = 0.0
     while True:
         started = time.time()
         lines = []
@@ -374,6 +414,13 @@ def main():
                 collector(*args)
             except Exception as error:
                 log(f"collect {name} failed: {error}")
+
+        if started - last_wan_health >= EVENTS_INTERVAL:
+            try:
+                collect_wan_health(lines)
+                last_wan_health = started
+            except Exception as error:
+                log(f"collect wan health failed: {error}")
 
         if started - last_events >= EVENTS_INTERVAL:
             window = int(started - last_events) if last_events else EVENTS_INTERVAL
