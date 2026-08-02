@@ -93,10 +93,12 @@ lint:
 # expressible in this suite; it is a gate, not a courtesy.
 .PHONY: test
 test:
-	python3 playbooks/roles/generic/proxmox/tests/test_lan_watchdog.py
+	@set -e; for t in $$(find playbooks/roles -path '*/tests/test_*.py' | sort); do \
+		echo "== $$t"; python3 "$$t"; \
+	done
 
 .PHONY: check
-check: lint
+check: lint test
 	$(ansible_playbook_cmd) --syntax-check
 
 .PHONY: bootstrap

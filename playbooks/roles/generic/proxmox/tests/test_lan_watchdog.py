@@ -722,6 +722,72 @@ results.append(
     )
 )
 
+# 32. The ring's own scalars cross the same trust boundary as the top-level
+#     ones. Unguarded, one string ts inside an event put that node's whole
+#     processing into the per-node except — permanently silenced, cursor
+#     frozen, document fresh and healthy so `watchdog silent` never fires.
+os.system("rm -rf /tmp/wd-peers && mkdir -p /tmp/wd-peers")
+mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
+good = doc(
+    "pve3",
+    lan="down",
+    seq=12,
+    events=[
+        dict(ev(11, "lan_down", {"fails": 6, "targets": ["192.168.1.1"]}), ts=str(NOW - 20)),
+        ev(12, "drained", {"bounces": 2, "stable_seconds": 600}),
+    ],
+)
+with open("/tmp/wd-peers/pve1", "w") as fh:
+    json.dump(doc("pve1"), fh)
+with open("/tmp/wd-peers/pve3", "w") as fh:
+    json.dump(good, fh)
+loaded = mod.read_peer_docs()
+out, _ = mod.report(loaded, {"pve1": True, "pve3": True}, {}, now=NOW)
+results.append(
+    check(
+        "32 a string ts inside the ring is coerced, not silencing",
+        [t for _, t, n, _ in out if n == "pve3"],
+        ["LAN down", "drained"],
+    )
+)
+bad = dict(good)
+bad["events"] = [dict(ev(11, "lan_down", {"fails": 6}), ts={"nested": True})]
+with open("/tmp/wd-peers/pve3", "w") as fh:
+    json.dump(bad, fh)
+loaded = mod.read_peer_docs()
+results.append(check("32 unreadable ring scalar drops the doc", sorted(loaded), ["pve1"]))
+out, _ = mod.report(loaded, {"pve1": True, "pve3": True}, {}, now=NOW)
+results.append(
+    check(
+        "32 and the drop is announced",
+        [(t, n) for _, t, n, _ in out],
+        [("watchdog silent", "pve3")],
+    )
+)
+os.system("rm -rf /tmp/wd-peers")
+
+# 33. `watchdog state lost` must not outrank the quiet gates: an offline node
+#     is fencing's story. The message waits until the node is back and it is
+#     actionable.
+mod = load({"NODE": "pve2"})
+reset = doc("pve3", seq=2, events=[ev(2, "recovered", {"bounces": 0})])
+warm = {"pve3": {"seq": 42, "stale_ts": -1}}
+out, warm = mod.report(
+    {"pve1": doc("pve1"), "pve3": reset}, {"pve1": True, "pve3": False}, warm, now=NOW
+)
+results.append(check("33 offline node stays quiet despite reset counter", out, []))
+results.append(check("33 cursor untouched while offline", warm["pve3"]["seq"], 42))
+out, warm = mod.report(
+    {"pve1": doc("pve1"), "pve3": reset}, {"pve1": True, "pve3": True}, warm, now=NOW
+)
+results.append(
+    check(
+        "33 reported once it returns",
+        [t for _, t, n, _ in out if n == "pve3"],
+        ["watchdog state lost", "LAN recovered"],
+    )
+)
+
 passed = sum(results)
 print("\n%d/%d passed" % (passed, len(results)))
 sys.exit(0 if all(results) else 1)

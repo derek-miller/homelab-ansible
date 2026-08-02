@@ -96,8 +96,10 @@ PEER_DIR = _env("PEER_DIR", "/etc/pve/lan-watchdog")
 MEMBERS_FILE = _env("MEMBERS_FILE", "/etc/pve/.members")
 PEER_FRESH_SECONDS = _int("PEER_FRESH_SECONDS", 180)
 # How far back a reporter with no usable cursor treats events as already
-# announced. Strictly wider than PEER_FRESH_SECONDS: see report().
-FLOOR_SECONDS = _int("FLOOR_SECONDS", PEER_FRESH_SECONDS * 2)
+# announced. Strictly wider than PEER_FRESH_SECONDS — see report() — and the
+# max() holds that invariant against an env override, since a floor at or
+# under the eligibility window silently clamps a handover's opening event.
+FLOOR_SECONDS = max(_int("FLOOR_SECONDS", PEER_FRESH_SECONDS * 2), PEER_FRESH_SECONDS * 2)
 PEER_KEEPALIVE_SECONDS = _int("PEER_KEEPALIVE_SECONDS", 60)
 DRAIN_MIN_HEALTHY_PEERS = _int("DRAIN_MIN_HEALTHY_PEERS", 1)
 DRAIN_STABLE_SECONDS = _int("DRAIN_STABLE_SECONDS", 600)
@@ -311,8 +313,16 @@ def read_peer_docs():
                 # the node has no doc, so `watchdog silent` announces it
                 # through the channel someone actually reads.
                 try:
-                    for key, default in (("ts", None), ("seq", 0), ("v", 0)):
-                        doc[key] = int(doc[key]) if key in doc else default
+                    doc["ts"] = int(doc["ts"])  # presence is the branch condition
+                    for key in ("seq", "v"):
+                        doc[key] = int(doc.get(key, 0))
+                    # The ring's scalars cross the same boundary, and report()
+                    # does the same arithmetic on them once per event.
+                    for event in doc.get("events") or []:
+                        if isinstance(event, dict):
+                            for key in ("ts", "seq"):
+                                if key in event:
+                                    event[key] = int(event[key])
                 except (TypeError, ValueError):
                     log("err", "ignoring unreadable document from %s" % name)
                     continue
@@ -544,30 +554,6 @@ def report(docs, members, announced, now=None):
                 announced[node] = {"seq": floor, "stale_ts": -1}
             cursor = announced[node]
 
-            # max() below can only push a cursor forward, so it cannot help a
-            # cursor that is too far *ahead*: a node whose /var/lib was lost
-            # (reimage, or the `rm state.json` this script's --rearm exists to
-            # replace) restarts its counter at zero, and every event it will
-            # ever publish sorts below the high-water mark from its last life.
-            # Silent and permanent — its document stays fresh and healthy, so
-            # `watchdog silent` never fires either. A seq that went backwards
-            # is proof of the state loss, and the same loss discards
-            # owns_maintenance, so say so rather than only resyncing.
-            if doc and doc.get("seq", 0) < cursor["seq"]:
-                out.append(
-                    (
-                        "warning",
-                        "watchdog state lost",
-                        node,
-                        "%s restarted its event counter at %d, below the %d already "
-                        "reported: its local state was lost. Reporting resumes from "
-                        "the restarted counter. If it was in HA maintenance it no "
-                        "longer records owning it — check `ha-manager status`."
-                        % (node, doc.get("seq", 0), cursor["seq"]),
-                    )
-                )
-                cursor["seq"] = floor
-
             # A node corosync sees online whose document is missing or stale has
             # a dead or wedged watchdog — or a long pmxcfs stall, or it is
             # inquorate (publish fails there by design). The message claims only
@@ -602,6 +588,33 @@ def report(docs, members, announced, now=None):
             # fencing notification; repeating it here would be noise.
             if not online or not doc:
                 continue
+
+            # max() below can only push a cursor forward, so it cannot help a
+            # cursor that is too far *ahead*: a node whose /var/lib was lost
+            # (reimage, or the `rm state.json` this script's --rearm exists to
+            # replace) restarts its counter at zero, and every event it will
+            # ever publish sorts below the high-water mark from its last life.
+            # Silent and permanent — its document stays fresh and healthy, so
+            # `watchdog silent` never fires either. A seq that went backwards
+            # is proof of the state loss, and the same loss discards
+            # owns_maintenance, so say so rather than only resyncing. Below the
+            # offline gate on purpose: a reimaged node that then left the
+            # cluster is fencing's story, and this message becomes actionable
+            # when it returns and republishes.
+            if doc.get("seq", 0) < cursor["seq"]:
+                out.append(
+                    (
+                        "warning",
+                        "watchdog state lost",
+                        node,
+                        "%s restarted its event counter at %d, below the %d already "
+                        "reported: its local state was lost. Reporting resumes from "
+                        "the restarted counter. If it was in HA maintenance it no "
+                        "longer records owning it — check `ha-manager status`."
+                        % (node, doc.get("seq", 0), cursor["seq"]),
+                    )
+                )
+                cursor["seq"] = floor
 
             # Everything newer than the cursor AND the floor, oldest first, so a
             # burst of transitions between reads is announced completely and in
