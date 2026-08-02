@@ -21,6 +21,12 @@ available_docker_images:
       - openclaw-webhook-proxy/server.mjs
     image_name: openclaw-webhook-proxy
     image_tag: "3.9.0"
+  unifi-collector:
+    dockerfile: unifi-collector/Dockerfile
+    build_files:
+      - unifi-collector/collector.py
+    image_name: unifi-collector
+    image_tag: "1.1.1"
   control4-driver-scraper:
     repo: git@github.com:derek-miller/control4-driver-scraper.git
     version: master

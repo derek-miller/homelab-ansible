@@ -46,6 +46,7 @@ raspi1
 
 [docker-build-images]
 rackvm1 docker_images_to_build=openclaw-webhook-proxy
+rackvm4 docker_images_to_build=unifi-collector
 rackvm5 docker_images_to_build=sourcebot,control4-driver-scraper,postgres-pgcron
 
 [control4-driver-scraper]
