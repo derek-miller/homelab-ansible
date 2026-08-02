@@ -165,7 +165,7 @@ def collect_health(lines):
             )
 
 
-def collect_devices(lines, previous, elapsed):
+def collect_devices(lines, previous, now):
     for device in api_get("stat/device"):
         if device.get("state") != 1:
             continue
@@ -199,14 +199,19 @@ def collect_devices(lines, previous, elapsed):
                 "rx_errors_total": counters["rx_errors"],
                 "tx_dropped_total": counters["tx_dropped"],
             }
-            if previous.get(key) and elapsed > 0:
+            # Each port carries the time its counters were read so a rate spans
+            # the gap that actually elapsed, even when a poll was skipped by a
+            # failed request.
+            sampled_at, earlier = previous.get(key, (None, None))
+            if earlier and now > sampled_at:
+                elapsed = now - sampled_at
                 for counter, field in PORT_RATES.items():
                     # Clamps a counter reset (switch reboot) to zero instead of
                     # emitting a negative spike.
-                    delta = max(0, counters[counter] - previous[key][counter])
+                    delta = max(0, counters[counter] - earlier[counter])
                     rate = delta / elapsed
                     fields[field] = rate * 8 if counter in BYTE_COUNTERS else rate
-            previous[key] = counters
+            previous[key] = (now, counters)
             lines.append(
                 line(
                     "unifi_port",
@@ -354,29 +359,31 @@ def main():
     log(f"collecting {UNIFI_URL} -> {INFLUX_URL}/{INFLUX_DB} every {POLL_INTERVAL}s")
     backfill()
     previous_ports = {}
-    last_sample = 0.0
     last_events = 0.0
     while True:
         started = time.time()
         lines = []
-        elapsed = started - last_sample if last_sample else 0
-        collectors = [
-            ("health", collect_health, (lines,)),
-            ("devices", collect_devices, (lines, previous_ports, elapsed)),
-            ("clients", collect_clients, (lines,)),
-        ]
-        if started - last_events >= EVENTS_INTERVAL:
-            window = int(started - last_events) if last_events else EVENTS_INTERVAL
-            collectors.append(("events", collect_events, (lines, window)))
-            last_events = started
         # One failing endpoint costs a single sample of one measurement; the
         # controller returns a sporadic 500 on stat/sta under load.
-        for name, collector, args in collectors:
+        for name, collector, args in (
+            ("health", collect_health, (lines,)),
+            ("devices", collect_devices, (lines, previous_ports, started)),
+            ("clients", collect_clients, (lines,)),
+        ):
             try:
                 collector(*args)
             except Exception as error:
                 log(f"collect {name} failed: {error}")
-        last_sample = started
+
+        if started - last_events >= EVENTS_INTERVAL:
+            window = int(started - last_events) if last_events else EVENTS_INTERVAL
+            try:
+                collect_events(lines, window)
+                # Advanced only on success so a failed poll retries its window
+                # instead of dropping the events inside it.
+                last_events = started
+            except Exception as error:
+                log(f"collect events failed: {error}")
 
         try:
             influx_write(lines)
