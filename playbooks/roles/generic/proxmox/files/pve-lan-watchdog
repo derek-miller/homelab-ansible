@@ -316,6 +316,11 @@ def read_peer_docs():
                     doc["ts"] = int(doc["ts"])  # presence is the branch condition
                     for key in ("seq", "v"):
                         doc[key] = int(doc.get(key, 0))
+                    # A wrong container type is as unreadable as a wrong scalar
+                    # type: kept-but-mute would be the silent-and-permanent
+                    # failure the drop-and-announce contract exists to prevent.
+                    if not isinstance(doc.get("events", []), list):
+                        raise TypeError("events is not a list")
                     # The ring's scalars cross the same boundary, and report()
                     # does the same arithmetic on them once per event.
                     for event in doc.get("events") or []:

@@ -93,9 +93,9 @@ lint:
 # expressible in this suite; it is a gate, not a courtesy.
 .PHONY: test
 test:
-	@set -e; for t in $$(find playbooks/roles -path '*/tests/test_*.py' | sort); do \
-		echo "== $$t"; python3 "$$t"; \
-	done
+	@set -e; found=0; for t in $$(find playbooks/roles -path '*/tests/test_*.py' | sort); do \
+		echo "== $$t"; python3 "$$t"; found=1; \
+	done; [ "$$found" = 1 ] || { echo "no test suites found"; exit 1; }
 
 .PHONY: check
 check: lint test

@@ -788,6 +788,43 @@ results.append(
     )
 )
 
+# 34. A wrong container type for `events` is as unreadable as a wrong scalar:
+#     kept-but-mute would be silent and permanent, so it drops the doc and the
+#     drop is announced. A ring merely containing junk entries is kept.
+os.system("rm -rf /tmp/wd-peers && mkdir -p /tmp/wd-peers")
+mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
+with open("/tmp/wd-peers/pve1", "w") as fh:
+    json.dump(doc("pve1"), fh)
+with open("/tmp/wd-peers/pve3", "w") as fh:
+    json.dump(dict(doc("pve3", seq=1), events={"not": "a list"}), fh)
+loaded = mod.read_peer_docs()
+results.append(check("34 non-list events drops the doc", sorted(loaded), ["pve1"]))
+out, _ = mod.report(loaded, {"pve1": True, "pve3": True}, {}, now=NOW)
+results.append(
+    check(
+        "34 and the drop is announced",
+        [(t, n) for _, t, n, _ in out],
+        [("watchdog silent", "pve3")],
+    )
+)
+with open("/tmp/wd-peers/pve3", "w") as fh:
+    json.dump(
+        dict(doc("pve3", seq=1, events=[None, "junk", ev(1, "recovered", {"bounces": 0})])), fh
+    )
+loaded = mod.read_peer_docs()
+results.append(
+    check("34 junk entries inside a real list are kept", sorted(loaded), ["pve1", "pve3"])
+)
+out, _ = mod.report(loaded, {"pve1": True, "pve3": True}, {}, now=NOW)
+results.append(
+    check(
+        "34 and the real event still reports",
+        [t for _, t, n, _ in out if n == "pve3"],
+        ["LAN recovered"],
+    )
+)
+os.system("rm -rf /tmp/wd-peers")
+
 passed = sum(results)
 print("\n%d/%d passed" % (passed, len(results)))
 sys.exit(0 if all(results) else 1)
