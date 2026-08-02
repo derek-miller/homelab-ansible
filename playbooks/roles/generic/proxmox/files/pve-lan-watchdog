@@ -391,7 +391,15 @@ _RENDERERS = {
         "drained",
         "%s had no LAN after %d bounce attempt(s) and entered HA maintenance; its HA "
         "guests are migrating away. It returns automatically after %ds of clean LAN."
-        % (n, d.get("bounces", 0), d.get("stable_seconds", DRAIN_STABLE_SECONDS)),
+        % (n, d.get("bounces", 0), d.get("stable_seconds", DRAIN_STABLE_SECONDS))
+        + (
+            ""
+            if d.get("persisted", True)
+            else " WARNING: it could not record that it owns this maintenance (local "
+            "state write failed). If its watchdog restarts before recovery, the node "
+            "stays in maintenance until someone runs `ha-manager crm-command "
+            "node-maintenance disable %s` by hand." % n
+        ),
     ),
     "back_in_service": lambda n, d: (
         "notice",
@@ -759,10 +767,20 @@ def main():
                 state["phase"] = DRAINED
                 state["owns_maintenance"] = True
                 state["trips"].append(int(now))
-                save_state(state)
+                # state.json is on /var/lib and the published document is on
+                # /etc/pve — different filesystems, so a failed local write
+                # can still be reported through the working channel. The
+                # in-memory state stays correct; the danger is a restart
+                # forgetting we own the maintenance, which the event warns
+                # a human about with the exact recovery command.
+                persisted = save_state(state)
                 pending_event = (
                     "drained",
-                    {"bounces": bounces, "stable_seconds": DRAIN_STABLE_SECONDS},
+                    {
+                        "bounces": bounces,
+                        "stable_seconds": DRAIN_STABLE_SECONDS,
+                        "persisted": persisted,
+                    },
                 )
 
         # Drained. Come back only after a long clean stretch: leaving

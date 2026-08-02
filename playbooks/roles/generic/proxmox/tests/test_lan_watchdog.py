@@ -517,6 +517,27 @@ except Exception as err:
 results.append(check("24 a bad peer doc does not stop the acting half", raised, None))
 os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members")
 
+# 25. A drain whose local state write fails still drains (the action was
+#     correct) but the event says so, and the rendered message tells a human
+#     exactly how to recover a stranded node. state.json is /var/lib, the
+#     document is /etc/pve: different filesystems, so the channel works.
+h = Harness(link_script=[(10, False)])
+h.mod.save_state = lambda state: False
+h.run(1200)
+results.append(check("25 still drains", h.acts(), ["bounce", "bounce", "maintenance enable"]))
+results.append(check("25 drained event emitted", "drained" in h.emitted(), True))
+
+mod = load({"NODE": "pve1"})
+sev, title, text = mod._RENDERERS["drained"](
+    "pve3", {"bounces": 2, "stable_seconds": 600, "persisted": False}
+)
+results.append(check("25 unpersisted drain warns", "node-maintenance disable pve3" in text, True))
+sev, title, text = mod._RENDERERS["drained"](
+    "pve3", {"bounces": 2, "stable_seconds": 600, "persisted": True}
+)
+results.append(check("25 persisted drain does not warn", "WARNING" in text, False))
+os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members")
+
 passed = sum(results)
 print("\n%d/%d passed" % (passed, len(results)))
 sys.exit(0 if all(results) else 1)
