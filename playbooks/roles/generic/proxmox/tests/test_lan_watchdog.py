@@ -10,6 +10,7 @@ import importlib.util
 import json
 import os
 import sys
+import time
 
 SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files", "pve-lan-watchdog")
 
@@ -961,6 +962,73 @@ results.append(
     )
 )
 os.system("rm -rf /tmp/wd-peers")
+
+# 40. The stall latch only works if the re-arm is durable. reporter_tick
+#     saves `if due`, and a re-arm is by design not due, so the one function
+#     the rest of this file's tests stub out is where it can be lost. The
+#     unit restarts on every deploy of this role, and both no-document
+#     incidents key on the same (0, kind), so a lost re-arm silences the
+#     next one for its whole duration.
+os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members && mkdir -p /tmp/wd-peers")
+with open("/tmp/wd-members", "w") as fh:
+    json.dump({"nodelist": {n: {"online": 1} for n in ("pve1", "pve2", "pve3")}}, fh)
+mod = load({"NODE": "pve1", "NOTIFY_ENABLED": "no"})
+sent = []
+mod.notify = lambda sev, title, node, text: sent.append((title, node))
+
+
+def live(node, seq=0):
+    with open("/tmp/wd-peers/" + node, "w") as fh:
+        json.dump(
+            {
+                "v": 2,
+                "node": node,
+                "ts": int(time.time()),
+                "seq": seq,
+                "lan": "healthy",
+                "phase": "healthy",
+                "mode": "drain",
+                "events": [],
+            },
+            fh,
+        )
+
+
+live("pve1")
+live("pve2")
+state = mod.load_state()
+mod.reporter_tick(state)
+results.append(
+    check("40 the never-published node is announced", sent, [("watchdog silent", "pve3")])
+)
+
+sent[:] = []
+live("pve3")  # recovery: the cursor re-arms, and nothing is due
+mod.reporter_tick(state)
+results.append(check("40 recovery is quiet", sent, []))
+results.append(check("40 the cursor re-armed", state["announced"]["pve3"]["stale_ts"], -1))
+results.append(
+    check(
+        "40 and the re-arm reached the state file",
+        json.load(open("/tmp/wd-state/state.json"))["announced"]["pve3"]["stale_ts"],
+        -1,
+    )
+)
+
+state = mod.load_state()  # the deploy handler restarts the unit
+results.append(
+    check("40 the restarted reporter is re-armed too", state["announced"]["pve3"]["stale_ts"], -1)
+)
+
+sent[:] = []
+os.remove("/tmp/wd-peers/pve3")  # a second, independent no-document incident
+live("pve1")
+live("pve2")
+mod.reporter_tick(state)
+results.append(
+    check("40 the second stall is announced, not latched out", sent, [("watchdog silent", "pve3")])
+)
+os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members")
 
 passed = sum(results)
 print("\n%d/%d passed" % (passed, len(results)))

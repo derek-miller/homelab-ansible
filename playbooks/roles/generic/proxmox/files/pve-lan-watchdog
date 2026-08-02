@@ -729,14 +729,28 @@ def reporter_tick(state):
     members = cluster_nodes()
     if not members:
         return
-    due, announced = report(docs, members, state.get("announced", {}), unreadable=unreadable)
+    cursors = state.get("announced", {})
+    before = json.dumps(cursors, sort_keys=True)
+    due, announced = report(docs, members, cursors, unreadable=unreadable)
     state["announced"] = announced
     for severity, title, node, text in due:
         log("info", "reporting for %s: %s" % (node, title))
         notify(severity, title, node, text)
     # Persisted after the sends: a crash mid-loop re-announces on restart
-    # rather than losing what was never delivered. Duplicate beats silent.
-    if due:
+    # rather than losing what was never delivered — duplicate beats silent,
+    # except for a notification that reports its own failure. notify() logs
+    # rc != 0 and returns without rolling the cursor back, so a broken
+    # delivery path is not retried; only a process crash gets the replay.
+    #
+    # A cursor that moved without producing a notification has to persist
+    # too. The re-arm under a resolved stall is exactly that: it is what
+    # lets the NEXT stall alert, and both no-document incidents latch on
+    # the same (0, kind), so dropping it re-latches the next one out for
+    # its whole duration. The unit restarts on every deploy of this role,
+    # so a restarted reporter is routine, not an outage. Compared rather
+    # than saved unconditionally: in steady state no cursor moves, so this
+    # writes nothing.
+    if due or json.dumps(announced, sort_keys=True) != before:
         save_state(state)
 
 
