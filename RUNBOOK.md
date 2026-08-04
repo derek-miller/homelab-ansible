@@ -32,7 +32,7 @@ Without `docker_migrate_labels=yes` the move is only reported and the label reco
 
 ## Applying updates and rebooting pve1-5
 
-Upgrading packages and rebooting are two independent opt-in flags on one play (`generic/proxmox-reboot`), not separate playbooks. A routine update sets both:
+Upgrading packages and rebooting are two opt-in flags on one play (`generic/proxmox-reboot`), not separate playbooks — but only one direction is independent. `proxmox_reboot_enabled` alone reboots without upgrading; `proxmox_upgrade_enabled` alone upgrades nothing, since the upgrade task lives inside this same role behind the same `proxmox_reboot_enabled` guard below. It still has an effect on its own, though: the final node-config reapply play is gated on `proxmox_upgrade_enabled` alone, so setting it without `proxmox_reboot_enabled` reapplies `generic/proxmox` config across all five nodes despite nothing having been upgraded. A routine update sets both:
 
 ```bash
 make run-proxmox tags=proxmox-reboot ANSIBLE_FLAGS="-e proxmox_reboot_enabled=yes -e proxmox_upgrade_enabled=yes"
@@ -48,13 +48,13 @@ make run-proxmox tags=proxmox-reboot ANSIBLE_FLAGS="-e proxmox_reboot_enabled=ye
 
 Default order is `groups['proxmox']` (pve1-5).
 
-Per node, in order: confirms the cluster is quorate and finds the node's running HA resources and guests — both checked from a witness node, since the node about to reboot can't answer for itself — applies the package upgrade live (guests keep running through this part), then reboots and waits for the node to rejoin quorate and for its guests and HA resources to come back. The `always:` block that hands resources back to HA runs even on failure, because a resource left `--state stopped` or a node left in maintenance both persist past a failed run rather than reverting on their own.
+Per node, in order: confirms the cluster is quorate and finds the node's running HA resources, both checked from a witness node since the node about to reboot can't answer for itself, then records which of its guests are currently running — checked on the node itself, since `qm list` is node-local and a witness would report its own guests, not the target's. It applies the package upgrade live (guests keep running through this part), then reboots and waits for the node to rejoin quorate and for its guests and HA resources to come back. The `always:` block that hands resources back to HA runs even on failure, because a resource left `--state stopped` or a node left in maintenance both persist past a failed run rather than reverting on their own.
 
 `proxmox_reboot_ha_mode` (default `downtime`) governs how the node's HA resources are protected during the reboot itself, not whether guests come back after:
 - `downtime` — marks them `--state stopped` so HA doesn't fence them while the node is down; they resume in place once it's back.
 - `migrate` — puts the node into HA maintenance first, which live-migrates its HA resources off before rebooting. Only wins if live migration is actually fast; two offline moves (off, then back) is usually slower than the reboot it was meant to avoid, which is why `downtime` is the default.
 
-Non-HA guests are never started by this play — it only *waits* for guests that were running before the reboot to be running again, which only happens for guests with `onboot: yes`. One without it stays down with nothing in the output calling that out; check `qm list` on the node afterward if unsure everything came back.
+Non-HA guests are never started by this play — it only *waits* for guests that were running before the reboot to be running again, which only happens for guests with `onboot: yes`. That wait is not a soft check: it has no `ignore_errors`, so a guest that doesn't come back within `proxmox_reboot_guest_timeout` (default 300s) fails the task hard, loudly, in the output. That failure sits outside the per-node `block`/`always`, so it stops the whole rolling loop — every node still left in `proxmox_reboot_order` is skipped, even though the failed node's own HA handback already ran cleanly before the failure. Not reachable on the current fleet (every running non-HA guest on pve1-5 has `onboot: 1` today), but a new guest added without it will stall a rolling reboot partway through rather than being skipped over.
 
 Once every node in the order has rebooted, a final play reapplies `generic/proxmox` (`scope: node`) across the whole cluster, but only when `proxmox_upgrade_enabled` was set — a PVE upgrade can reset node-level settings the role manages, and reasserting them unconditionally afterward is simpler than detecting what an upgrade actually touched.
 
