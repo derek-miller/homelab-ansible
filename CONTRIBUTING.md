@@ -19,9 +19,9 @@ To actually upgrade the newest versions of unpinned packages:
 Running locally
 ===============
 
-    make bootstrap
-    make run env=<env>
-    make run env=<env> host=<host>
+    make bootstrap hosts=<new-host> user=<your-local-user>
+    make run
+    make run hosts=<host>
 
 Setting up Ansible Vault
 ------------------------
@@ -40,22 +40,6 @@ To provision and pass ansible flags:
     make run ansible_flags='--skip-tags=common,base --tags=vnc'
     make run tags=vnc  # shorthand for the above command
     make run hosts=raspi1  # shorthand for passing the --limit flag
-
-Bootstrapping
--------------
-
-You'll need to bootstrap any new hosts:
-
-    make bootstrap env=<env> hosts=<new-host> user=<your-local-user>
-
-Adding local SSH known hosts entries for inventory hosts
---------------------------------------------------------
-
-To get ssh hostname completion and known host keys for hosts in an inventory:
-
-    make known-hosts
-    make known-hosts env=<env> hosts=<host>
-
 
 (Re)installing Ansible Galaxy roles
 -----------------------------------
