@@ -50,34 +50,9 @@ make galaxy-install                   # Reinstall Galaxy roles/collections
 - The `project-files` role deploys from `playbooks/files/plaintext/{hostname}/` and `playbooks/files/vault/{hostname}/` to target paths, keyed by hostname.
 - Traefik labels on swarm services carry routing, OAuth middleware, and TLS.
 
-## Moving a swarm workload to another host
+## Runbook
 
-Swarm does not move local volumes, so a move happens in two halves: copy the data while the services are stopped, and only then let the label follow. `generic/docker/migrate-labels` does both, driven by the inventory.
-
-Move the label to the new host in `[docker_labels]`, then:
-
-```bash
-make run tags=docker-swarm ANSIBLE_FLAGS="-e docker_migrate_labels=yes"
-```
-
-**Do not narrow this with `hosts=`.** The role runs on the primary manager and reaches both nodes by delegation, so a limit has to name the source, the target *and* the manager; omit the manager and it never runs at all.
-
-For each label whose inventory host no longer matches the node carrying it, the role scales that label's services to 0, tars each of their volumes through `docker_migrate_transit_dir` onto the target, removes the source copy, and moves the label. The stack deploy then starts the services on top of their data. Services and volumes are read from the stack definition, so nothing needs listing by hand.
-
-Without `docker_migrate_labels=yes` the move is only reported and the label reconcile is held back, because moving a label while its data sits on the old host would start the service on an empty volume. A routine `make run` is therefore safe with a pending move outstanding. The hold-back is keyed on a fact set on the primary manager, and undefined holds rather than reconciles — so a `hosts=` limit can stop a move being detected, but cannot lift the interlock.
-
-**Volumes are all the role moves.** Check the rest by hand first; a service that lands on a host missing any of it either fails to start or starts unreachable:
-
-- **Host bind mounts** — `/var/docker/...` paths come from `project-files`, which is keyed by hostname, so the file tree and the `project_files` declaration move too.
-- **CIFS shares** — the target needs whatever the services mount beyond `Backups`.
-- **Locally built images** — `docker_images_to_build` moves with the workload, or the target has no image to run.
-- **Host-network services** — not on the overlay, so Traefik routes them from `external-rules.yaml` by address rather than by discovery. That address is not a label and does not follow the move; repoint it or the service works locally and 502s through Traefik.
-- **Endpoints other hosts write to** — `influxdb3_url` follows the `metrics` label out of the inventory, but each Telegraf agent only picks up the new address when its config is rewritten. Run `make run tags=telegraf` across every host after moving `metrics`, or the agents keep writing to the old address: nothing errors, the graphs just stop filling.
-
-## macOS hosts: manual steps at bootstrap
-
-Some macOS state cannot be set from an Ansible run, and the reason differs per case. The playbook does not handle these uniformly, so read the bullet rather than assuming a failed run told you about the problem: `generic/smb-mount` halts on an interactive `pause:` with a 10-minute timeout, `generic/plex` only prints a `debug:` note and continues green, and FileVault has no detection at all.
-
-- **autofs SMB map** — autofs only reads `/etc/auto_smb` when `/etc/auto_master` carries a `/-  auto_smb` direct-map line. Only an interactive local Terminal.app session can write that file: direct SSH write, a boot-time LaunchDaemon, and SSH with Full Disk Access granted to sshd all fail identically with EPERM. The role writes the map itself over SSH, then detects a missing `auto_master` line and pauses for 10 minutes with the exact command to paste. **macOS updates reset `/etc/auto_master` and strip the line, so after every OS update re-run `make run hosts=<host> tags=smb-mount` and be at the Mac to answer the prompt** — the re-run only detects the problem, it cannot fix it. Leave the prompt unanswered and the pause times out, then the verify task fails the play for that host.
-- **Plex "Open at Login"** — the menu-bar app registers its own LaunchAgent via LSSharedFileList, which needs Automation TCC and so cannot be set programmatically. After `generic/plex` installs the cask, launch Plex once via VNC or console and tick the box. The role prints instructions until the LaunchAgent appears.
-- **FileVault login on reboot** — after a power cycle the Mac sits at the login screen until a human logs in, because user LaunchAgents only run post-login. No workaround; design-accepted.
+Moving a swarm workload, applying updates and rebooting pve1-5, and the
+macOS manual bootstrap steps live in [RUNBOOK.md](RUNBOOK.md), not here.
+This file is what to know before editing the Ansible; the runbook is what
+to know before operating the fleet.
