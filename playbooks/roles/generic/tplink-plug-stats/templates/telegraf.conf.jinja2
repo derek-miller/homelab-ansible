@@ -9,3 +9,9 @@
   ]
   timeout = "{{ tplink_plug_stats_timeout_s|int }}s"
   data_format = "influx"
+{% if tplink_plug_stats_cloud_username|length > 0 %}
+  environment = [
+    "TPLINK_CLOUD_USERNAME={{ tplink_plug_stats_cloud_username }}",
+    "TPLINK_CLOUD_PASSWORD={{ tplink_plug_stats_cloud_password }}",
+  ]
+{% endif %}

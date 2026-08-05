@@ -6,3 +6,8 @@ tplink_plug_stats_virtualenv_path: "{{ tplink_plug_stats_dir }}/virtualenv"
 tplink_plug_stats_script_path: "{{ tplink_plug_stats_dir }}/bin/tplink-plug-stats"
 tplink_plug_stats_timeout_s: 5
 tplink_plug_stats_ip_addresses: []
+# TP-Link cloud account credentials. Only needed for devices on the newer KLAP
+# transport (e.g. HS300, EP40) - legacy devices (KP115, HS110, ...) work with
+# these unset. Vault these per-host rather than committing them plain.
+tplink_plug_stats_cloud_username: ''
+tplink_plug_stats_cloud_password: ''
