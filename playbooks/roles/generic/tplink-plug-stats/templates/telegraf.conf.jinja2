@@ -3,8 +3,10 @@
   name_override = "{{ tplink_plug_stats_metric_name }}"
 {% endif %}
   commands = [
-{% for ip_address in tplink_plug_stats_ip_addresses %}
-    "{{ tplink_plug_stats_script_path }} --host {{ ip_address }}",
+{% for entry in tplink_plug_stats_ip_addresses %}
+{% set ip_address = entry.ip if entry is mapping else entry %}
+{% set klap_v2 = (entry.klap_v2 | default(false)) if entry is mapping else false %}
+    "{{ tplink_plug_stats_script_path }} --host {{ ip_address }}{{ ' --klap-v2' if klap_v2 else '' }}",
 {% endfor %}
   ]
   timeout = "{{ tplink_plug_stats_timeout_s|int }}s"

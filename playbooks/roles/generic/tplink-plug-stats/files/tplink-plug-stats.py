@@ -42,9 +42,25 @@ def async_command(f):
     return wrapper
 
 
-async def connect(host, username, password):
-    # Some devices (e.g. HS300) need KLAP v2 auth that python-kasa can't
-    # select for IOT-family devices on its own; retry by hand on failure.
+async def connect_klap_v2(host, username, password):
+    # python-kasa can't select KLAP v2 auth for IOT-family devices on its
+    # own (some, like the HS300, need it); build the connection by hand.
+    config = DeviceConfig(
+        host=host,
+        credentials=Credentials(username=username, password=password),
+        timeout=5,
+    )
+    protocol = IotProtocol(transport=KlapTransportV2(config=config))
+    info = await protocol.query(GET_SYSINFO_QUERY)
+    device_class = get_device_class_from_sys_info(info)
+    device = device_class(host=host, protocol=protocol)
+    await device.update()
+    return device
+
+
+async def connect(host, username, password, klap_v2):
+    if klap_v2:
+        return await connect_klap_v2(host, username, password)
     try:
         device = await Discover.discover_single(
             host, username=username, password=password, timeout=5
@@ -54,17 +70,7 @@ async def connect(host, username, password):
     except AuthenticationError:
         if not (username and password):
             raise
-        config = DeviceConfig(
-            host=host,
-            credentials=Credentials(username=username, password=password),
-            timeout=5,
-        )
-        protocol = IotProtocol(transport=KlapTransportV2(config=config))
-        info = await protocol.query(GET_SYSINFO_QUERY)
-        device_class = get_device_class_from_sys_info(info)
-        device = device_class(host=host, protocol=protocol)
-        await device.update()
-        return device
+        return await connect_klap_v2(host, username, password)
 
 
 def energy_fields(outlet):
@@ -122,11 +128,17 @@ def outlet_line(measurement_name, parent, outlet, extra_tags=None):
     default=None,
     help="TP-Link cloud account password.",
 )
+@click.option(
+    "--klap-v2",
+    is_flag=True,
+    help="Skip straight to KLAP v2 auth (e.g. for a known HS300) instead of "
+    "trying normally first and falling back on failure.",
+)
 @click.pass_context
 @async_command
-async def cli(ctx, host, username, password):
+async def cli(ctx, host, username, password, klap_v2):
     try:
-        p = await connect(host, username, password)
+        p = await connect(host, username, password, klap_v2)
     except Exception as e:
         click.echo(f"{host}: {e}", err=True)
         ctx.exit(1)
