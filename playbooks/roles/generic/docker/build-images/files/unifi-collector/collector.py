@@ -69,6 +69,10 @@ PORT_RATES = {
     "tx_multicast": "tx_mcast_pps",
 }
 BYTE_COUNTERS = ("rx_bytes", "tx_bytes")
+# The switch refreshes port_table counters every minute or two, not once per
+# poll, so an unchanged counter usually means "not refreshed yet" rather than
+# "no traffic". Only once a port has held still this long is it really idle.
+PORT_IDLE_AFTER = max(300, POLL_INTERVAL * 6)
 
 
 def log(message):
@@ -226,21 +230,31 @@ def collect_devices(lines, previous, now):
                 "rx_dropped_total": counters["rx_dropped"],
                 "tx_dropped_total": counters["tx_dropped"],
             }
-            # Each port carries the loop's start time as an approximation of
-            # when its counters were read (jitter is at most however long
-            # collect_health took earlier in the same cycle), so a rate spans
-            # the gap that actually elapsed, even when a poll was skipped by a
-            # failed request.
+            # Rates span the gap since the counters last MOVED, not since the
+            # last poll. Every field here refreshes together, so any non-zero
+            # delta means this entry is fresh; dividing by the poll interval
+            # instead would charge a whole refresh window's bytes to one 30s
+            # sample and leave its neighbours reading a flat zero.
             sampled_at, earlier = previous.get(key, (None, None))
             if earlier and now > sampled_at:
                 elapsed = now - sampled_at
-                for counter, field in PORT_RATES.items():
-                    # Clamps a counter reset (switch reboot) to zero instead of
-                    # emitting a negative spike.
-                    delta = max(0, counters[counter] - earlier[counter])
-                    rate = delta / elapsed
-                    fields[field] = rate * 8 if counter in BYTE_COUNTERS else rate
-            previous[key] = (now, counters)
+                # Clamps a counter reset (switch reboot) to zero instead of
+                # emitting a negative spike.
+                deltas = {c: max(0, counters[c] - earlier[c]) for c in PORT_RATES}
+                if any(deltas.values()):
+                    for counter, field in PORT_RATES.items():
+                        rate = deltas[counter] / elapsed
+                        fields[field] = rate * 8 if counter in BYTE_COUNTERS else rate
+                    previous[key] = (now, counters)
+                elif elapsed >= PORT_IDLE_AFTER:
+                    for field in PORT_RATES.values():
+                        fields[field] = 0.0
+                    previous[key] = (now, counters)
+                # Otherwise the counters simply have not refreshed yet: leave
+                # the baseline alone so the next move rates against it, and
+                # write the row without rate fields rather than a false zero.
+            else:
+                previous[key] = (now, counters)
             lines.append(
                 line(
                     "unifi_port",
