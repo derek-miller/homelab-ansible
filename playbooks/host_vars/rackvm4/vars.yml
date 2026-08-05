@@ -86,7 +86,6 @@ tplink_plug_stats_ip_addresses:
   # - 192.168.2.7  # unused
   - 192.168.2.8  # Washer
   - 192.168.2.9  # Astronaut Lamp
-  # - 192.168.2.26  # EP40A Outdoor Christmas Lights - no energy monitoring hardware
   - 192.168.2.28  # HS300 Coffee Bar
 
 tplink_plug_stats_cloud_username: !vault |
