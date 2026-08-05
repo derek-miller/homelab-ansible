@@ -86,11 +86,9 @@ tplink_plug_stats_ip_addresses:
   # - 192.168.2.7  # unused
   - 192.168.2.8  # Washer
   - 192.168.2.9  # Astronaut Lamp
-  # - 192.168.2.26  # EP40A Outdoor Christmas Lights - no energy monitoring hardware, would only ever error
-  - 192.168.2.28  # HS300 Coffee Bar (6 outlets, requires the cloud credentials below)
+  # - 192.168.2.26  # EP40A Outdoor Christmas Lights - no energy monitoring hardware
+  - 192.168.2.28  # HS300 Coffee Bar
 
-# TP-Link cloud account for devices on the KLAP transport (currently just the
-# HS300 above). Legacy devices (KP115, HS110) ignore these.
 tplink_plug_stats_cloud_username: !vault |
   $ANSIBLE_VAULT;1.1;AES256
   62376332613436343937323331343764646661346230393439313039646238653064383230323239

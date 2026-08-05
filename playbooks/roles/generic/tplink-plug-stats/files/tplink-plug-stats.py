@@ -43,26 +43,12 @@ def async_command(f):
 
 
 async def connect(host, username, password):
-    """Connect to a plug/strip, working around a python-kasa gap.
-
-    python-kasa hardcodes the IOT-schema + KLAP-encryption combination to the
-    v1 (MD5) auth hash, but some legacy Kasa devices on newer firmware
-    (confirmed on an HS300 strip) are actually provisioned with the v2 (SHA)
-    hash used by SMART-schema devices - the same mismatch the production
-    Control4 driver's klap.lua documents as two selectable hash flavors.
-    python-kasa has no public way to select v2 for an IOT-family device, so
-    on an auth failure we retry by hand: query get_sysinfo directly over a
-    v2 KLAP transport, then let python-kasa classify the resulting sysinfo
-    the same way its own connect() does.
-    """
+    # Some devices (e.g. HS300) need KLAP v2 auth that python-kasa can't
+    # select for IOT-family devices on its own; retry by hand on failure.
     try:
         device = await Discover.discover_single(
             host, username=username, password=password, timeout=5
         )
-        # discover_single() doesn't always raise AuthenticationError itself -
-        # for some devices the failed handshake only surfaces once update()
-        # forces the authenticated query, so both calls need to be inside
-        # this same try so the except below actually catches it.
         await device.update()
         return device
     except AuthenticationError:
@@ -82,7 +68,6 @@ async def connect(host, username, password):
 
 
 def energy_fields(outlet):
-    """Pull voltage/power/current/total off an outlet's Energy module, if it has one."""
     energy = outlet.modules.get("Energy")
     if energy is None:
         return None
@@ -129,15 +114,13 @@ def outlet_line(measurement_name, parent, outlet, extra_tags=None):
     "--username",
     envvar="TPLINK_CLOUD_USERNAME",
     default=None,
-    help="TP-Link cloud account email. Only needed for newer devices on the KLAP "
-    "transport (e.g. HS300, EP40); legacy devices ignore it. Reads "
-    "TPLINK_CLOUD_USERNAME if unset.",
+    help="TP-Link cloud account email, needed for KLAP devices (e.g. HS300, EP40).",
 )
 @click.option(
     "--password",
     envvar="TPLINK_CLOUD_PASSWORD",
     default=None,
-    help="TP-Link cloud account password. See --username. Reads " "TPLINK_CLOUD_PASSWORD if unset.",
+    help="TP-Link cloud account password.",
 )
 @click.pass_context
 @async_command
@@ -150,9 +133,6 @@ async def cli(ctx, host, username, password):
 
     measurement_name = "tplink_plug_stats"
 
-    # Multi-outlet devices (HS300, EP40, ...) expose each socket as a child
-    # device with its own Energy module; single-outlet devices have none and
-    # the parent device itself is the outlet.
     outlets = p.children if p.children else [p]
 
     lines = []
