@@ -26,7 +26,7 @@ available_docker_images:
     build_files:
       - unifi-collector/collector.py
     image_name: unifi-collector
-    image_tag: "1.2.1"
+    image_tag: "1.3.2"
   control4-driver-scraper:
     repo: git@github.com:derek-miller/control4-driver-scraper.git
     version: master
