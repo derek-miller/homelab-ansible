@@ -252,13 +252,17 @@ def collect_devices(lines, previous, now):
                     # than the window the bytes actually accumulated over. A
                     # port cannot exceed its own link speed, which bounds how
                     # far that skew can carry a burst.
-                    ceiling = fields["speed"] * 1_000_000
+                    # Float, so a bound rate stays a float: min() returns its
+                    # smaller operand with that operand's own type, and an int
+                    # here would serialise as `1000000000i` into a Float64
+                    # column, which InfluxDB rejects for the whole row.
+                    ceiling = fields["speed"] * 1_000_000.0
                     for counter, field in PORT_RATES.items():
                         rate = deltas[counter] / elapsed
-                        if counter in BYTE_COUNTERS:
+                        if counter in BYTE_COUNTERS and ceiling > 0:
+                            rate = min(rate * 8, ceiling)
+                        elif counter in BYTE_COUNTERS:
                             rate *= 8
-                            if ceiling:
-                                rate = min(rate, ceiling)
                         fields[field] = rate
                     previous[key] = (now, counters)
                 elif elapsed >= PORT_IDLE_AFTER:
