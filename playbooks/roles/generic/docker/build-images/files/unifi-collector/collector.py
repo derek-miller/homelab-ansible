@@ -238,13 +238,28 @@ def collect_devices(lines, previous, now):
             sampled_at, earlier = previous.get(key, (None, None))
             if earlier and now > sampled_at:
                 elapsed = now - sampled_at
-                # Clamps a counter reset (switch reboot) to zero instead of
-                # emitting a negative spike.
-                deltas = {c: max(0, counters[c] - earlier[c]) for c in PORT_RATES}
-                if any(deltas.values()):
+                deltas = {c: counters[c] - earlier[c] for c in PORT_RATES}
+                if any(delta < 0 for delta in deltas.values()):
+                    # Counter reset (switch reboot). Re-baseline on the spot:
+                    # clamping the negative to zero would be indistinguishable
+                    # from "not refreshed yet" and would hold a baseline the
+                    # counters can no longer reach, stranding the port until
+                    # PORT_IDLE_AFTER and then reporting it idle mid-traffic.
+                    previous[key] = (now, counters)
+                elif any(deltas.values()):
+                    # The counters are a snapshot taken up to one refresh
+                    # behind the poll that read them, so elapsed can be shorter
+                    # than the window the bytes actually accumulated over. A
+                    # port cannot exceed its own link speed, which bounds how
+                    # far that skew can carry a burst.
+                    ceiling = fields["speed"] * 1_000_000
                     for counter, field in PORT_RATES.items():
                         rate = deltas[counter] / elapsed
-                        fields[field] = rate * 8 if counter in BYTE_COUNTERS else rate
+                        if counter in BYTE_COUNTERS:
+                            rate *= 8
+                            if ceiling:
+                                rate = min(rate, ceiling)
+                        fields[field] = rate
                     previous[key] = (now, counters)
                 elif elapsed >= PORT_IDLE_AFTER:
                     for field in PORT_RATES.values():
