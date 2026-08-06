@@ -59,12 +59,6 @@ docker_daemon_options:
   data-root: /mnt/data/docker
 
 project_files:
-  # ha_hatch's awscrt/awsiotsdk pin (added #0328595, emptied above) is fully
-  # retired: the homeassistant service no longer bind-mounts /uv_override.txt
-  # or sets UV_OVERRIDE, so this just deletes the now-unreferenced file.
-  # Safe to drop this entry entirely once a deploy has run it.
-  - dest: /var/docker/homeassistant/uv_override.txt
-    state: absent
   - src: "plaintext/{{ inventory_hostname }}/var/docker/mosquitto/config/mosquitto.conf"
     dest: /var/docker/mosquitto/config/mosquitto.conf
     owner: 1883
