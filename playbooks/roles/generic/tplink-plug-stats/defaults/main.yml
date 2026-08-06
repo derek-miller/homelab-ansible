@@ -6,3 +6,6 @@ tplink_plug_stats_virtualenv_path: "{{ tplink_plug_stats_dir }}/virtualenv"
 tplink_plug_stats_script_path: "{{ tplink_plug_stats_dir }}/bin/tplink-plug-stats"
 tplink_plug_stats_timeout_s: 5
 tplink_plug_stats_ip_addresses: []
+# Only needed for devices on the newer KLAP transport (e.g. HS300, EP40).
+tplink_plug_stats_cloud_username: ''
+tplink_plug_stats_cloud_password: ''
