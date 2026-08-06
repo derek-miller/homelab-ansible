@@ -1,7 +1,0 @@
-# ha_hatch was updated past 1.25.0 on 2026-08-06 (bumped to 1.31.4 to fix the
-# Python 3.14 / awscrt MQTT connect crash HA 2026.8.0's image introduced), so
-# the awscrt/awsiotsdk pin this file used to carry is obsolete: intentionally
-# empty. Kept as an empty file rather than deleted because the homeassistant
-# service still bind-mounts it (UV_OVERRIDE=/uv_override.txt) and an absent
-# bind source would fail container start. Safe to drop the mount + this file
-# together in a follow-up once the update has been running clean for a while.
