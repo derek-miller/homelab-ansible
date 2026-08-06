@@ -78,3 +78,44 @@
   delay: 1
   until: _automaster_verify.rc == 0
   changed_when: false
+
+# ---- exclude mount_point parents from Time Machine (manual step) -------
+# backupd walks the whole boot volume and stat()s mount_point to check its
+# exclusion, which triggers the autofs mount as root. Excluding the parent
+# stops it descending in at all. addexclusion needs Full Disk Access, same
+# manual-step story as /etc/auto_master above.
+- name: probe Time Machine exclusion on mount_point parent dirs
+  command: "/usr/bin/tmutil isexcluded {{ item }}"
+  register: _tm_exclusion_probe
+  changed_when: false
+  loop: "{{ smb_mounts | map(attribute='shares') | flatten
+            | map(attribute='mount_point') | map('dirname') | unique | list }}"
+
+- name: prompt user to exclude mount_point parents from Time Machine via GUI Terminal
+  pause:
+    seconds: 600
+    prompt: |
+
+      =====================================================================
+      MANUAL STEP REQUIRED — exclude these paths from Time Machine
+      =====================================================================
+
+      tmutil addexclusion needs Full Disk Access, which fails over SSH on
+      this host. In a Terminal.app window on the Mac (NOT over SSH), paste:
+
+        sudo tmutil addexclusion -p {{ _tm_exclusion_probe.results
+          | selectattr('stdout', 'search', '\[Included\]')
+          | map(attribute='item') | join(' ') }}
+
+      Then press Enter here to continue. Timing out after 10 minutes.
+  when: _tm_exclusion_probe.results | selectattr('stdout', 'search', '\[Included\]') | list | length > 0
+
+- name: verify Time Machine exclusion on mount_point parent dirs
+  command: "/usr/bin/tmutil isexcluded {{ item }}"
+  register: _tm_exclusion_verify
+  retries: 5
+  delay: 1
+  until: "'[Excluded]' in _tm_exclusion_verify.stdout"
+  changed_when: false
+  loop: "{{ smb_mounts | map(attribute='shares') | flatten
+            | map(attribute='mount_point') | map('dirname') | unique | list }}"
