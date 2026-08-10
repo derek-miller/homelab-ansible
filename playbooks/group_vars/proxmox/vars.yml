@@ -206,6 +206,10 @@ proxmox_ha_resources:
     max_relocate: 1
 # strict: only nodes holding a replica. Unrestricted, HA would try a node with
 # no copy of the disks and the failover would fail.
+# `nodes` must be spelled the way PVE reads it back: the converge task string-
+# compares it against `ha-manager rules config`, so a spelling PVE re-encodes
+# reports changed forever. Its encoder sorts the keys and drops a falsy priority,
+# so keep them sorted and never write an explicit `:0` — that reads back bare.
 proxmox_ha_rules:
   - rule: vm100-nodes
     type: node-affinity

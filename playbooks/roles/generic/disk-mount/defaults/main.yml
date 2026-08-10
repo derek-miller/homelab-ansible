@@ -5,8 +5,9 @@ disk_mount_state: present
 #   src:     device identifier (UUID=..., LABEL=..., or /dev/...)
 #   device:  optional; when set, create the filesystem on this device first if it
 #            has none. Pair with a LABEL= src so the label is applied at mkfs.
-#   symlinks: optional list of {src, dest}, applied after the mount. Refuses to
-#            replace a real directory — clear it deliberately first.
+#   symlinks: optional list of {src, dest}, applied after the mount with force: yes,
+#            which replaces an existing symlink, file, or empty directory. Only a
+#            non-empty directory is refused — clear that one deliberately first.
 #   path:    mount point
 #   fstype:  filesystem type
 #   opts:    defaults to "defaults,nofail". On exfat/ntfs set uid=/gid=/fmask=
