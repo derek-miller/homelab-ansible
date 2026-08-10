@@ -13,6 +13,10 @@ on:
         description: Run specific tag(s)
         required: false
 
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
