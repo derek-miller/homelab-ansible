@@ -13,6 +13,14 @@ on:
         description: Run specific tag(s)
         required: false
 
+# One ansible run against the fleet at a time. The group is a constant, not
+# github.ref, so a targeted workflow_dispatch cannot overlap a push deploy
+# either. Queue rather than cancel: killing a run mid-play leaves hosts half
+# converged, whereas a queued run just starts late.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
