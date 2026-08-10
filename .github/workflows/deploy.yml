@@ -13,7 +13,6 @@ on:
         description: Run specific tag(s)
         required: false
 
-# Queue, don't cancel: killing a run mid-play leaves hosts half converged.
 concurrency:
   group: deploy
   cancel-in-progress: false
