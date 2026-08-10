@@ -16,6 +16,8 @@
     mode: 0644
   notify: restart telegraf
 
+- include_tasks: cleanup-backups.yml
+
 - include_tasks: present-debian.yml
   when: ansible_os_family != 'Darwin'
 

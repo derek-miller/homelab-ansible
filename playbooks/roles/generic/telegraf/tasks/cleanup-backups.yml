@@ -1,0 +1,18 @@
+---
+# Sweeps the 0644 copies left behind by the old `backup: yes` on `config
+# telegraf`; each one holds the InfluxDB password and token.
+
+- name: find leftover telegraf config backups
+  find:
+    paths: "{{ telegraf_conf | dirname }}"
+    patterns: "{{ telegraf_conf | basename }}.*~"
+    file_type: file
+  register: _telegraf_conf_backups
+
+- name: remove leftover telegraf config backups
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ _telegraf_conf_backups.files }}"
+  loop_control:
+    label: "{{ item.path }}"

@@ -1,9 +1,12 @@
 ---
 # Telegraf absent — fully reverse what present.yml installed:
+#   - remove leftover config backups (first: the Debian purge takes the dir)
 #   - stop + disable service (systemd / launchd)
 #   - remove config file + conf.d dir
 #   - uninstall the package (apt / brew)
 #   - remove repo GPG key + apt source (Debian)
+
+- include_tasks: cleanup-backups.yml
 
 - include_tasks: absent-debian.yml
   when: ansible_os_family != 'Darwin'
