@@ -19,6 +19,11 @@
     path: "/Users/{{ mac_user | mandatory }}/Library/LaunchAgents/homebrew.mxcl.telegraf.plist"
     state: absent
 
+- name: remove telegraf conf directory
+  file:
+    path: "{{ telegraf_conf_dir }}"
+    state: absent
+
 - name: switch become_user to mac_user (brew refuses root)
   set_fact:
     ansible_become_user: "{{ mac_user | mandatory }}"
