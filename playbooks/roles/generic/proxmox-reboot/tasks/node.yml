@@ -45,13 +45,6 @@
       {{ guests_before.stdout_lines
          | difference(ha_here.stdout_lines | map('regex_replace', '^[a-z]+:', '') | list) }}
 
-- name: upgrade {{ node }}
-  apt:
-    update_cache: yes
-    upgrade: full
-  delegate_to: "{{ node }}"
-  when: proxmox_upgrade_enabled | bool
-
 - name: reboot {{ node }}
   block:
     - name: tell HA the resources on {{ node }} are intentionally stopped
@@ -75,6 +68,15 @@
       retries: "{{ (proxmox_reboot_ha_settle_timeout | int / 10) | int }}"
       delay: 10
       when: proxmox_reboot_ha_mode == 'migrate' and ha_here.stdout_lines | length > 0
+
+    # PVE cannot live-migrate a guest onto an older QEMU than it is running, so a
+    # cross-major upgrade has to come after the vacate above, not before it.
+    - name: upgrade {{ node }}
+      apt:
+        update_cache: yes
+        upgrade: full
+      delegate_to: "{{ node }}"
+      when: proxmox_upgrade_enabled | bool
 
     - name: reboot {{ node }}
       reboot:

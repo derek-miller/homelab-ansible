@@ -1,4 +1,17 @@
 ---
+# qm set allocates the create size in whole GiB, so a unit suffix other than G
+# would be silently truncated to GiB (2T -> 2 GiB). Reject anything but <int>G.
+- name: require guest disk sizes in whole GiB
+  assert:
+    that: item.1.size is match('^[0-9]+G$')
+    fail_msg: >-
+      {{ item.0.name }} disk {{ item.1.iface }} size '{{ item.1.size }}' must be
+      an integer with a G suffix.
+    quiet: yes
+  loop: "{{ proxmox_guests | subelements('disks', skip_missing=true) }}"
+  loop_control:
+    label: "{{ item.0.name }} {{ item.1.iface }}"
+
 - name: clone guests from the template
   community.proxmox.proxmox_kvm:
     api_host: "{{ proxmox_api_host }}"
@@ -69,19 +82,6 @@
          and ('ciuser: ' ~ item.item.ciuser) not in item.stdout)
     or ('ip=' ~ item.item.address) not in item.stdout
     or ('onboot: ' ~ (item.item.onboot | default(true) | int)) not in item.stdout
-
-# qm set allocates the create size in whole GiB, so a unit suffix other than G
-# would be silently truncated to GiB (2T -> 2 GiB). Reject anything but <int>G.
-- name: require guest disk sizes in whole GiB
-  assert:
-    that: item.1.size is match('^[0-9]+G$')
-    fail_msg: >-
-      {{ item.0.name }} disk {{ item.1.iface }} size '{{ item.1.size }}' must be
-      an integer with a G suffix.
-    quiet: yes
-  loop: "{{ proxmox_guests | subelements('disks', skip_missing=true) }}"
-  loop_control:
-    label: "{{ item.0.name }} {{ item.1.iface }}"
 
 # The template's disk is the 3 GB cloud image, so every declared disk needs work
 # after a clone. Declared per interface, since a guest can carry more than one.
