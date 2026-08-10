@@ -144,16 +144,10 @@
   tags:
     - project-files
 
-# The disk-mount role refuses to mkfs a device it cannot prove is empty, and
-# that refusal carries the only message that says which disk and why. Without
-# any_errors_fatal the failing host is merely dropped and the run carries on to
-# the swarm plays, which read docker_swarm_manager[0]'s facts by index — so a
-# refusal on rackvm1 resurfaces as "no attribute 'docker_swarm_addr'" on the
-# other four hosts and buries the real one. Stop instead.
-#
-# Safe against the off-site pis going dark: this group is rackvm1-5, and a host
-# already dropped as unreachable by an earlier play does not re-trigger
-# any_errors_fatal here (verified on ansible-core 2.21.2).
+# Fail the run here instead of dropping the host: the swarm plays below read
+# docker_swarm_manager[0]'s facts by index, so a disk-mount failure on rackvm1
+# resurfaces as an unrelated docker_swarm_addr error on the other four. Scoped
+# to this group so an off-site pi going dark cannot abort a full run.
 - hosts: disk-mounts
   any_errors_fatal: true
   roles:
@@ -215,23 +209,15 @@
       {{ swarm_node_labels if (docker_labels_reconcile_allowed | bool)
          else docker_swarm_current_labels }}
   pre_tasks:
-    # galaxy/docker-swarm is a Galaxy role we do not own, and its
-    # "cluster | Register primary node" task dereferences
-    # hostvars[primary].docker_swarm_addr unconditionally on every host. That
-    # fact is only set for hosts that reach the role, so if the primary manager
-    # is missing from the run every other node dies on an attribute error that
-    # names swarm rather than whatever actually went wrong. Say which host
-    # vanished while we still can.
-    - name: the primary swarm manager has to be part of this run
+    # galaxy/docker-swarm dereferences the primary's docker_swarm_addr on every
+    # host with no guard, and it is Galaxy-managed so we cannot fix it there.
+    - name: the primary swarm manager must be in this run
       assert:
         that: groups['docker_swarm_manager'][0] in ansible_play_hosts
         fail_msg: >-
           {{ groups['docker_swarm_manager'][0] }} is not in this run, so
           galaxy/docker-swarm cannot read its docker_swarm_addr and every other
-          node would fail with an unrelated "no attribute 'docker_swarm_addr'".
-          Either it failed or went unreachable in an earlier play (scroll up for
-          the real error), or a hosts=/--limit excluded it. Re-run including
-          {{ groups['docker_swarm_manager'][0] }}.
+          node fails with an unrelated attribute error; re-run including it.
         quiet: yes
       run_once: yes
   roles:
