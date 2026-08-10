@@ -377,6 +377,12 @@
   tags:
     - tplink-plug-stats
 
+- hosts: volume-backup-stats
+  roles:
+    - role: generic/volume-backup-stats
+  tags:
+    - volume-backup-stats
+
 - hosts: sourcebot-db
   roles:
     - role: generic/sourcebot-db

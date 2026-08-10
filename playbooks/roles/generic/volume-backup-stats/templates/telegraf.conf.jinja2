@@ -1,0 +1,11 @@
+# Reports one series per backup target directory so a single stalled backup is
+# visible. Globbing the children (rather than pointing at the root with
+# `recursive = true`) is load bearing: filecount emits one series per entry in
+# `directories`, so the root form collapses every target into a single
+# aggregate whose newest_file_timestamp is always fresh.
+[[inputs.filecount]]
+  name_override = "{{ volume_backup_stats_metric_name }}"
+  directories = ["{{ volume_backup_stats_root }}/*"]
+  name = "{{ volume_backup_stats_archive_glob }}"
+  recursive = false
+  interval = "{{ volume_backup_stats_interval_s|int }}s"

@@ -58,6 +58,22 @@ Non-HA guests are never started by this play — it only *waits* for guests that
 
 A final play reapplies `generic/proxmox` (`scope: node`) across the whole cluster whenever `proxmox_upgrade_enabled` was set, whether or not any node actually rebooted — a PVE upgrade can reset node-level settings the role manages, and reasserting them unconditionally afterward is simpler than detecting what an upgrade actually touched. That's true of the clean `meta: end_play` exit above, but not of a failure: the rolling loop runs as a single `localhost` play with no error-control override, so the hard failure described above aborts the whole playbook run on the spot — the reapply play never starts, not even for nodes that already upgraded before the failure.
 
+## Volume backup freshness monitoring
+
+`offen/docker-volume-backup` emits no metrics, and its `NOTIFICATION_URLS` only fire on a run that actually happens — a container whose cron has stopped is silent and looks healthy. So the monitoring watches the *outcome* on the share rather than the process: `generic/volume-backup-stats` runs a Telegraf `filecount` input over `/mnt/Backups/Volumes/*` and reports `count` and `newest_file_timestamp` per target directory.
+
+The glob is load bearing. `filecount` emits **one series per entry in `directories`**, and `recursive` only controls how deep it walks to build that one aggregate — so pointing it at the root with `recursive = true` yields a single series whose `newest_file_timestamp` is whichever target ran most recently. Every stalled target hides behind a healthy one. Globbing the children instead gives one series per target and is layout agnostic, so a new backup service needs no monitoring change.
+
+It runs on one host (`[volume-backup-stats]`, currently `rackvm4`), since every rackvm mounts the same share and 14 duplicate copies of the same numbers buy nothing.
+
+Three alert rules, because one threshold does not cover the failure modes:
+
+- **Stale** — `newest_file_timestamp` older than 2 days, filtered to `count > 0`. Retention is 7 daily archives, so 2 days is clear of a single missed run. The `count > 0` filter matters: `filecount` reports `newest_file_timestamp = 0` for a directory with no matching files, which reads as epoch 1970 and would otherwise pin that target to a permanent stale alert.
+- **Empty** — `count == 0`, the case the staleness rule excludes. Catches a target that has never produced an archive, or whose whole retention window has aged out.
+- **Absent** — no series at all. An unmounted share emits *nothing* rather than something stale, so silence and health look identical to the first two rules. `Host Deadman` already covers rackvm4 being down, but not Telegraf running fine on a host whose CIFS mount has dropped.
+
+What none of this catches: a backup target directory being **deleted** disappears from the glob silently, the same shape as the absent case but scoped to one target. A pruned service leaves its directory behind, so the ordinary stop-producing case is covered; only an actual `rm -rf` of the target is not.
+
 ## macOS hosts: manual steps at bootstrap
 
 Some macOS state cannot be set from an Ansible run, and the reason differs per case. The playbook does not handle these uniformly, so read the bullet rather than assuming a failed run told you about the problem: `generic/smb-mount` halts on an interactive `pause:` with a 10-minute timeout, `generic/plex` only prints a `debug:` note and continues green, and FileVault has no detection at all.
