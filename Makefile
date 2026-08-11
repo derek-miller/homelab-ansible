@@ -91,9 +91,11 @@ lint:
 # Role test suites are plain-stdlib scripts, so they run in the same minimal
 # venv CI's lint job builds. Three review rounds of watchdog findings were all
 # expressible in this suite; it is a gate, not a courtesy.
+# Galaxy roles ship testinfra suites that need a converged container, not just
+# pytest, so no amount of venv work makes them runnable here.
 .PHONY: test
 test:
-	@set -e; found=0; for t in $$(find playbooks/roles -path '*/tests/test_*.py' | sort); do \
+	@set -e; found=0; for t in $$(find playbooks/roles -path '*/tests/test_*.py' -not -path 'playbooks/roles/galaxy/*' | sort); do \
 		echo "== $$t"; python3 "$$t"; found=1; \
 	done; [ "$$found" = 1 ] || { echo "no test suites found"; exit 1; }
 
