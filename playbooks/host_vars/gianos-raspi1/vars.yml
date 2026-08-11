@@ -75,8 +75,15 @@ docker_compose_definition:
       container_name: docker-volume-backup
       image: offen/docker-volume-backup:latest
       restart: unless-stopped
+      init: true
       networks:
         - apps
+      healthcheck:
+        test: ["CMD-SHELL", "find /archive -name 'backup-*' -mmin -1560 | grep -q ."]
+        interval: 1h
+        timeout: 30s
+        retries: 2
+        start_period: 27h
       environment:
         BACKUP_CRON_EXPRESSION: "0 0 * * *"
         BACKUP_FILENAME: backup-%Y-%m-%dT%H-%M-%S.tar.gz

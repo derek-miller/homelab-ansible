@@ -87,3 +87,22 @@ Three consequences:
 **A dry run of this role is not inert.** Listing an encrypted archive requires decrypting it, so `--check` (`make dry-run`, or the command above with `--check` appended) installs `age` on the target and stages the identity at 0600 exactly as a real run does, removing it afterward. Only the volume writes are simulated: the volume create, the extract, and the ownership fix.
 
 The pipeline sets `pipefail`, so a wrong or missing identity fails the run at the listing step with age's own error. Without it a failed decrypt exits 0 through `tar` and the play reports a successful restore of nothing.
+
+## docker-volume-backup on a Pi is unhealthy
+
+`raspi1`, `gianos-raspi1`, `quinn-raspi1` and `mertins-raspi1` each run an `offen/docker-volume-backup` container on a `0 0 * * *` cron, writing to `/mnt/Backups/Volumes/<host>` over the `unas_over_ts` CIFS mount. The container's healthcheck asserts that directory holds a `backup-*` file newer than 26h, so the **Container Unhealthy** alert is what pages when a nightly stops landing.
+
+**The alert cannot tell you why.** A wedged PID 1, a dropped CIFS mount and a genuinely missed cron all produce an identical unhealthy container. Work through them in this order, from a second Pi so a poisoned mount on the failing host cannot hang the investigation too:
+
+1. **Is the archive actually stale?** `ls -l /mnt/Backups/Volumes/<host>/` from any other Pi. If the newest `backup-*` is under a day old, the archives are fine and the failing host's own view of the share is the suspect.
+2. **Is the mount alive on the failing host?** `timeout 10 ls /mnt/Backups/Volumes/<host>/`. Hanging rather than erroring means the mount is poisoned, and the process doing the listing is now in uninterruptible sleep where `kill -9` cannot reach it. `ps -eo stat,pid,cmd | awk '$1 ~ /^D/'` lists everything already stuck there, and a load average pinned to exactly that count is the same signal read another way. Only a reboot clears D state.
+3. **Is the container's PID 1 alive?** `docker top docker-volume-backup`. A defunct process, or a `docker exec` that reports the container stopped while `docker ps` shows it up, is the wedge this healthcheck exists to catch.
+4. **Force a run.** `docker exec docker-volume-backup backup`. A complete run logs Stored, Pruned and Removed; one that stops after Stored died mid-cycle.
+
+**Nothing restarts the container for you.** `restart: unless-stopped` reacts to process exit, not to health state, so an unhealthy container stays unhealthy until someone intervenes. It cannot be relied on across a reboot either: on 2026-08-11 a wedged container exited 0 during shutdown with `restartCount=0` and stayed down. Recovery is a reboot followed by `make run hosts=<host> tags=docker-compose`, not a container restart; the container's recorded compose working directory is an Ansible temp path that no longer exists, so `docker compose up` from there also fails.
+
+**Expect the first successful run to prune hard.** Retention is 7 days and pruning is done by the same process that wedged, so a long outage leaves every archive past the window and the first completed run deletes them together. Recovering gianos went from 8 archives to 1 in a single run. There is no rollback depth until seven nightlies accumulate, which is worth saying out loud before anyone treats the recovery as finished.
+
+**Detection takes about 28 hours.** 26h of staleness window, plus up to two more hours for two failed checks an hour apart, plus the alert's own pending period. A Friday night failure surfaces on Sunday morning. That is deliberate for a daily backup, but it does mean this is not a same-day signal.
+
+**A fresh host reports `starting`, not `unhealthy`.** `start_period` is 27h, longer than the backup interval, so a newly built Pi is not counted as failing before its first archive can exist. The start period ends at the first passing check rather than at the 27h mark, so any container that has completed one backup reports `healthy` or `unhealthy` and nothing else: `starting` on a host that has been up for days is not benign.
