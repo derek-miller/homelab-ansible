@@ -31,10 +31,13 @@
   hosts: proxmox
   tasks:
     # setup does not populate ansible_facts.packages; only this does, and the
-    # summary below reads pve-manager out of it.
+    # summary below reads pve-manager out of it. It fails the host outright when
+    # no manager yields packages, so a fresh node without python3-apt would abort
+    # this always-tagged play; the summary already degrades to '?' without it.
     - name: gather package facts
       package_facts:
         manager: apt
+      failed_when: false
 
     - name: node summary
       debug:
