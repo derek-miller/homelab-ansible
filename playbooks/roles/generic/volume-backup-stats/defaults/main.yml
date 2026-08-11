@@ -1,0 +1,8 @@
+---
+volume_backup_stats_state: "{{ 'present' if volume_backup_stats_root is truthy else 'absent' }}"
+volume_backup_stats_metric_name: volume_backups
+volume_backup_stats_root: "{{ docker_volume_backup_root|default('', true) }}"
+# Trailing * so an AGE_PUBLIC_KEYS archive, which lands as
+# backup-<ts>.tar.gz.age, still counts toward freshness.
+volume_backup_stats_archive_glob: backup-*.tar.gz*
+volume_backup_stats_interval_s: 300

@@ -83,6 +83,9 @@ raspi1
 [tplink-plug-stats]
 rackvm4
 
+[volume-backup-stats]
+rackvm4
+
 [control4-director-stats]
 rackvm4
 
