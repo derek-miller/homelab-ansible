@@ -18,8 +18,6 @@ authorized_keys:
     user: rackmini
     state: present
 
-# Primary admin/desktop user on this Mac (see macos group_vars for details
-# on what this controls).
 mac_user: rackmini
 
 sudoers:
@@ -38,8 +36,6 @@ tailscale_host_args: --accept-routes
 mac_synthetic_links:
   mnt: /System/Volumes/Data/mnt
 
-# Homebridge UI binds directly to 443 on this host (TLS certs referenced
-# in ~/.homebridge/config.json), so its URL needs no explicit port.
 homebridge_ui_port: 443
 
 smb_mounts:
