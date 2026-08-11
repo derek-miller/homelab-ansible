@@ -166,6 +166,8 @@ proxmox_metrics_verify_certificate: 1
 
 # group_vars/all builds this from groups['docker_labels'], which exists only in
 # playbooks/hosts; under hosts-proxmox it renders an error string instead of raising.
+# The name is a CNAME to wan1.dmiller.me, a DDNS record for WAN1 only, so it does not
+# follow a failover to WAN2 and neither does anything writing through it.
 influxdb3_url: https://influxdb3.dmiller.me
 
 # node-red reformats and decides where these end up. Mail is unusable here, no relayhost.
