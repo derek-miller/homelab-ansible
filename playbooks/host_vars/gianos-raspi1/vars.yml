@@ -83,7 +83,7 @@ docker_compose_definition:
         interval: 1h
         timeout: 30s
         retries: 2
-        start_period: 1m
+        start_period: 27h
       environment:
         BACKUP_CRON_EXPRESSION: "0 0 * * *"
         BACKUP_FILENAME: backup-%Y-%m-%dT%H-%M-%S.tar.gz
