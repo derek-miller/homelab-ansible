@@ -62,7 +62,12 @@ influxdb3_ui_session_secret: !vault |
   30343462623266663664363765643035376330376534343839656663313531653262633531663865
   34323565306365366565613433646537306137376338626139393664353936343861306362333838
   64313936616666613065
-influxdb3_url: https://influxdb3.dmiller.me
+influxdb3_metrics_host: >-
+  {{ groups['docker_labels'] | map('extract', hostvars)
+     | selectattr('docker_labels', 'defined')
+     | selectattr('docker_labels', 'search', '(^|,)\s*metrics\s*(,|$)')
+     | map(attribute='inventory_hostname') | first }}
+influxdb3_url: "http://{{ hostvars[influxdb3_metrics_host].ansible_host }}:8181"
 influxdb3_admin_token: !vault |
   $ANSIBLE_VAULT;1.1;AES256
   33303265633164653663393237313565356461356263376437393531396561356232323830353864

@@ -28,6 +28,7 @@ Without `docker_migrate_labels=yes` the move is only reported and the label reco
 - **CIFS shares** — the target needs whatever the services mount beyond `Backups`.
 - **Locally built images** — `docker_images_to_build` moves with the workload, or the target has no image to run.
 - **Host-network services** — not on the overlay, so Traefik routes them from `external-rules.yaml` by address rather than by discovery. That address is not a label and does not follow the move; repoint it or the service works locally and 502s through Traefik.
+- **Endpoints other hosts write to** — `influxdb3_url` follows the `metrics` label out of the inventory, but each Telegraf agent only picks up the new address when its config is rewritten. Run `make run tags=telegraf` across every host after moving `metrics`, or the agents keep writing to the old address: nothing errors, the graphs just stop filling.
 
 ## Applying updates and rebooting pve1-5
 
