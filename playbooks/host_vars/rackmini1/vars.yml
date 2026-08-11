@@ -39,8 +39,7 @@ mac_synthetic_links:
   mnt: /System/Volumes/Data/mnt
 
 # Homebridge UI binds directly to 443 on this host (TLS certs referenced
-# in ~/.homebridge/config.json), so homebridge.dmiller.me resolves without
-# an explicit port.
+# in ~/.homebridge/config.json), so its URL needs no explicit port.
 homebridge_ui_port: 443
 
 smb_mounts:

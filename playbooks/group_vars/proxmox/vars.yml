@@ -166,7 +166,14 @@ proxmox_metrics_verify_certificate: 1
 
 # group_vars/all builds this from groups['docker_labels'], which exists only in
 # playbooks/hosts; under hosts-proxmox it renders an error string instead of raising.
-influxdb3_url: https://influxdb3.dmiller.me
+# Vaulted to keep the endpoint hostname out of this public repo.
+influxdb3_url: !vault |
+  $ANSIBLE_VAULT;1.1;AES256
+  35626532643365646238646562616464303463346563643632346361616237356535613264303433
+  6366363035643733333265616162373832663161653165380a373736666539346462373536633535
+  34393966613330326362383038656235336439383266643061333166616133623134393734633331
+  3232383532323733370a303130313732343237636234323039346164613031356566373032383232
+  38643933323866346337316665303734303131343931383034613036373663623231
 
 # node-red reformats and decides where these end up. Mail is unusable here, no relayhost.
 proxmox_notification_targets:
