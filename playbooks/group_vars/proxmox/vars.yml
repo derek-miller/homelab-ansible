@@ -164,6 +164,10 @@ proxmox_metrics_proto: https
 proxmox_metrics_bucket: pve
 proxmox_metrics_verify_certificate: 1
 
+# group_vars/all builds this from groups['docker_labels'], which exists only in
+# playbooks/hosts; under hosts-proxmox it renders an error string instead of raising.
+influxdb3_url: https://influxdb3.dmiller.me
+
 # node-red reformats and decides where these end up. Mail is unusable here, no relayhost.
 proxmox_notification_targets:
   - name: node-red
