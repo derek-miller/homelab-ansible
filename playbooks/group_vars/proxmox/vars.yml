@@ -164,8 +164,6 @@ proxmox_metrics_proto: https
 proxmox_metrics_bucket: pve
 proxmox_metrics_verify_certificate: 1
 
-# group_vars/all builds this from groups['docker_labels'], which exists only in
-# playbooks/hosts; under hosts-proxmox it renders an error string instead of raising.
 influxdb3_url: !vault |
   $ANSIBLE_VAULT;1.1;AES256
   35626532643365646238646562616464303463346563643632346361616237356535613264303433
