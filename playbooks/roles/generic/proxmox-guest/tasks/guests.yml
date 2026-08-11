@@ -12,6 +12,9 @@
   loop_control:
     label: "{{ item.0.name }} {{ item.1.iface }}"
 
+# validate_certs stays off here and on the hardware task below: the API is served
+# by the node's self-signed pve-ssl.pem, issued by the cluster's own CA, which the
+# controller has no copy of.
 - name: clone guests from the template
   community.proxmox.proxmox_kvm:
     api_host: "{{ proxmox_api_host }}"
@@ -21,9 +24,9 @@
     validate_certs: no
     node: "{{ item.node }}"
     clone: "{{ proxmox_guest_template_name }}"
-    # Source template lives on the guest's own node, so its id is derived from
-    # that node rather than from the host running this play.
-    vmid: "{{ 9000 + hostvars[item.node].proxmox_nodeid }}"
+    # Source template lives on the guest's own node, so its id is read from that
+    # node's vars rather than from the host running this play.
+    vmid: "{{ hostvars[item.node].proxmox_guest_template_vmid }}"
     newid: "{{ item.vmid }}"
     name: "{{ item.name }}"
     full: yes

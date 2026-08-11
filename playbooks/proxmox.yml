@@ -30,6 +30,15 @@
 - name: connect and gather facts
   hosts: proxmox
   tasks:
+    # setup does not populate ansible_facts.packages; only this does, and the
+    # summary below reads pve-manager out of it. It fails the host outright when
+    # no manager yields packages, so a fresh node without python3-apt would abort
+    # this always-tagged play; the summary already degrades to '?' without it.
+    - name: gather package facts
+      package_facts:
+        manager: apt
+      failed_when: false
+
     - name: node summary
       debug:
         msg: >-
@@ -38,7 +47,6 @@
           {{ ansible_processor_vcpus }} CPU(s),
           {{ ansible_memtotal_mb }} MB memory,
           pve {{ ansible_facts.packages['pve-manager'][0].version | default('?') }}
-      when: ansible_facts.packages is defined
   tags:
     - always
     - connect
