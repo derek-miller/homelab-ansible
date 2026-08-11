@@ -34,10 +34,9 @@
 - name: "{{ volume_name }} | show restore command"
   debug:
     msg: >-
-      Will run: docker run --rm
-      -v {{ docker_restore_latest_backup }}:/archive/backup.tar.gz:ro
-      -v {{ full_volume_name }}:/restore
-      alpine sh -c 'tar -xzf /archive/backup.tar.gz --strip-components=2 -C /restore backup/{{ volume_name }}/'
+      Will run: {{ docker_restore_archive_cat }} | docker run --rm -i
+      -v {{ full_volume_name | quote }}:/restore
+      alpine tar -xzf - --strip-components=2 -C /restore {{ ('backup/' ~ volume_name ~ '/') | quote }}
   when:
     - ansible_check_mode
     - volume_inspect.rc != 0
@@ -49,12 +48,15 @@
   when: volume_inspect.rc != 0
 
 - name: "{{ volume_name }} | restore volume data from backup"
-  command: >-
-    docker run --rm
-    -v {{ docker_restore_latest_backup }}:/archive/backup.tar.gz:ro
-    -v {{ full_volume_name }}:/restore
+  shell: >-
+    set -o pipefail;
+    {{ docker_restore_archive_cat }}
+    | docker run --rm -i
+    -v {{ full_volume_name | quote }}:/restore
     alpine
-    sh -c 'tar -xzf /archive/backup.tar.gz --strip-components=2 -C /restore backup/{{ volume_name }}/'
+    tar -xzf - --strip-components=2 -C /restore {{ ('backup/' ~ volume_name ~ '/') | quote }}
+  args:
+    executable: /bin/bash
   when: >-
     volume_inspect.rc != 0
     or volume_contents.stdout | default('') | length == 0

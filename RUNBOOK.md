@@ -65,3 +65,25 @@ Some macOS state cannot be set from an Ansible run, and the reason differs per c
 - **autofs SMB map** — autofs only reads `/etc/auto_smb` when `/etc/auto_master` carries a `/-  auto_smb` direct-map line. Only an interactive local Terminal.app session can write that file: direct SSH write, a boot-time LaunchDaemon, and SSH with Full Disk Access granted to sshd all fail identically with EPERM. The role writes the map itself over SSH, then detects a missing `auto_master` line and pauses for 10 minutes with the exact command to paste. **macOS updates reset `/etc/auto_master` and strip the line, so after every OS update re-run `make run hosts=<host> tags=smb-mount` and be at the Mac to answer the prompt** — the re-run only detects the problem, it cannot fix it. Leave the prompt unanswered and the pause times out, then the verify task fails the play for that host.
 - **Plex "Open at Login"** — the menu-bar app registers its own LaunchAgent via LSSharedFileList, which needs Automation TCC and so cannot be set programmatically. After `generic/plex` installs the cask, launch Plex once via VNC or console and tick the box. The role prints instructions until the LaunchAgent appears.
 - **FileVault login on reboot** — after a power cycle the Mac sits at the login screen until a human logs in, because user LaunchAgents only run post-login. No workaround; design-accepted.
+
+## Restoring volumes from a backup archive
+
+`generic/docker/restore-volumes` reads a `offen/docker-volume-backup` archive off the `Backups` share and writes each `backup/<volume>/` directory it finds back into the matching docker volume. It is opt-in per host:
+
+```bash
+make run hosts=<host> tags=docker-restore-volumes ANSIBLE_FLAGS="-e docker_restore_volumes=yes"
+```
+
+Swarm nodes are drained for the duration and made active again afterward, so the services release their volumes while the data lands. The role picks the **newest archive by filename** in `<docker_volume_backup_root>/<label>` and never asks: `docker_restore_volumes_label` chooses the directory, and `docker_restore_volumes_only` narrows which volumes come out of it. A volume that already holds data is skipped unless `docker_restore_volumes_force=yes`, the only guard against overwriting live data.
+
+**Encrypted archives are handled by suffix, not by configuration.** Turning on `AGE_PUBLIC_KEYS` for a backup service makes it write `backup-<ts>.tar.gz.age`; the role discovers both shapes and switches on the trailing `.age` of whichever archive is newest. A directory mid-cutover holds both, and the newest wins either way, so the cutover works in either direction.
+
+Three consequences:
+
+- **The private key is not on the fleet.** It lives vault-encrypted in the repo and is staged to the restore target at 0600 for the length of the run, check runs included, then removed in an `always` block, including when the run fails. A compromised node holds only the public key, so it cannot read any archive, including the ones it wrote itself. `age` is installed on demand on the target, from Debian stable.
+- **Decryption is streamed, never written to disk.** The archive is bind-mounted from `/mnt/Backups`, so decrypting it in place would write the cleartext back onto the share the encryption is protecting. Nothing is written next to the archive.
+- **Recovery needs the repo and the vault password.** Neither can live only on the fleet it protects. The archives on the NAS are recoverable exactly as far as that password is.
+
+**A dry run of this role is not inert.** Listing an encrypted archive requires decrypting it, so `--check` (`make dry-run`, or the command above with `--check` appended) installs `age` on the target and stages the identity at 0600 exactly as a real run does, removing it afterward. Only the volume writes are simulated: the volume create, the extract, and the ownership fix.
+
+The pipeline sets `pipefail`, so a wrong or missing identity fails the run at the listing step with age's own error. Without it a failed decrypt exits 0 through `tar` and the play reports a successful restore of nothing.

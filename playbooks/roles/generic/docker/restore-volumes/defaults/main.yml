@@ -10,3 +10,12 @@ docker_restore_volumes_backup_dir: >-
 # volumes from the source archive should land on the target host.
 # Example: docker_restore_volumes_only=["sourcebot-data", "sourcebot-redis"]
 docker_restore_volumes_only: []
+
+# offen appends the encryption method to the filename, so an AGE_PUBLIC_KEYS
+# archive lands as backup-<ts>.tar.gz.age.
+docker_restore_volumes_archive_patterns:
+  - "backup-*.tar.gz"
+  - "backup-*.tar.gz.age"
+
+docker_restore_volumes_age_identity_file: vault/docker-volume-backup-age.key
+docker_restore_volumes_age_identity_path: /root/.docker-volume-backup-age.key
