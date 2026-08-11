@@ -69,6 +69,13 @@
     - proxmox
     - proxmox-cluster
 
+- name: telegraf
+  hosts: proxmox
+  roles:
+    - role: generic/telegraf
+  tags:
+    - telegraf
+
 - name: proxmox guest templates
   hosts: proxmox
   roles:
