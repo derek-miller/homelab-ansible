@@ -8,6 +8,9 @@ swarm_node_labels: >-
 
 docker_volume_backup_root: /mnt/Backups/Volumes
 docker_migrate_transit_dir: /mnt/Backups/migrate
+# Recipient for offen's AGE_PUBLIC_KEYS. Its private half is
+# playbooks/files/vault/docker-volume-backup-age.key.
+docker_volume_backup_age_public_key: age1nzyr0mk08nwy7x0w2wjw462kvnyq6lwhmgufzyzl4xq57gtdv40qe8lnqg
 
 pip_default_index_url: https://pypi.python.org/simple
 pip_version_spec:

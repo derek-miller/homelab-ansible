@@ -104,11 +104,12 @@ Swarm nodes are drained for the duration and made active again afterward, so the
 
 **Encrypted archives are handled by suffix, not by configuration.** Turning on `AGE_PUBLIC_KEYS` for a backup service makes it write `backup-<ts>.tar.gz.age`; the role discovers both shapes and switches on the trailing `.age` of whichever archive is newest. A directory mid-cutover holds both, and the newest wins either way, so the cutover works in either direction.
 
-Three consequences:
+Four consequences:
 
 - **The private key is not on the fleet.** It lives vault-encrypted in the repo and is staged to the restore target at 0600 for the length of the run, check runs included, then removed in an `always` block, including when the run fails. A compromised node holds only the public key, so it cannot read any archive, including the ones it wrote itself. `age` is installed on demand on the target, from Debian stable.
 - **Decryption is streamed, never written to disk.** The archive is bind-mounted from `/mnt/Backups`, so decrypting it in place would write the cleartext back onto the share the encryption is protecting. Nothing is written next to the archive.
 - **Recovery needs the repo and the vault password.** Neither can live only on the fleet it protects. The archives on the NAS are recoverable exactly as far as that password is.
+- **Rotating the keypair does not reach the archives already written.** Each one stays readable only by the identity it was encrypted to, so a retired key has to be kept until the last archive naming it as recipient ages out of the 7 day retention.
 
 **A dry run of this role is not inert.** Listing an encrypted archive requires decrypting it, so `--check` (`make dry-run`, or the command above with `--check` appended) installs `age` on the target and stages the identity at 0600 exactly as a real run does, removing it afterward. Only the volume writes are simulated: the volume create, the extract, and the ownership fix.
 
