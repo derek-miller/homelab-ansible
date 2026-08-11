@@ -20,7 +20,7 @@
 - name: find latest backup archive
   find:
     paths: "{{ docker_restore_volumes_backup_dir }}"
-    patterns: "backup-*.tar.gz"
+    patterns: "{{ docker_restore_volumes_archive_patterns }}"
     file_type: file
   register: backup_files
 
@@ -33,71 +33,123 @@
   set_fact:
     docker_restore_latest_backup: "{{ (backup_files.files | sort(attribute='path') | last).path }}"
 
+- name: note whether the selected archive is encrypted
+  set_fact:
+    docker_restore_backup_encrypted: "{{ docker_restore_latest_backup.endswith('.age') }}"
+
 - name: display selected backup archive
   debug:
-    msg: "Restoring from: {{ docker_restore_latest_backup }}"
-
-- name: list volume directories in archive
-  command: "tar -tzf {{ docker_restore_latest_backup }}"
-  changed_when: false
-  check_mode: false
-  register: archive_contents
-
-- name: extract unique volume names from archive
-  set_fact:
-    _docker_restore_archive_volumes: >-
-      {{ archive_contents.stdout_lines
-         | map('regex_search', '^/?backup/([^/]+)/', '\1')
-         | select('ne', None)
-         | map('first')
-         | unique
-         | list }}
-
-# When docker_restore_volumes_only is set, restrict the restore to just
-# those volumes AND fail loudly if any requested name isn't in the
-# archive — silently skipping a missing volume would leave the operator
-# thinking their data was restored.
-- name: narrow restore to docker_restore_volumes_only (if set)
-  set_fact:
-    docker_restore_volume_names: >-
-      {{ _docker_restore_archive_volumes
-         if (docker_restore_volumes_only | length == 0)
-         else (docker_restore_volumes_only | intersect(_docker_restore_archive_volumes)) }}
-
-- name: fail if any requested volume is missing from archive
-  fail:
     msg: >-
-      docker_restore_volumes_only lists volumes not present in the archive:
-      {{ docker_restore_volumes_only | difference(_docker_restore_archive_volumes) | join(', ') }}.
-      Archive contains: {{ _docker_restore_archive_volumes | join(', ') }}.
-  when:
-    - docker_restore_volumes_only | length > 0
-    - (docker_restore_volumes_only | difference(_docker_restore_archive_volumes)) | length > 0
+      Restoring from: {{ docker_restore_latest_backup }}
+      ({{ 'age-encrypted' if (docker_restore_backup_encrypted | bool) else 'plaintext' }})
 
-- name: determine volume name prefix (swarm hosts)
-  set_fact:
-    docker_restore_volume_prefix: >-
-      {{ hostvars[groups['docker_swarm_manager'][0]].docker_stack_name
-         | default(groups['docker_swarm_manager'][0]) }}
-  when: "'docker_swarm_manager' in group_names or 'docker_swarm_worker' in group_names"
+- name: restore from the selected archive
+  block:
+    # tags= expands to --skip-tags=base,common, so common's apt update is
+    # skipped for the documented restore command.
+    - name: install age to decrypt the archive
+      apt:
+        name: age
+        state: present
+        update_cache: yes
+        cache_valid_time: 3600
+      check_mode: false
+      when: docker_restore_backup_encrypted | bool
 
-- name: determine volume name prefix (compose hosts)
-  set_fact:
-    docker_restore_volume_prefix: "{{ docker_compose_project_name | default(inventory_hostname) }}"
-  when: "'docker_swarm_manager' not in group_names and 'docker_swarm_worker' not in group_names"
+    - name: stage the age identity on the restore target
+      copy:
+        src: "{{ docker_restore_volumes_age_identity_file }}"
+        dest: "{{ docker_restore_volumes_age_identity_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      diff: no
+      check_mode: false
+      when: docker_restore_backup_encrypted | bool
 
-- name: display volumes to restore
-  debug:
-    msg: >-
-      Found {{ docker_restore_volume_names | length }} volume(s):
-      {{ docker_restore_volume_names | join(', ') }}.
-      Prefix: {{ docker_restore_volume_prefix }}
+    # One {{ }} on purpose: a folded scalar keeps the newline before a
+    # more-indented line, which silently makes this two shell commands.
+    - name: build the archive read command
+      set_fact:
+        docker_restore_archive_cat: >-
+          {{ ('age --decrypt --identity ' ~ (docker_restore_volumes_age_identity_path | quote)
+              if (docker_restore_backup_encrypted | bool) else 'cat')
+             ~ ' ' ~ (docker_restore_latest_backup | quote) }}
 
-- name: restore each volume
-  include_tasks: restore_volume.yml
-  loop: "{{ docker_restore_volume_names }}"
-  loop_control:
-    loop_var: volume_name
+    # Without pipefail a failed decrypt exits 0 through tar, leaving an empty
+    # volume list and a play that reports a clean restore of nothing.
+    - name: list volume directories in archive
+      shell: "set -o pipefail; {{ docker_restore_archive_cat }} | tar -tzf -"
+      args:
+        executable: /bin/bash
+      changed_when: false
+      check_mode: false
+      register: archive_contents
+
+    - name: extract unique volume names from archive
+      set_fact:
+        _docker_restore_archive_volumes: >-
+          {{ archive_contents.stdout_lines
+             | map('regex_search', '^/?backup/([^/]+)/', '\1')
+             | select('ne', None)
+             | map('first')
+             | unique
+             | list }}
+
+    - name: fail if the archive yielded no volumes
+      fail:
+        msg: >-
+          {{ docker_restore_latest_backup }} listed no backup/<volume>/ entries.
+          The archive is empty, truncated, or did not decrypt.
+      when: _docker_restore_archive_volumes | length == 0
+
+    - name: narrow restore to docker_restore_volumes_only (if set)
+      set_fact:
+        docker_restore_volume_names: >-
+          {{ _docker_restore_archive_volumes
+             if (docker_restore_volumes_only | length == 0)
+             else (docker_restore_volumes_only | intersect(_docker_restore_archive_volumes)) }}
+
+    - name: fail if any requested volume is missing from archive
+      fail:
+        msg: >-
+          docker_restore_volumes_only lists volumes not present in the archive:
+          {{ docker_restore_volumes_only | difference(_docker_restore_archive_volumes) | join(', ') }}.
+          Archive contains: {{ _docker_restore_archive_volumes | join(', ') }}.
+      when:
+        - docker_restore_volumes_only | length > 0
+        - (docker_restore_volumes_only | difference(_docker_restore_archive_volumes)) | length > 0
+
+    - name: determine volume name prefix (swarm hosts)
+      set_fact:
+        docker_restore_volume_prefix: >-
+          {{ hostvars[groups['docker_swarm_manager'][0]].docker_stack_name
+             | default(groups['docker_swarm_manager'][0]) }}
+      when: "'docker_swarm_manager' in group_names or 'docker_swarm_worker' in group_names"
+
+    - name: determine volume name prefix (compose hosts)
+      set_fact:
+        docker_restore_volume_prefix: "{{ docker_compose_project_name | default(inventory_hostname) }}"
+      when: "'docker_swarm_manager' not in group_names and 'docker_swarm_worker' not in group_names"
+
+    - name: display volumes to restore
+      debug:
+        msg: >-
+          Found {{ docker_restore_volume_names | length }} volume(s):
+          {{ docker_restore_volume_names | join(', ') }}.
+          Prefix: {{ docker_restore_volume_prefix }}
+
+    - name: restore each volume
+      include_tasks: restore_volume.yml
+      loop: "{{ docker_restore_volume_names }}"
+      loop_control:
+        loop_var: volume_name
+  always:
+    - name: remove the age identity from the restore target
+      file:
+        path: "{{ docker_restore_volumes_age_identity_path }}"
+        state: absent
+      check_mode: false
 
 - name: remind user to remove restore flag
   debug:
