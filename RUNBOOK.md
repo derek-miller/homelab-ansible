@@ -66,13 +66,19 @@ The glob is load bearing. `filecount` emits **one series per entry in `directori
 
 It runs on one host (`[volume-backup-stats]`, currently `rackvm4`), since every rackvm mounts the same share and 14 duplicate copies of the same numbers buy nothing.
 
-Three alert rules, because one threshold does not cover the failure modes:
+Anything placed under `docker_volume_backup_root` is monitored, unconditionally. There is no exclusion list and no name matching, which is what keeps a new backup target from needing a monitoring change to be covered — and what stops a rename from silently dropping one out of coverage.
 
-- **Stale** — `newest_file_timestamp` older than 2 days, filtered to `count > 0`. Retention is 7 daily archives, so 2 days is clear of a single missed run. The `count > 0` filter matters: `filecount` reports `newest_file_timestamp = 0` for a directory with no matching files, which reads as epoch 1970 and would otherwise pin that target to a permanent stale alert.
-- **Empty** — `count == 0`, the case the staleness rule excludes. Catches a target that has never produced an archive, or whose whole retention window has aged out.
-- **Absent** — no series at all. An unmounted share emits *nothing* rather than something stale, so silence and health look identical to the first two rules. `Host Deadman` already covers rackvm4 being down, but not Telegraf running fine on a host whose CIFS mount has dropped.
+That is why retired backups go in `/mnt/Backups/RetiredVolumes/`, a sibling of `Volumes` rather than a child. A folder of deliberately kept archives inside the monitored root would sit at `count > 0` with an old timestamp forever, which is a `Volume Backup Stale` alert that can never clear. Restoring from one needs `docker_restore_volumes_backup_dir` set directly: `generic/docker/restore-volumes` derives its path as `<docker_volume_backup_root>/<label>`, so `docker_restore_volumes_label` cannot reach outside the monitored root.
+
+Three alert rules, in the Grafana rule group `backup`, because one threshold does not cover the failure modes. This repo provisions no Grafana alerting, so they are configured in Grafana itself and appear nowhere in this tree:
+
+- **Volume Backup Stale** — `newest_file_timestamp` older than 2 days, filtered to `count > 0`. Retention is 7 daily archives, so 2 days is clear of a single missed run. The `count > 0` filter matters: `filecount` reports `newest_file_timestamp = 0` for a directory with no matching files, which reads as epoch 1970 and would otherwise pin that target to a permanent stale alert.
+- **Volume Backup Empty** — `count == 0`, the case the staleness rule excludes. Catches a target that has never produced an archive, or whose whole retention window has aged out.
+- **Volume Backup Metrics Absent** — no series at all. An unmounted share emits *nothing* rather than something stale, so silence and health look identical to the first two rules. `Host Deadman` already covers rackvm4 being down, but not Telegraf running fine on a host whose CIFS mount has dropped.
 
 What none of this catches: a backup target directory being **deleted** disappears from the glob silently, the same shape as the absent case but scoped to one target. A pruned service leaves its directory behind, so the ordinary stop-producing case is covered; only an actual `rm -rf` of the target is not.
+
+Nor does it catch a *partial* archive. `offen` builds the archive under `/tmp` inside the container and then byte-copies it onto the share under its final name, and it does not unlink the destination if that copy dies partway (`internal/storage/local/local.go`: `os.Create` then `io.Copy`, no rename anywhere in the tree). A copy interrupted by a dropped mount leaves a truncated `backup-<ts>.tar.gz` carrying a current mtime, which reads as fresh. Freshness here means an archive arrived, not that it is complete or restorable.
 
 ## macOS hosts: manual steps at bootstrap
 
