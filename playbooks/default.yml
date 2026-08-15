@@ -207,15 +207,10 @@
     # galaxy/docker-swarm dereferences the primary's docker_swarm_addr on every
     # host with no guard, and it is Galaxy-managed so we cannot fix it there.
     - name: the primary swarm manager must be in this run
-      assert:
-        that: groups['docker_swarm_manager'][0] in ansible_play_hosts
-        fail_msg: >-
-          {{ groups['docker_swarm_manager'][0] }} is not in this run, so
-          galaxy/docker-swarm cannot read its docker_swarm_addr and every other
-          node fails with an unrelated attribute error. It failed or went
-          unreachable in an earlier play above; fix that, or re-run including it.
-        quiet: yes
-      run_once: yes
+      include_role:
+        name: generic/docker/require-swarm-manager
+      vars:
+        require_swarm_manager_scope: primary
   roles:
     - role: galaxy/docker-swarm
   post_tasks:
@@ -223,14 +218,14 @@
       community.docker.docker_node:
         hostname: "{{ inventory_hostname }}"
         role: "{{ 'manager' if 'docker_swarm_manager' in group_names else 'worker' }}"
-      delegate_to: "{{ docker_swarm_primary_manager_name }}"
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
 
     - name: reconcile swarm node labels with docker_labels
       community.docker.docker_node:
         hostname: "{{ inventory_hostname }}"
         labels: "{{ swarm_node_labels }}"
         labels_state: replace
-      delegate_to: "{{ docker_swarm_primary_manager_name }}"
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
       when: docker_labels_reconcile_allowed | bool
 
     - name: the edge label must sit on a manager
@@ -246,9 +241,20 @@
 
 - hosts: docker
   pre_tasks:
+    # [docker] also holds the non-swarm compose Pis (no drain, no manager), so
+    # only guard when the run holds a swarm node. Play-wide, not group_names:
+    # the assert is run_once, so a per-host test would read only the first host.
+    - name: a swarm manager must be in this run to restore a swarm node
+      include_role:
+        name: generic/docker/require-swarm-manager
+      when:
+        - docker_restore_volumes | default(false) | bool
+        - (groups['docker_swarm_manager'] + groups['docker_swarm_worker'])
+          | intersect(ansible_play_hosts) | length > 0
+
     - name: drain node before volume restore
       command: "docker node update --availability drain {{ inventory_hostname }}"
-      delegate_to: "{{ groups['docker_swarm_manager'][0] }}"
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
       when:
         - docker_restore_volumes | default(false) | bool
         - "'docker_swarm_manager' in group_names or 'docker_swarm_worker' in group_names"
@@ -258,7 +264,7 @@
   post_tasks:
     - name: activate node after volume restore
       command: "docker node update --availability active {{ inventory_hostname }}"
-      delegate_to: "{{ groups['docker_swarm_manager'][0] }}"
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
       when:
         - docker_restore_volumes | default(false) | bool
         - "'docker_swarm_manager' in group_names or 'docker_swarm_worker' in group_names"

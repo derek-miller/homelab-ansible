@@ -1,0 +1,4 @@
+---
+# Which manager must be present: 'any' (delegate admin commands through any
+# manager's socket) or 'primary' (galaxy reads the primary's docker_swarm_addr).
+require_swarm_manager_scope: any

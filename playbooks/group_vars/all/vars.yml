@@ -6,6 +6,14 @@ swarm_node_labels: >-
           | map('trim') | select | list
           | zip_longest([], fillvalue='true')) }}
 
+# A manager to run swarm-admin commands through (drain/activate, label reconcile).
+# Prefers one already in the run, so a scoped hosts=<manager> drains through
+# itself rather than demanding the primary be connected; else the primary.
+docker_swarm_delegate_manager: >-
+  {{ (groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | sort | first)
+     if (groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | length > 0)
+     else (groups['docker_swarm_manager'] | first) }}
+
 docker_volume_backup_root: /mnt/Backups/Volumes
 docker_migrate_transit_dir: /mnt/Backups/migrate
 # Recipient for offen's AGE_PUBLIC_KEYS. Its private half is
