@@ -243,11 +243,17 @@
   pre_tasks:
     # The drain below runs through a manager socket; a scoped run that targets
     # only workers has none, so fail here with a fix rather than a stray SSH
-    # error against the primary.
+    # error against the primary. Only when the run holds a swarm node, though:
+    # [docker] also carries the non-swarm compose hosts (the Pis), which restore
+    # with no drain and no manager. Play-wide, not group_names — the assert is
+    # run_once, so a per-host test would read only whichever host runs first.
     - name: a swarm manager must be in this run to restore a swarm node
       include_role:
         name: generic/docker/require-swarm-manager
-      when: docker_restore_volumes | default(false) | bool
+      when:
+        - docker_restore_volumes | default(false) | bool
+        - (groups['docker_swarm_manager'] + groups['docker_swarm_worker'])
+          | intersect(ansible_play_hosts) | length > 0
 
     - name: drain node before volume restore
       command: "docker node update --availability drain {{ inventory_hostname }}"

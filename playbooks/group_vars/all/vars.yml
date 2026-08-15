@@ -10,8 +10,9 @@ swarm_node_labels: >-
 # reconcile). Any manager's socket can drive these, so prefer one already in the
 # run: a scoped `hosts=<manager>` drains through that node itself, with no
 # demand that the primary be connected. Falls back to the primary only when no
-# manager is in the run — a worker-only limit, which then fails at the command
-# with a clear "no manager in this run" assert rather than a stray hardcode.
+# manager is in the run — a worker-only limit. The restore play's
+# require-swarm-manager guard rejects that up front; the reconcile play already
+# requires the primary, so the fallback is never reached there.
 docker_swarm_delegate_manager: >-
   {{ (groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | sort | first)
      if (groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | length > 0)
