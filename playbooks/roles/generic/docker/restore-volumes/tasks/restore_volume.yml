@@ -47,6 +47,21 @@
   command: "docker volume create {{ full_volume_name }}"
   when: volume_inspect.rc != 0
 
+# Before the extract, not after: the archive's own sidecars (older archives still
+# carry them) must survive; only a stale one left in the target must go. tar
+# overlays rather than replaces, and SQLite replays a journal beside whatever .db
+# it opens next to, with no binding to the copy it came from.
+- name: "{{ volume_name }} | drop stale SQLite sidecars before extracting"
+  command: >-
+    docker run --rm
+    -v {{ full_volume_name | quote }}:/restore
+    alpine
+    find /restore -type f \( -name '*-wal' -o -name '*-shm' -o -name '*-journal' \) -delete
+  when: >-
+    volume_inspect.rc != 0
+    or volume_contents.stdout | default('') | length == 0
+    or (docker_restore_volumes_force | bool)
+
 - name: "{{ volume_name }} | restore volume data from backup"
   shell: >-
     set -o pipefail;
@@ -62,17 +77,6 @@
     or volume_contents.stdout | default('') | length == 0
     or (docker_restore_volumes_force | bool)
   register: restore_result
-
-# The archive no longer carries SQLite -wal/-shm/-journal (backups exclude them),
-# and tar overlays rather than replaces, so a sidecar left in the target from a
-# prior restore would be replayed onto the freshly restored .db and corrupt it.
-- name: "{{ volume_name }} | drop stale SQLite sidecars left in the target volume"
-  command: >-
-    docker run --rm
-    -v {{ full_volume_name | quote }}:/restore
-    alpine
-    find /restore -type f \( -name '*-wal' -o -name '*-shm' -o -name '*-journal' \) -delete
-  when: restore_result is changed
 
 - name: "{{ volume_name }} | fix volume root ownership to match contents"
   command: >-
