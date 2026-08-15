@@ -1,8 +1,4 @@
 ---
-# One guard for "the swarm manager this play needs is actually in the run", so a
-# scoped hosts= run fails with a fix instead of a stray delegated-command error
-# against a host the run never connected. Include it, optionally with
-# require_swarm_manager_scope: primary. See defaults/main.yml for the scopes.
 - name: "require-swarm-manager | scope must be 'any' or 'primary'"
   assert:
     that: require_swarm_manager_scope in ['any', 'primary']

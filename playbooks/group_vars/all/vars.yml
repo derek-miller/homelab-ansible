@@ -6,13 +6,9 @@ swarm_node_labels: >-
           | map('trim') | select | list
           | zip_longest([], fillvalue='true')) }}
 
-# Manager to run swarm-admin commands through (node drain/activate, label
-# reconcile). Any manager's socket can drive these, so prefer one already in the
-# run: a scoped `hosts=<manager>` drains through that node itself, with no
-# demand that the primary be connected. Falls back to the primary only when no
-# manager is in the run — a worker-only limit. The restore play's
-# require-swarm-manager guard rejects that up front; the reconcile play already
-# requires the primary, so the fallback is never reached there.
+# A manager to run swarm-admin commands through (drain/activate, label reconcile).
+# Prefers one already in the run, so a scoped hosts=<manager> drains through
+# itself rather than demanding the primary be connected; else the primary.
 docker_swarm_delegate_manager: >-
   {{ (groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | sort | first)
      if (groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | length > 0)

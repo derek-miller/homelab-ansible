@@ -241,12 +241,9 @@
 
 - hosts: docker
   pre_tasks:
-    # The drain below runs through a manager socket; a scoped run that targets
-    # only workers has none, so fail here with a fix rather than a stray SSH
-    # error against the primary. Only when the run holds a swarm node, though:
-    # [docker] also carries the non-swarm compose hosts (the Pis), which restore
-    # with no drain and no manager. Play-wide, not group_names — the assert is
-    # run_once, so a per-host test would read only whichever host runs first.
+    # [docker] also holds the non-swarm compose Pis (no drain, no manager), so
+    # only guard when the run holds a swarm node. Play-wide, not group_names:
+    # the assert is run_once, so a per-host test would read only the first host.
     - name: a swarm manager must be in this run to restore a swarm node
       include_role:
         name: generic/docker/require-swarm-manager
