@@ -207,15 +207,10 @@
     # galaxy/docker-swarm dereferences the primary's docker_swarm_addr on every
     # host with no guard, and it is Galaxy-managed so we cannot fix it there.
     - name: the primary swarm manager must be in this run
-      assert:
-        that: groups['docker_swarm_manager'][0] in ansible_play_hosts
-        fail_msg: >-
-          {{ groups['docker_swarm_manager'][0] }} is not in this run, so
-          galaxy/docker-swarm cannot read its docker_swarm_addr and every other
-          node fails with an unrelated attribute error. It failed or went
-          unreachable in an earlier play above; fix that, or re-run including it.
-        quiet: yes
-      run_once: yes
+      include_role:
+        name: generic/docker/require-swarm-manager
+      vars:
+        require_swarm_manager_scope: primary
   roles:
     - role: galaxy/docker-swarm
   post_tasks:
@@ -250,14 +245,8 @@
     # only workers has none, so fail here with a fix rather than a stray SSH
     # error against the primary.
     - name: a swarm manager must be in this run to restore a swarm node
-      assert:
-        that: groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | length > 0
-        fail_msg: >-
-          Restoring a swarm node runs 'docker node update' through a manager, but
-          no swarm manager is in this run. Add one to hosts= — the node itself if
-          it is a manager, otherwise a manager alongside the worker being restored.
-        quiet: yes
-      run_once: yes
+      include_role:
+        name: generic/docker/require-swarm-manager
       when: docker_restore_volumes | default(false) | bool
 
     - name: drain node before volume restore

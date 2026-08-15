@@ -1,0 +1,35 @@
+---
+# One guard for "the swarm manager this play needs is actually in the run", so a
+# scoped hosts= run fails with a fix instead of a stray delegated-command error
+# against a host the run never connected. Include it, optionally with
+# require_swarm_manager_scope: primary. See defaults/main.yml for the scopes.
+- name: "require-swarm-manager | scope must be 'any' or 'primary'"
+  assert:
+    that: require_swarm_manager_scope in ['any', 'primary']
+    fail_msg: >-
+      require_swarm_manager_scope must be 'any' or 'primary',
+      got '{{ require_swarm_manager_scope }}'.
+    quiet: yes
+  run_once: yes
+
+- name: "require-swarm-manager | a swarm manager must be in this run"
+  assert:
+    that: groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | length > 0
+    fail_msg: >-
+      This play runs a swarm-admin command ('docker node update') through a
+      manager socket, but no swarm manager is in this run. Add one to hosts= —
+      the node itself if it is a manager, otherwise a manager alongside it.
+    quiet: yes
+  run_once: yes
+  when: require_swarm_manager_scope == 'any'
+
+- name: "require-swarm-manager | the primary swarm manager must be in this run"
+  assert:
+    that: groups['docker_swarm_manager'][0] in ansible_play_hosts
+    fail_msg: >-
+      {{ groups['docker_swarm_manager'][0] }} is not in this run, so
+      galaxy/docker-swarm cannot read its docker_swarm_addr and every other node
+      fails with an unrelated attribute error. Re-run including it.
+    quiet: yes
+  run_once: yes
+  when: require_swarm_manager_scope == 'primary'

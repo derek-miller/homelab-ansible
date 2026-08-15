@@ -1,0 +1,7 @@
+---
+# Which manager must be present for the including play to be safe:
+#   any     - some manager is in the run, enough to delegate admin commands
+#             ('docker node update') through its socket.
+#   primary - the primary specifically, whose docker_swarm_addr galaxy/docker-swarm
+#             dereferences on every node.
+require_swarm_manager_scope: any
