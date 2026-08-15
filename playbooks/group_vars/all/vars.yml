@@ -6,6 +6,17 @@ swarm_node_labels: >-
           | map('trim') | select | list
           | zip_longest([], fillvalue='true')) }}
 
+# Manager to run swarm-admin commands through (node drain/activate, label
+# reconcile). Any manager's socket can drive these, so prefer one already in the
+# run: a scoped `hosts=<manager>` drains through that node itself, with no
+# demand that the primary be connected. Falls back to the primary only when no
+# manager is in the run — a worker-only limit, which then fails at the command
+# with a clear "no manager in this run" assert rather than a stray hardcode.
+docker_swarm_delegate_manager: >-
+  {{ (groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | sort | first)
+     if (groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | length > 0)
+     else (groups['docker_swarm_manager'] | first) }}
+
 docker_volume_backup_root: /mnt/Backups/Volumes
 docker_migrate_transit_dir: /mnt/Backups/migrate
 # Recipient for offen's AGE_PUBLIC_KEYS. Its private half is

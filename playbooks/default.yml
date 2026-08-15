@@ -223,14 +223,14 @@
       community.docker.docker_node:
         hostname: "{{ inventory_hostname }}"
         role: "{{ 'manager' if 'docker_swarm_manager' in group_names else 'worker' }}"
-      delegate_to: "{{ docker_swarm_primary_manager_name }}"
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
 
     - name: reconcile swarm node labels with docker_labels
       community.docker.docker_node:
         hostname: "{{ inventory_hostname }}"
         labels: "{{ swarm_node_labels }}"
         labels_state: replace
-      delegate_to: "{{ docker_swarm_primary_manager_name }}"
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
       when: docker_labels_reconcile_allowed | bool
 
     - name: the edge label must sit on a manager
@@ -246,9 +246,23 @@
 
 - hosts: docker
   pre_tasks:
+    # The drain below runs through a manager socket; a scoped run that targets
+    # only workers has none, so fail here with a fix rather than a stray SSH
+    # error against the primary.
+    - name: a swarm manager must be in this run to restore a swarm node
+      assert:
+        that: groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | length > 0
+        fail_msg: >-
+          Restoring a swarm node runs 'docker node update' through a manager, but
+          no swarm manager is in this run. Add one to hosts= — the node itself if
+          it is a manager, otherwise a manager alongside the worker being restored.
+        quiet: yes
+      run_once: yes
+      when: docker_restore_volumes | default(false) | bool
+
     - name: drain node before volume restore
       command: "docker node update --availability drain {{ inventory_hostname }}"
-      delegate_to: "{{ groups['docker_swarm_manager'][0] }}"
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
       when:
         - docker_restore_volumes | default(false) | bool
         - "'docker_swarm_manager' in group_names or 'docker_swarm_worker' in group_names"
@@ -258,7 +272,7 @@
   post_tasks:
     - name: activate node after volume restore
       command: "docker node update --availability active {{ inventory_hostname }}"
-      delegate_to: "{{ groups['docker_swarm_manager'][0] }}"
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
       when:
         - docker_restore_volumes | default(false) | bool
         - "'docker_swarm_manager' in group_names or 'docker_swarm_worker' in group_names"
