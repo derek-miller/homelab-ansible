@@ -29,7 +29,8 @@
     fail_msg: >-
       {{ groups['docker_swarm_manager'][0] }} is not in this run, so
       galaxy/docker-swarm cannot read its docker_swarm_addr and every other node
-      fails with an unrelated attribute error. Re-run including it.
+      fails with an unrelated attribute error. It likely failed or went
+      unreachable in an earlier play above; fix that, or re-run including it.
     quiet: yes
   run_once: yes
   when: require_swarm_manager_scope == 'primary'
