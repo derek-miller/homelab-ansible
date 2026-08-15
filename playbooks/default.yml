@@ -1,6 +1,9 @@
 ---
+# The shared plays exclude the proxmox group: ansible/setup/connection sets
+# ansible_become with no guard, which outranks group_vars/proxmox's
+# ansible_become: no, and PVE has no sudo — root@pam is its admin identity.
 - name: set up connection before gathering facts
-  hosts: all
+  hosts: all:!proxmox
   gather_facts: no
   roles:
     - ansible/setup/connection
@@ -8,7 +11,7 @@
     - always
 
 - name: connect and gather facts
-  hosts: all
+  hosts: all:!proxmox
   tasks:
     - name: node summary
       debug:
@@ -22,7 +25,7 @@
     - connect
 
 - name: bootstrap connection credentials
-  hosts: all
+  hosts: all:!proxmox
   roles:
     - role: ansible/setup/bootstrap
       when: bootstrap|default(false)|bool
@@ -30,7 +33,7 @@
     - bootstrap
 
 - name: set up ansible environment on remote
-  hosts: all
+  hosts: all:!proxmox
   roles:
     - ansible/remote
   tags:
@@ -39,7 +42,7 @@
     - ansible-remote
 
 - name: common
-  hosts: all
+  hosts: all:!proxmox
   roles:
     - common
   tags:
@@ -48,7 +51,7 @@
     - common
 
 - name: telegraf
-  hosts: all
+  hosts: all:!proxmox
   roles:
     - role: generic/telegraf
     - role: generic/telegraf-syslog
