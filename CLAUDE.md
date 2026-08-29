@@ -8,6 +8,7 @@ Ansible-managed homelab. Docker Swarm (rackvm1-3 managers, rackvm4-5 workers, am
 
 - **Service config lives in Ansible Vault, not in the tree you can grep.** The entire Docker Swarm stack (services, volumes, networks) is the `vault_docker_stack_definition` variable inside `playbooks/host_vars/rackvm1/vault.yml`, and per-host Compose stacks are `docker_compose_definition` in each host's `vault.yml`. Deployed config files live under `playbooks/files/vault/{hostname}/...`. A plain grep reads these as opaque AES blobs and reports them absent — decrypt (`make vault-decrypt`) before concluding anything is undeclared.
 - **Run `make vault-encrypt` before committing.** `hooks/pre-commit` runs `make vault-check` and rejects the commit otherwise. The Makefile hard-errors unless `VIRTUAL_ENV` is set, so commit from inside `.venv`.
+- **The pve1-5 plays are opt-in, and that is what keeps them out of CI.** They are in `default.yml` alongside the swarm plays, but their host patterns resolve to nothing unless a run passes `-e proxmox_enabled=yes`. The `Deploy` workflow runs plain `make run`, so a push to master never touches a hypervisor. The flag has to be an extra var: Ansible resolves a play's `hosts:` before `group_vars` load. The shared plays exclude the group the other way round, with `all:!proxmox`, because `ansible/setup/connection` forces become-to-root and PVE has no sudo.
 - **The swarm stack is named `rackpis` and every volume is `rackpis_*`.** The rackpi hosts are long gone; the name is not. Renaming the stack points all 41 services at empty volumes, so it stays regardless of which hosts run it.
 
 ## Commands
@@ -21,11 +22,12 @@ make dry-run            # --check
 make check              # Syntax validation
 make bootstrap hosts=<host> user=<user>
 
-# make {run,dry-run,check,bootstrap}-<name> runs playbooks/<name>.yml, paired with
-# playbooks/hosts-<name> as inventory when that file exists. hosts=/tags= work here too.
+# The proxmox plays sit in the same playbook but select no hosts unless
+# proxmox_enabled is set, which only these targets do. hosts=/tags= work here too.
 make bootstrap-proxmox user=root   # First contact: asks for the PAM password, authorises
                                    # the repo key for root, then forms or joins the cluster
 make run-proxmox hosts=pve3 tags=proxmox-cluster
+make dry-run-proxmox
 
 # Vault
 make vault-diff         # Vault changes (use for commit messages)

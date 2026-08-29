@@ -119,22 +119,23 @@ run:
 dry-run:
 	$(ansible_playbook_cmd) --check
 
-# <name> selects playbooks/<name>.yml, paired with playbooks/hosts-<name>
-# when that inventory exists.
-bootstrap-% run-% dry-run-% check-%: playbook = $*
-bootstrap-% run-% dry-run-% check-%: inventory = $(if $(wildcard playbooks/hosts-$*),hosts-$*,hosts)
+# The proxmox plays live in default.yml and select no hosts unless
+# proxmox_enabled is set, which is what keeps them out of `make run` and so out
+# of the master deploy. The default limit keeps the swarm plays out of a proxmox
+# run; hosts= replaces it, and drops the localhost plays with it (see RUNBOOK).
+proxmox_flags = --extra-vars=proxmox_enabled=yes $(if $(hosts),,--limit='proxmox:localhost')
 
-bootstrap-%:
-	$(ansible_playbook_cmd) $(ansible_bootstrap_flags) --extra-vars=bootstrap=yes --tags=bootstrap --skip-tags=base,common
+.PHONY: bootstrap-proxmox
+bootstrap-proxmox:
+	$(ansible_playbook_cmd) $(ansible_bootstrap_flags) $(proxmox_flags) --extra-vars=bootstrap=yes --tags=bootstrap --skip-tags=base,common
 
-run-%:
-	$(ansible_playbook_cmd)
+.PHONY: run-proxmox
+run-proxmox:
+	$(ansible_playbook_cmd) $(proxmox_flags)
 
-dry-run-%:
-	$(ansible_playbook_cmd) --check
-
-check-%:
-	$(ansible_playbook_cmd) --syntax-check
+.PHONY: dry-run-proxmox
+dry-run-proxmox:
+	$(ansible_playbook_cmd) $(proxmox_flags) --check
 
 .PHONY: facts
 facts:

@@ -106,3 +106,14 @@ rackvm5
 
 [qemu-guest-agent]
 rackvm[1:5]
+
+[proxmox]
+pve[1:5]
+
+[proxmox_primary]
+pve1
+
+# No play targets this group; group_vars/proxmox builds proxmox_guests by
+# iterating it and reading each host's proxmox_guest.
+[proxmox_guests]
+rackvm[1:5]
