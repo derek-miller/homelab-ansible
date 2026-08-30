@@ -4,7 +4,7 @@
  // terminal state. A lone completed or failed job therefore remains available
  // past this age; once a newer same-state job finishes, it replaces the old one.
  const TWO_WEEKS_IN_SECONDS = 14 * 24 * 60 * 60;
-+const ONE_DAY_IN_SECONDS = 24 * 60 * 60;
++const THREE_DAYS_IN_SECONDS = 3 * 24 * 60 * 60;
  
  export const DEFAULT_JOB_OPTIONS: JobOptions = {
      attempts: 2,
@@ -13,7 +13,7 @@
      },
      keepJobs: {
 -        completed: { age: TWO_WEEKS_IN_SECONDS },
-+        completed: { age: ONE_DAY_IN_SECONDS },
++        completed: { age: THREE_DAYS_IN_SECONDS },
          failed: { age: TWO_WEEKS_IN_SECONDS },
      },
      keepLogs: DEFAULT_JOB_LOGS_MAX_ENTRIES,
