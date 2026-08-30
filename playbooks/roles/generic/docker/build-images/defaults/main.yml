@@ -19,10 +19,6 @@ available_docker_images:
       - sourcebot/web-heap-cap.patch
     image_name: sourcebot
     image_tag: v5.1.10-patched3
-  postgres-pgcron:
-    dockerfile: postgres-pgcron/Dockerfile
-    image_name: postgres-pgcron
-    image_tag: "16-cron1.6.7"
   openclaw-webhook-proxy:
     dockerfile: openclaw-webhook-proxy/Dockerfile
     build_files:
