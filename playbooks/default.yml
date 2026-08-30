@@ -402,12 +402,6 @@
   tags:
     - volume-backup-stats
 
-- hosts: sourcebot-db
-  roles:
-    - role: generic/sourcebot-db
-  tags:
-    - sourcebot-db
-
 - hosts: qemu-guest-agent
   roles:
     - role: generic/qemu-guest-agent

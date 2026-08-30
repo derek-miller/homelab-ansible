@@ -2,19 +2,23 @@
 available_docker_images:
   sourcebot:
     repo: https://github.com/sourcebot-dev/sourcebot.git
-    version: v5.1.4
+    version: v5.1.10
     patches:
       # Strips the Sentry sourcemap-upload secret mounts: RUN --mount requires
       # BuildKit, which the docker_image build path doesn't use, and no Sentry
       # token is supplied anyway.
       - sourcebot/no-buildkit.patch
       - sourcebot/vault-entitlements.patch
+      # Cuts BullMQ completed-job retention from 14 days to 3: at ~31k repos
+      # and 4 reindex sweeps/day the retained set stays a fraction of redis
+      # --maxmemory, so noeviction can't fail queue writes and stall indexing.
+      - sourcebot/job-retention.patch
+      # Fixed 6GiB web heap instead of upstream's 50%-of-cgroup-limit: with no
+      # container memory limit, Node reads 50% of the whole VM. supervisord.conf
+      # overrides NODE_OPTIONS for the web program, so an env var can't do this.
+      - sourcebot/web-heap-cap.patch
     image_name: sourcebot
-    image_tag: v5.1.4-patched1
-  postgres-pgcron:
-    dockerfile: postgres-pgcron/Dockerfile
-    image_name: postgres-pgcron
-    image_tag: "16-cron1.6.7"
+    image_tag: v5.1.10-patched3
   openclaw-webhook-proxy:
     dockerfile: openclaw-webhook-proxy/Dockerfile
     build_files:

@@ -47,7 +47,7 @@ raspi1
 [docker-build-images]
 rackvm1 docker_images_to_build=openclaw-webhook-proxy
 rackvm4 docker_images_to_build=unifi-collector
-rackvm5 docker_images_to_build=sourcebot,control4-driver-scraper,postgres-pgcron
+rackvm5 docker_images_to_build=sourcebot,control4-driver-scraper
 
 [control4-driver-scraper]
 rackvm5
@@ -100,9 +100,6 @@ rackmini1
 
 [plex]
 rackmini1
-
-[sourcebot-db]
-rackvm5
 
 [qemu-guest-agent]
 rackvm[1:5]

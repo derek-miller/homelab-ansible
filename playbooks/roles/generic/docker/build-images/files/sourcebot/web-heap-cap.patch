@@ -1,0 +1,11 @@
+--- a/supervisord.conf
++++ b/supervisord.conf
+@@ -15,7 +15,7 @@ redirect_stderr=true
+ 
+ [program:web]
+ command=./prefix-output.sh node packages/web/server.js
+-environment=NODE_OPTIONS="--max-old-space-size-percentage=50"
++environment=NODE_OPTIONS="--max-old-space-size=6144"
+ priority=20
+ autostart=true
+ autorestart=true
