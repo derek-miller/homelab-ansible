@@ -59,6 +59,10 @@
       "type": "git",
       "url": "file:///repos/github-com/*/*/*"
     },
+    "manual-driver-repos": {
+      "type": "git",
+      "url": "file:///repos/manual/*"
+    },
     "github-personal": {
       "type": "github",
       "users": [
