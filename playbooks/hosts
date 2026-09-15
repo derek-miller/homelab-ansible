@@ -53,7 +53,7 @@ rackvm5 docker_images_to_build=sourcebot,control4-driver-scraper
 rackvm5
 
 [docker_swarm_manager]
-rackvm1 docker_stack_name=rackpis
+rackvm1 docker_stack_name=rackvms
 rackvm2
 rackvm3
 
