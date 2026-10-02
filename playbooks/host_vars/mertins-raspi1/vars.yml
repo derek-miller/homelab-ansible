@@ -114,7 +114,9 @@ sudoers:
   - user: pi
     passwordless: true
 
-tailscale_host_args: --accept-routes
+# 4via6 site 4: ratgdo garage doors at 192.168.1.212 (left) and 192.168.1.220
+# (right) (ESPHome API 6053, web UI 80)
+tailscale_host_args: --accept-routes --advertise-routes=fd7a:115c:a1e0:b1a:0:4:c0a8:1d4/128,fd7a:115c:a1e0:b1a:0:4:c0a8:1dc/128
 
 raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:
