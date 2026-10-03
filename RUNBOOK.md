@@ -133,3 +133,31 @@ The pipeline sets `pipefail`, so a wrong or missing identity fails the run at th
 **Detection takes about 28 hours.** 26h of staleness window, plus up to two more hours for two failed checks an hour apart, plus the alert's own pending period. A Friday night failure surfaces on Sunday morning. That is deliberate for a daily backup, but it does mean this is not a same-day signal.
 
 **A fresh host reports `starting`, not `unhealthy`.** `start_period` is 27h, longer than the backup interval, so a newly built Pi is not counted as failing before its first archive can exist. The start period ends at the first passing check rather than at the 27h mark, so any container that has completed one backup reports `healthy` or `unhealthy` and nothing else: `starting` on a host that has been up for days is not benign.
+
+## GitHub Actions runners for control4-zigbee3
+
+`gha-runner-zigbee3` in the swarm stack runs one ephemeral GitHub Actions runner on every node except the one carrying `edge`, registered to `finitelabs/control4-zigbee3` under the node's hostname with the label `rack`. A task registers at start, takes one job and exits, and swarm starts a fresh task from the image, so no job inherits another's workspace. A task stopped while idle leaves an offline registration behind until the node's next task replaces it by name. The image is `gha-runner`, built on each runner node from `generic/docker/build-images/files/gha-runner/`.
+
+**One limit fits every node.** Swarm sets `cpus` and `memory` per service, not per node, and has no CPU shares, so every runner gets the same hard cap: 4 CPUs and 8G, half of an 8-core rackvm. That is also why the edge node is left out. It has 4 cores, so a cap it could afford would halve every other runner, and it carries the ingress every routed service depends on. Node's `os.availableParallelism()` reads the CPU cap, so a job that sizes its workers by core count starts 4 of them rather than 8, and its memory follows.
+
+**The token.** Each task trades `gha_runner_zigbee3_github_token` (`playbooks/group_vars/all/vars.yml`) for a one-hour registration token, then drops it from its environment before taking a job, since jobs inherit the runner's environment. It is a fine-grained personal access token. To set or rotate it:
+
+1. On GitHub, Settings > Developer settings > Personal access tokens > Fine-grained tokens > Generate new token.
+2. Resource owner `finitelabs`. Repository access: Only select repositories, `finitelabs/control4-zigbee3`.
+3. Repository permissions: Administration, Read and write. GitHub adds Metadata, Read-only; grant nothing else.
+4. Expiration: the longest the organization allows. A lapsed token stops new registrations (below), so note the date.
+5. If `finitelabs` requires approval for fine-grained tokens, approve the request under the organization's Settings > Personal access tokens > Pending requests.
+6. Copy the token, then from the repo root inside `.venv`:
+
+   ```bash
+   pbpaste | tr -d '\n' | ansible-vault encrypt_string --vault-id=.vault_pass --stdin-name gha_runner_zigbee3_github_token
+   ```
+
+   Replace the `gha_runner_zigbee3_github_token: !vault |` block in `playbooks/group_vars/all/vars.yml` with the output and commit.
+7. Merging to master deploys it. The new value changes the service, so swarm replaces every task and cancels any job in flight; merge while the runners are idle.
+
+**A bad or expired token** shows in the task log as `no registration token for finitelabs/control4-zigbee3` followed by GitHub's message, such as `Bad credentials`. The task waits a minute before exiting, which keeps the API calls down while still letting swarm's restarts trip **Container Crash Loop (Swarm)**. Every job is a new task, so that alert can also fire on a run of jobs under about three minutes each; the catalogue job takes far longer.
+
+**Updating the runner.** Bump the `FROM` tag in the Dockerfile and `image_tag` together, since a node builds only a tag it does not have. An image that falls behind a runner release keeps working: each new task's runner updates itself first, at the cost of that download per job until the image catches up. The image is excluded from the docker-prune sweep, because between jobs no container may reference it, so after a bump remove the old tag by hand with `docker rmi gha-runner:<old>` on each runner node.
+
+**If `edge` moves**, the runner goes the other way: it starts on the old edge node and leaves the new one. Move `gha-runner` in `docker_images_to_build` to match, and check the node it lands on can spare 4 CPUs and 8G.

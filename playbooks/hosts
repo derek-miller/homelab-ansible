@@ -46,8 +46,9 @@ raspi1
 
 [docker-build-images]
 rackvm1 docker_images_to_build=openclaw-webhook-proxy
-rackvm4 docker_images_to_build=unifi-collector
-rackvm5 docker_images_to_build=sourcebot,control4-driver-scraper
+rackvm[2:3] docker_images_to_build=gha-runner
+rackvm4 docker_images_to_build=unifi-collector,gha-runner
+rackvm5 docker_images_to_build=sourcebot,control4-driver-scraper,gha-runner
 
 [control4-driver-scraper]
 rackvm5
