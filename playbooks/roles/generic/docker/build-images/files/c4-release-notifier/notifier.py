@@ -28,7 +28,6 @@ JAILBREAK_WEBHOOK_URL = os.environ.get("JAILBREAK_WEBHOOK_URL", "").strip()
 
 STATE_FILE = os.environ.get("STATE_FILE", "/data/state.json")
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "1800"))
-NOTIFY_ON_SEED = os.environ.get("NOTIFY_ON_SEED", "false").strip().lower() == "true"
 # The external endpoint carries beta OS/Composer builds that never reach the
 # main one until GA.
 INCLUDE_BETA = os.environ.get("INCLUDE_BETA", "false").strip().lower() == "true"
@@ -45,6 +44,7 @@ JAILBREAK_COLOR = 0x24292F
 
 session = requests.Session()
 session.headers["User-Agent"] = USER_AGENT
+jailbreak_cache = {"etag": None, "releases": []}
 
 
 def log(message):
@@ -152,15 +152,22 @@ def composer_embed(release):
 
 
 def jailbreak_releases():
+    headers = {"Accept": "application/vnd.github+json"}
+    if jailbreak_cache["etag"]:
+        headers["If-None-Match"] = jailbreak_cache["etag"]
     r = session.get(
         f"https://api.github.com/repos/{JAILBREAK_REPO}/releases",
         params={"per_page": 10},
-        headers={"Accept": "application/vnd.github+json"},
+        headers=headers,
         timeout=30,
     )
+    if r.status_code == 304:
+        return jailbreak_cache["releases"]
     r.raise_for_status()
     releases = [rel for rel in r.json() if not rel.get("draft")]
-    return sorted(releases, key=lambda rel: rel.get("published_at") or "")
+    releases.sort(key=lambda rel: rel.get("published_at") or "")
+    jailbreak_cache.update(etag=r.headers.get("ETag"), releases=releases)
+    return releases
 
 
 def jailbreak_embed(release):
@@ -192,7 +199,10 @@ def post(webhook, embed):
 
 
 def check(state, name, webhook, fetch, key, embed):
-    """Fetch releases oldest first and post the ones not yet in state."""
+    """Fetch releases oldest first and post the ones not yet in state.
+
+    With no state yet, post only the newest release and record the rest as seen.
+    """
     try:
         items = fetch()
     except (requests.RequestException, ET.ParseError) as e:
@@ -202,11 +212,11 @@ def check(state, name, webhook, fetch, key, embed):
         seen = set(state[name])
         to_post = [i for i in items if key(i) not in seen]
     else:
-        to_post = items[-1:] if NOTIFY_ON_SEED else []
-        seen = {key(i) for i in items} - {key(i) for i in to_post}
+        to_post = items[-1:]
+        seen = {key(i) for i in items[:-1]}
         state[name] = sorted(seen)
         save_state(state)
-        log(f"{name}: seeded {len(seen)} existing releases without posting")
+        log(f"{name}: seeded {len(seen)} older releases, posting the newest")
     for item in to_post:
         try:
             post(webhook, embed(item))
