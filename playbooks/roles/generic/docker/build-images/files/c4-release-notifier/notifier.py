@@ -16,6 +16,8 @@ wait for the next poll or restart the service:
   python notifier.py forget jailbreak v9
 """
 
+import contextlib
+import fcntl
 import json
 import os
 import random
@@ -23,6 +25,7 @@ import re
 import sys
 import time
 import xml.etree.ElementTree as ET
+from typing import Callable, NamedTuple, Optional
 
 import requests
 
@@ -66,6 +69,20 @@ def save_state(state):
     with open(tmp, "w") as f:
         json.dump(state, f, indent=2, sort_keys=True)
     os.replace(tmp, STATE_FILE)
+
+
+@contextlib.contextmanager
+def locked_state():
+    """Read, modify and write state under a lock shared with `forget`.
+
+    Every write goes through here and starts from the file rather than a copy
+    held across a poll, so a `forget` that lands mid-poll is not overwritten.
+    """
+    with open(f"{STATE_FILE}.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        state = load_state()
+        yield state
+        save_state(state)
 
 
 def soap(action, inner):
@@ -122,7 +139,7 @@ def composer_packages(version):
     return sorted(packages, key=lambda p: p["name"])
 
 
-def composer_installers(state):
+def composer_installers():
     """Return one item per Composer installer, oldest version first.
 
     Every version is scanned on first start. After that only versions not yet
@@ -130,23 +147,57 @@ def composer_installers(state):
     added to a recent version later is still found. A version is marked
     scanned once every installer it lists is in the posted set, so one whose
     post failed is fetched again next poll.
+
+    A version whose lookup fails is skipped and fetched again next poll. If
+    that happens on first start, the version is recorded in
+    composer_unseeded, and its installers are added as already posted once
+    a lookup succeeds, since it existed before the notifier did.
     """
+    state = load_state()
     ordered = composer_versions()
-    scanned = set(state.get("composer_scanned", []))
-    posted = set(state.get("composer", []))
-    if "composer" in state:
+    seeding = "composer" not in state
+    if seeding:
+        to_scan = ordered
+    else:
+        scanned = set(state.get("composer_scanned", []))
         recent = set(ordered[-RESCAN_NEWEST_VERSIONS:])
         to_scan = [v for v in ordered if v not in scanned or v in recent]
-    else:
-        to_scan = ordered
-    items = []
+    unseeded = set(state.get("composer_unseeded", []))
+    items, failed, fetched, empty, quiet = [], set(), set(), set(), []
     for version in to_scan:
-        found = [{**p, "version": version} for p in composer_packages(version)]
-        items.extend(found)
-        if all(composer_key(i) in posted for i in found):
-            scanned.add(version)
-    state["composer_scanned"] = sorted(scanned)
+        try:
+            found = [{**p, "version": version} for p in composer_packages(version)]
+        except Exception as e:
+            log(f"composer: looking up {version} failed, will retry: {describe(e)}")
+            failed.add(version)
+            continue
+        fetched.add(version)
+        if not found:
+            empty.add(version)
+        elif version in unseeded and not seeding:
+            quiet.extend(found)
+        else:
+            items.extend(found)
+    if seeding and ordered and ordered[-1] in failed:
+        raise RuntimeError(f"looking up the newest version {ordered[-1]} failed")
+    with locked_state() as s:
+        if seeding:
+            unseeded |= failed
+        s["composer_unseeded"] = sorted(unseeded - fetched)
+        if quiet:
+            s["composer"] = sorted(set(s["composer"]) | {composer_key(i) for i in quiet})
+            empty |= {i["version"] for i in quiet}
+        s["composer_scanned"] = sorted(set(s.get("composer_scanned", [])) | empty)
     return items
+
+
+def composer_settle(state, items):
+    posted = set(state.get("composer", []))
+    keys = {}
+    for i in items:
+        keys.setdefault(i["version"], []).append(composer_key(i))
+    done = {v for v, ks in keys.items() if all(k in posted for k in ks)}
+    state["composer_scanned"] = sorted(set(state.get("composer_scanned", [])) | done)
 
 
 def composer_key(item):
@@ -171,23 +222,39 @@ def composer_embed(installers):
     }
 
 
-def jailbreak_releases(state):
-    headers = {"Accept": "application/vnd.github+json"}
+def jailbreak_releases():
+    """Return every published release, oldest first.
+
+    All pages are fetched so `forget` works for any tag. Only the first page
+    is conditional: a new release always lands on it.
+    """
+    accept = {"Accept": "application/vnd.github+json"}
+    headers = dict(accept)
     if jailbreak_cache["etag"]:
         headers["If-None-Match"] = jailbreak_cache["etag"]
     r = session.get(
         f"https://api.github.com/repos/{JAILBREAK_REPO}/releases",
-        params={"per_page": 10},
+        params={"per_page": 100},
         headers=headers,
         timeout=30,
     )
     if r.status_code == 304:
         return jailbreak_cache["releases"]
     r.raise_for_status()
-    releases = [rel for rel in r.json() if not rel.get("draft") and not rel.get("prerelease")]
+    etag = r.headers.get("ETag")
+    found = r.json()
+    while "next" in r.links:
+        r = session.get(r.links["next"]["url"], headers=accept, timeout=30)
+        r.raise_for_status()
+        found.extend(r.json())
+    releases = [rel for rel in found if not rel.get("draft") and not rel.get("prerelease")]
     releases.sort(key=lambda rel: rel.get("published_at") or "")
-    jailbreak_cache.update(etag=r.headers.get("ETag"), releases=releases)
+    jailbreak_cache.update(etag=etag, releases=releases)
     return releases
+
+
+def release_tag(release):
+    return release["tag_name"]
 
 
 def jailbreak_embed(releases):
@@ -228,45 +295,64 @@ def post(webhook, embed):
     raise RuntimeError("Discord kept rate limiting the webhook")
 
 
-def check(state, name, webhook, fetch, key, group, embed):
+class Source(NamedTuple):
+    name: str
+    webhook: str
+    fetch: Callable[[], list]
+    key: Callable[[dict], str]
+    group: Callable[[dict], str]
+    embed: Callable[[list], dict]
+    settle: Optional[Callable[[dict, list], None]] = None
+
+
+def check(source):
     """Fetch items oldest first and post the new ones, one message per group.
 
     With no state yet, post only the newest group and record the rest as seen.
     """
+    name, key, group = source.name, source.key, source.group
     try:
-        items = fetch(state)
+        items = source.fetch()
     except Exception as e:
         log(f"{name}: fetch failed: {describe(e)}")
         return
-    if name in state:
-        seen = set(state[name])
-        new = [i for i in items if key(i) not in seen]
-    else:
-        newest = group(items[-1]) if items else None
-        new = [i for i in items if group(i) == newest]
-        seen = {key(i) for i in items if group(i) != newest}
-        state[name] = sorted(seen)
-        log(f"{name}: seeded {len(seen)} older items, posting the newest")
-    save_state(state)
+    with locked_state() as state:
+        if name in state:
+            seen = set(state[name])
+            new = [i for i in items if key(i) not in seen]
+        else:
+            newest = group(items[-1]) if items else None
+            new = [i for i in items if group(i) == newest]
+            state[name] = sorted(key(i) for i in items if group(i) != newest)
+            log(f"{name}: seeded {len(state[name])} older items, posting the newest")
+        if source.settle:
+            source.settle(state, items)
     groups = {}
     for item in new:
         groups.setdefault(group(item), []).append(item)
     for label, members in groups.items():
         try:
-            post(webhook, embed(members))
+            post(source.webhook, source.embed(members))
         except Exception as e:
             log(f"{name}: posting {label} failed, will retry next poll: {describe(e)}")
             continue
-        seen.update(key(i) for i in members)
-        state[name] = sorted(seen)
-        save_state(state)
+        with locked_state() as state:
+            state[name] = sorted(set(state.get(name, [])) | {key(i) for i in members})
+            if source.settle:
+                source.settle(state, items)
         log(f"{name}: posted {label} ({len(members)} items)")
     log(f"{name}: {len(items)} items, {len(groups)} to post")
 
 
 def forget(source, target):
     """Drop matching entries from state so the next poll posts them again."""
-    state = load_state()
+    with locked_state() as state:
+        dropped = forget_entries(state, source, target)
+    for k in dropped:
+        print(f"forgot {source} {k}")
+
+
+def forget_entries(state, source, target):
     if source not in state:
         sys.exit(f"no {source} state in {STATE_FILE}")
 
@@ -286,9 +372,7 @@ def forget(source, target):
         state["composer_scanned"] = [
             v for v in state.get("composer_scanned", []) if v not in versions
         ]
-    save_state(state)
-    for k in dropped:
-        print(f"forgot {source} {k}")
+    return dropped
 
 
 def main():
@@ -300,32 +384,31 @@ def main():
     if not COMPOSER_WEBHOOK_URL and not JAILBREAK_WEBHOOK_URL:
         sys.exit("set COMPOSER_WEBHOOK_URL and/or JAILBREAK_WEBHOOK_URL")
     sources = [
-        (
-            "composer",
-            COMPOSER_WEBHOOK_URL,
-            composer_installers,
-            composer_key,
-            lambda i: i["version"],
-            composer_embed,
+        Source(
+            name="composer",
+            webhook=COMPOSER_WEBHOOK_URL,
+            fetch=composer_installers,
+            key=composer_key,
+            group=lambda i: i["version"],
+            embed=composer_embed,
+            settle=composer_settle,
         ),
-        (
-            "jailbreak",
-            JAILBREAK_WEBHOOK_URL,
-            jailbreak_releases,
-            lambda r: r["tag_name"],
-            lambda r: r["tag_name"],
-            jailbreak_embed,
+        Source(
+            name="jailbreak",
+            webhook=JAILBREAK_WEBHOOK_URL,
+            fetch=jailbreak_releases,
+            key=release_tag,
+            group=release_tag,
+            embed=jailbreak_embed,
         ),
     ]
-    sources = [s for s in sources if s[1]]
+    sources = [s for s in sources if s.webhook]
     while True:
-        # Reloaded every poll so a `forget` run alongside the service sticks.
-        state = load_state()
         for source in sources:
             try:
-                check(state, *source)
+                check(source)
             except Exception as e:
-                log(f"{source[0]}: {describe(e)}")
+                log(f"{source.name}: {describe(e)}")
         if ONCE:
             return
         time.sleep(POLL_INTERVAL + random.uniform(0, POLL_INTERVAL / 10))
