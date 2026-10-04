@@ -37,7 +37,9 @@ ONCE = os.environ.get("ONCE", "false").strip().lower() == "true"
 
 UPDATES_NS = "http://services.control4.com/updates/v2_0/"
 UPDATES_URL = "https://services.control4.com/Updates2x/v2_0/Updates.asmx"
-JAILBREAK_REPO = os.environ.get("JAILBREAK_REPO", "garrynewman/Control4.Jailbreak").strip()
+JAILBREAK_REPO = os.environ.get(
+    "JAILBREAK_REPO", "garrynewman/Control4.Jailbreak"
+).strip()
 RESCAN_NEWEST_VERSIONS = 3
 
 USER_AGENT = "c4-release-notifier (+https://github.com/derek-miller/homelab-ansible)"
@@ -115,7 +117,9 @@ def composer_packages(version):
         packages.append(
             {
                 "name": name,
-                "url": pkg.findtext(f"{{{UPDATES_NS}}}Url", "").replace("http://", "https://", 1),
+                "url": pkg.findtext(f"{{{UPDATES_NS}}}Url", "").replace(
+                    "http://", "https://", 1
+                ),
                 "size": int(pkg.findtext(f"{{{UPDATES_NS}}}Size", "0") or 0),
             }
         )
@@ -125,12 +129,15 @@ def composer_packages(version):
 def composer_installers(state):
     """Return one item per Composer installer, oldest version first.
 
-    Every version is scanned on first start. After that only versions never
-    scanned before and the newest RESCAN_NEWEST_VERSIONS are, so an installer
-    added to a recent version later is still found.
+    Every version is scanned on first start. After that only versions not yet
+    marked scanned and the newest RESCAN_NEWEST_VERSIONS are, so an installer
+    added to a recent version later is still found. A version is marked
+    scanned once every installer it lists is in the posted set, so one whose
+    post failed is fetched again next poll.
     """
     ordered = composer_versions()
     scanned = set(state.get("composer_scanned", []))
+    posted = set(state.get("composer", []))
     if "composer" in state:
         recent = set(ordered[-RESCAN_NEWEST_VERSIONS:])
         to_scan = [v for v in ordered if v not in scanned or v in recent]
@@ -138,9 +145,11 @@ def composer_installers(state):
         to_scan = ordered
     items = []
     for version in to_scan:
-        for package in composer_packages(version):
-            items.append({**package, "version": version})
-    state["composer_scanned"] = sorted(scanned | set(to_scan))
+        found = [{**p, "version": version} for p in composer_packages(version)]
+        items.extend(found)
+        if all(composer_key(i) in posted for i in found):
+            scanned.add(version)
+    state["composer_scanned"] = sorted(scanned)
     return items
 
 
@@ -179,7 +188,9 @@ def jailbreak_releases(state):
     if r.status_code == 304:
         return jailbreak_cache["releases"]
     r.raise_for_status()
-    releases = [rel for rel in r.json() if not rel.get("draft") and not rel.get("prerelease")]
+    releases = [
+        rel for rel in r.json() if not rel.get("draft") and not rel.get("prerelease")
+    ]
     releases.sort(key=lambda rel: rel.get("published_at") or "")
     jailbreak_cache.update(etag=r.headers.get("ETag"), releases=releases)
     return releases
@@ -204,6 +215,14 @@ def jailbreak_embed(releases):
     }
 
 
+def describe(e):
+    # requests errors embed the request URL, and a webhook URL holds its token.
+    if isinstance(e, requests.RequestException):
+        status = getattr(e.response, "status_code", None)
+        return f"{type(e).__name__} {status}" if status else type(e).__name__
+    return f"{type(e).__name__}: {e}"
+
+
 def post(webhook, embed):
     for _ in range(5):
         r = session.post(webhook, json={"embeds": [embed]}, timeout=30)
@@ -222,8 +241,8 @@ def check(state, name, webhook, fetch, key, group, embed):
     """
     try:
         items = fetch(state)
-    except (requests.RequestException, ET.ParseError) as e:
-        log(f"{name}: fetch failed: {e}")
+    except Exception as e:
+        log(f"{name}: fetch failed: {describe(e)}")
         return
     if name in state:
         seen = set(state[name])
@@ -241,8 +260,8 @@ def check(state, name, webhook, fetch, key, group, embed):
     for label, members in groups.items():
         try:
             post(webhook, embed(members))
-        except (requests.RequestException, RuntimeError) as e:
-            log(f"{name}: posting {label} failed, will retry next poll: {e}")
+        except Exception as e:
+            log(f"{name}: posting {label} failed, will retry next poll: {describe(e)}")
             continue
         seen.update(key(i) for i in members)
         state[name] = sorted(seen)
@@ -281,7 +300,9 @@ def forget(source, target):
 def main():
     if sys.argv[1:2] == ["forget"]:
         if len(sys.argv) != 4 or sys.argv[2] not in ("composer", "jailbreak"):
-            sys.exit("usage: notifier.py forget composer|jailbreak <version, tag or state entry>")
+            sys.exit(
+                "usage: notifier.py forget composer|jailbreak <version, tag or state entry>"
+            )
         forget(sys.argv[2], sys.argv[3])
         return
     if not COMPOSER_WEBHOOK_URL and not JAILBREAK_WEBHOOK_URL:
@@ -309,7 +330,10 @@ def main():
         # Reloaded every poll so a `forget` run alongside the service sticks.
         state = load_state()
         for source in sources:
-            check(state, *source)
+            try:
+                check(state, *source)
+            except Exception as e:
+                log(f"{source[0]}: {describe(e)}")
         if ONCE:
             return
         time.sleep(POLL_INTERVAL + random.uniform(0, POLL_INTERVAL / 10))
