@@ -33,14 +33,10 @@ JAILBREAK_WEBHOOK_URL = os.environ.get("JAILBREAK_WEBHOOK_URL", "").strip()
 
 STATE_FILE = os.environ.get("STATE_FILE", "/data/state.json")
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "1800"))
-# The external endpoint carries beta OS/Composer builds that never reach the
-# main one until GA.
-INCLUDE_BETA = os.environ.get("INCLUDE_BETA", "false").strip().lower() == "true"
 ONCE = os.environ.get("ONCE", "false").strip().lower() == "true"
 
 UPDATES_NS = "http://services.control4.com/updates/v2_0/"
 UPDATES_URL = "https://services.control4.com/Updates2x/v2_0/Updates.asmx"
-UPDATES_BETA_URL = "https://services.control4.com/Updates2x-external/v2_0/Updates.asmx"
 JAILBREAK_REPO = os.environ.get("JAILBREAK_REPO", "garrynewman/Control4.Jailbreak").strip()
 RESCAN_NEWEST_VERSIONS = 3
 
@@ -72,14 +68,14 @@ def save_state(state):
     os.replace(tmp, STATE_FILE)
 
 
-def soap(url, action, inner):
+def soap(action, inner):
     body = (
         '<?xml version="1.0" encoding="utf-8"?>'
         '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" '
         f'xmlns:upd="{UPDATES_NS}"><soap:Body>{inner}</soap:Body></soap:Envelope>'
     )
     r = session.post(
-        url,
+        UPDATES_URL,
         data=body.encode(),
         headers={
             "Content-Type": "text/xml; charset=utf-8",
@@ -95,9 +91,8 @@ def version_key(version):
     return tuple(int(p) for p in re.findall(r"\d+", version.split("-")[0]))
 
 
-def composer_versions(url):
+def composer_versions():
     root = soap(
-        url,
         "GetVersions",
         "<upd:GetVersions><upd:currentVersion>3.0.0</upd:currentVersion></upd:GetVersions>",
     )
@@ -105,9 +100,8 @@ def composer_versions(url):
     return sorted((v for v in found if v.endswith("+Composer")), key=version_key)
 
 
-def composer_packages(url, version):
+def composer_packages(version):
     root = soap(
-        url,
         "GetPackagesByVersion",
         "<upd:GetPackagesByVersion><upd:version>"
         f"{version}"
@@ -135,14 +129,7 @@ def composer_installers(state):
     scanned before and the newest RESCAN_NEWEST_VERSIONS are, so an installer
     added to a recent version later is still found.
     """
-    endpoints = [(UPDATES_URL, False)]
-    if INCLUDE_BETA:
-        endpoints.append((UPDATES_BETA_URL, True))
-    versions = {}
-    for url, beta in endpoints:
-        for version in composer_versions(url):
-            versions.setdefault(version, (url, beta))
-    ordered = sorted(versions, key=version_key)
+    ordered = composer_versions()
     scanned = set(state.get("composer_scanned", []))
     if "composer" in state:
         recent = set(ordered[-RESCAN_NEWEST_VERSIONS:])
@@ -151,9 +138,8 @@ def composer_installers(state):
         to_scan = ordered
     items = []
     for version in to_scan:
-        url, beta = versions[version]
-        for package in composer_packages(url, version):
-            items.append({**package, "version": version, "beta": beta})
+        for package in composer_packages(version):
+            items.append({**package, "version": version})
     state["composer_scanned"] = sorted(scanned | set(to_scan))
     return items
 
@@ -169,8 +155,6 @@ def installer_label(name):
 def composer_embed(installers):
     version = installers[0]["version"].removesuffix("+Composer").removesuffix("-res")
     title = f"Composer {version}"
-    if installers[0]["beta"]:
-        title += " (beta)"
     lines = [
         f"[{installer_label(i['name'])}]({i['url']}) · {i['size'] / 1e6:.0f} MB" for i in installers
     ]
@@ -190,7 +174,7 @@ def jailbreak_releases(state):
     if r.status_code == 304:
         return jailbreak_cache["releases"]
     r.raise_for_status()
-    releases = [rel for rel in r.json() if not rel.get("draft")]
+    releases = [rel for rel in r.json() if not rel.get("draft") and not rel.get("prerelease")]
     releases.sort(key=lambda rel: rel.get("published_at") or "")
     jailbreak_cache.update(etag=r.headers.get("ETag"), releases=releases)
     return releases
@@ -199,8 +183,6 @@ def jailbreak_releases(state):
 def jailbreak_embed(releases):
     release = releases[0]
     title = release.get("name") or release["tag_name"]
-    if release.get("prerelease"):
-        title += " (prerelease)"
     assets = [f"[{a['name']}]({a['browser_download_url']})" for a in release.get("assets", [])]
     return {
         "title": title,
@@ -276,7 +258,9 @@ def forget(source, target):
     state[source] = [k for k in state[source] if k not in dropped]
     if source == "composer":
         versions = {k.split("/", 1)[0] for k in dropped}
-        state["composer_scanned"] = [v for v in state.get("composer_scanned", []) if v not in versions]
+        state["composer_scanned"] = [
+            v for v in state.get("composer_scanned", []) if v not in versions
+        ]
     save_state(state)
     for k in dropped:
         print(f"forgot {source} {k}")
