@@ -154,11 +154,16 @@ def installer_label(name):
 
 def composer_embed(installers):
     version = installers[0]["version"].removesuffix("+Composer").removesuffix("-res")
-    title = f"Composer {version}"
     lines = [
-        f"[{installer_label(i['name'])}]({i['url']}) · {i['size'] / 1e6:.0f} MB" for i in installers
+        f"**{installer_label(i['name'])}**: [download]({i['url']}) ({i['size'] / 1e6:.0f} MB)"
+        for i in installers
     ]
-    return {"title": title, "color": COMPOSER_COLOR, "description": "\n".join(lines)}
+    return {
+        "author": {"name": "Control4 Composer"},
+        "title": version,
+        "color": COMPOSER_COLOR,
+        "description": "\n".join(lines),
+    }
 
 
 def jailbreak_releases(state):
@@ -183,8 +188,15 @@ def jailbreak_releases(state):
 def jailbreak_embed(releases):
     release = releases[0]
     title = release.get("name") or release["tag_name"]
-    assets = [f"[{a['name']}]({a['browser_download_url']})" for a in release.get("assets", [])]
+    assets = [
+        f"**{a['name']}**: [download]({a['browser_download_url']})"
+        for a in release.get("assets", [])
+    ]
+    author = {"name": JAILBREAK_REPO, "url": f"https://github.com/{JAILBREAK_REPO}"}
+    if release.get("author", {}).get("avatar_url"):
+        author["icon_url"] = release["author"]["avatar_url"]
     return {
+        "author": author,
         "title": title,
         "url": release["html_url"],
         "color": JAILBREAK_COLOR,
