@@ -37,9 +37,7 @@ ONCE = os.environ.get("ONCE", "false").strip().lower() == "true"
 
 UPDATES_NS = "http://services.control4.com/updates/v2_0/"
 UPDATES_URL = "https://services.control4.com/Updates2x/v2_0/Updates.asmx"
-JAILBREAK_REPO = os.environ.get(
-    "JAILBREAK_REPO", "garrynewman/Control4.Jailbreak"
-).strip()
+JAILBREAK_REPO = os.environ.get("JAILBREAK_REPO", "garrynewman/Control4.Jailbreak").strip()
 RESCAN_NEWEST_VERSIONS = 3
 
 USER_AGENT = "c4-release-notifier (+https://github.com/derek-miller/homelab-ansible)"
@@ -117,9 +115,7 @@ def composer_packages(version):
         packages.append(
             {
                 "name": name,
-                "url": pkg.findtext(f"{{{UPDATES_NS}}}Url", "").replace(
-                    "http://", "https://", 1
-                ),
+                "url": pkg.findtext(f"{{{UPDATES_NS}}}Url", "").replace("http://", "https://", 1),
                 "size": int(pkg.findtext(f"{{{UPDATES_NS}}}Size", "0") or 0),
             }
         )
@@ -188,9 +184,7 @@ def jailbreak_releases(state):
     if r.status_code == 304:
         return jailbreak_cache["releases"]
     r.raise_for_status()
-    releases = [
-        rel for rel in r.json() if not rel.get("draft") and not rel.get("prerelease")
-    ]
+    releases = [rel for rel in r.json() if not rel.get("draft") and not rel.get("prerelease")]
     releases.sort(key=lambda rel: rel.get("published_at") or "")
     jailbreak_cache.update(etag=r.headers.get("ETag"), releases=releases)
     return releases
@@ -300,9 +294,7 @@ def forget(source, target):
 def main():
     if sys.argv[1:2] == ["forget"]:
         if len(sys.argv) != 4 or sys.argv[2] not in ("composer", "jailbreak"):
-            sys.exit(
-                "usage: notifier.py forget composer|jailbreak <version, tag or state entry>"
-            )
+            sys.exit("usage: notifier.py forget composer|jailbreak <version, tag or state entry>")
         forget(sys.argv[2], sys.argv[3])
         return
     if not COMPOSER_WEBHOOK_URL and not JAILBREAK_WEBHOOK_URL:
