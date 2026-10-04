@@ -9,6 +9,11 @@ Two sources, each with its own webhook:
 A release is announced the first time it is seen, not when it compares
 greater than the last one: Composer moved from 4.x to 2026.M.D.build
 numbering, so "newest" is not a stable ordering across the change.
+
+To post a release again, e.g. to test the webhooks, drop it from state and
+wait for the next poll or restart the service:
+  python notifier.py forget composer 2026.9.16.642
+  python notifier.py forget jailbreak v9
 """
 
 import json
@@ -37,6 +42,7 @@ UPDATES_NS = "http://services.control4.com/updates/v2_0/"
 UPDATES_URL = "https://services.control4.com/Updates2x/v2_0/Updates.asmx"
 UPDATES_BETA_URL = "https://services.control4.com/Updates2x-external/v2_0/Updates.asmx"
 JAILBREAK_REPO = os.environ.get("JAILBREAK_REPO", "garrynewman/Control4.Jailbreak").strip()
+RESCAN_NEWEST_VERSIONS = 3
 
 USER_AGENT = "c4-release-notifier (+https://github.com/derek-miller/homelab-ansible)"
 COMPOSER_COLOR = 0xE6332A
@@ -122,36 +128,56 @@ def composer_packages(url, version):
     return sorted(packages, key=lambda p: p["name"])
 
 
-def composer_releases():
+def composer_installers(state):
+    """Return one item per Composer installer, oldest version first.
+
+    Every version is scanned on first start. After that only versions never
+    scanned before and the newest RESCAN_NEWEST_VERSIONS are, so an installer
+    added to a recent version later is still found.
+    """
     endpoints = [(UPDATES_URL, False)]
     if INCLUDE_BETA:
         endpoints.append((UPDATES_BETA_URL, True))
-    releases = {}
+    versions = {}
     for url, beta in endpoints:
         for version in composer_versions(url):
-            if version in releases:
-                continue
-            releases[version] = {"version": version, "url": url, "beta": beta}
-    return list(releases.values())
+            versions.setdefault(version, (url, beta))
+    ordered = sorted(versions, key=version_key)
+    scanned = set(state.get("composer_scanned", []))
+    if "composer" in state:
+        recent = set(ordered[-RESCAN_NEWEST_VERSIONS:])
+        to_scan = [v for v in ordered if v not in scanned or v in recent]
+    else:
+        to_scan = ordered
+    items = []
+    for version in to_scan:
+        url, beta = versions[version]
+        for package in composer_packages(url, version):
+            items.append({**package, "version": version, "beta": beta})
+    state["composer_scanned"] = sorted(scanned | set(to_scan))
+    return items
 
 
-def composer_embed(release):
-    version = release["version"].removesuffix("+Composer")
-    packages = composer_packages(release["url"], release["version"])
-    lines = [f"[{p['name']}]({p['url']}) ({p['size'] / 1e6:.0f} MB)" for p in packages]
+def composer_key(item):
+    return f"{item['version']}/{item['name']}"
+
+
+def installer_label(name):
+    return re.sub(r"^Composer(?=\w)", "Composer ", name.split("-")[0])
+
+
+def composer_embed(installers):
+    version = installers[0]["version"].removesuffix("+Composer").removesuffix("-res")
     title = f"Composer {version}"
-    if release["beta"]:
+    if installers[0]["beta"]:
         title += " (beta)"
-    embed = {
-        "title": title,
-        "color": COMPOSER_COLOR,
-        "description": "\n".join(lines) or "No installer packages listed.",
-        "footer": {"text": "Control4 Updates service"},
-    }
-    return embed
+    lines = [
+        f"[{installer_label(i['name'])}]({i['url']}) · {i['size'] / 1e6:.0f} MB" for i in installers
+    ]
+    return {"title": title, "color": COMPOSER_COLOR, "description": "\n".join(lines)}
 
 
-def jailbreak_releases():
+def jailbreak_releases(state):
     headers = {"Accept": "application/vnd.github+json"}
     if jailbreak_cache["etag"]:
         headers["If-None-Match"] = jailbreak_cache["etag"]
@@ -170,21 +196,18 @@ def jailbreak_releases():
     return releases
 
 
-def jailbreak_embed(release):
+def jailbreak_embed(releases):
+    release = releases[0]
     title = release.get("name") or release["tag_name"]
     if release.get("prerelease"):
         title += " (prerelease)"
     assets = [f"[{a['name']}]({a['browser_download_url']})" for a in release.get("assets", [])]
-    embed = {
+    return {
         "title": title,
         "url": release["html_url"],
         "color": JAILBREAK_COLOR,
         "description": "\n".join(assets) or "No release assets.",
-        "footer": {"text": f"{JAILBREAK_REPO} {release['tag_name']}"},
     }
-    if release.get("published_at"):
-        embed["timestamp"] = release["published_at"]
-    return embed
 
 
 def post(webhook, embed):
@@ -198,47 +221,82 @@ def post(webhook, embed):
     raise RuntimeError("Discord kept rate limiting the webhook")
 
 
-def check(state, name, webhook, fetch, key, embed):
-    """Fetch releases oldest first and post the ones not yet in state.
+def check(state, name, webhook, fetch, key, group, embed):
+    """Fetch items oldest first and post the new ones, one message per group.
 
-    With no state yet, post only the newest release and record the rest as seen.
+    With no state yet, post only the newest group and record the rest as seen.
     """
     try:
-        items = fetch()
+        items = fetch(state)
     except (requests.RequestException, ET.ParseError) as e:
         log(f"{name}: fetch failed: {e}")
         return
     if name in state:
         seen = set(state[name])
-        to_post = [i for i in items if key(i) not in seen]
+        new = [i for i in items if key(i) not in seen]
     else:
-        to_post = items[-1:]
-        seen = {key(i) for i in items[:-1]}
+        newest = group(items[-1]) if items else None
+        new = [i for i in items if group(i) == newest]
+        seen = {key(i) for i in items if group(i) != newest}
         state[name] = sorted(seen)
-        save_state(state)
-        log(f"{name}: seeded {len(seen)} older releases, posting the newest")
-    for item in to_post:
+        log(f"{name}: seeded {len(seen)} older items, posting the newest")
+    save_state(state)
+    groups = {}
+    for item in new:
+        groups.setdefault(group(item), []).append(item)
+    for label, members in groups.items():
         try:
-            post(webhook, embed(item))
-        except (requests.RequestException, ET.ParseError, RuntimeError) as e:
-            log(f"{name}: posting {key(item)} failed, will retry next poll: {e}")
+            post(webhook, embed(members))
+        except (requests.RequestException, RuntimeError) as e:
+            log(f"{name}: posting {label} failed, will retry next poll: {e}")
             continue
-        seen.add(key(item))
+        seen.update(key(i) for i in members)
         state[name] = sorted(seen)
         save_state(state)
-        log(f"{name}: posted {key(item)}")
-    log(f"{name}: {len(items)} releases, {len(to_post)} to post")
+        log(f"{name}: posted {label} ({len(members)} items)")
+    log(f"{name}: {len(items)} items, {len(groups)} to post")
+
+
+def forget(source, target):
+    """Drop matching entries from state so the next poll posts them again."""
+    state = load_state()
+    if source not in state:
+        sys.exit(f"no {source} state in {STATE_FILE}")
+
+    def matches(k):
+        if k == target:
+            return True
+        if source != "composer" or "/" in target:
+            return False
+        return version_key(k.split("/", 1)[0]) == version_key(target)
+
+    dropped = [k for k in state[source] if matches(k)]
+    if not dropped:
+        sys.exit(f"nothing in {source} state matches {target}")
+    state[source] = [k for k in state[source] if k not in dropped]
+    if source == "composer":
+        versions = {k.split("/", 1)[0] for k in dropped}
+        state["composer_scanned"] = [v for v in state.get("composer_scanned", []) if v not in versions]
+    save_state(state)
+    for k in dropped:
+        print(f"forgot {source} {k}")
 
 
 def main():
+    if sys.argv[1:2] == ["forget"]:
+        if len(sys.argv) != 4 or sys.argv[2] not in ("composer", "jailbreak"):
+            sys.exit("usage: notifier.py forget composer|jailbreak <version, tag or state entry>")
+        forget(sys.argv[2], sys.argv[3])
+        return
     if not COMPOSER_WEBHOOK_URL and not JAILBREAK_WEBHOOK_URL:
         sys.exit("set COMPOSER_WEBHOOK_URL and/or JAILBREAK_WEBHOOK_URL")
     sources = [
         (
             "composer",
             COMPOSER_WEBHOOK_URL,
-            composer_releases,
-            lambda r: r["version"],
+            composer_installers,
+            composer_key,
+            lambda i: i["version"],
             composer_embed,
         ),
         (
@@ -246,12 +304,14 @@ def main():
             JAILBREAK_WEBHOOK_URL,
             jailbreak_releases,
             lambda r: r["tag_name"],
+            lambda r: r["tag_name"],
             jailbreak_embed,
         ),
     ]
     sources = [s for s in sources if s[1]]
-    state = load_state()
     while True:
+        # Reloaded every poll so a `forget` run alongside the service sticks.
+        state = load_state()
         for source in sources:
             check(state, *source)
         if ONCE:
