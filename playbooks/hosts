@@ -46,7 +46,8 @@ raspi1
 
 [docker-build-images]
 rackvm1 docker_images_to_build=openclaw-webhook-proxy
-rackvm[2:3] docker_images_to_build=gha-runner
+rackvm2 docker_images_to_build=gha-runner
+rackvm3 docker_images_to_build=gha-runner,c4-release-notifier
 rackvm4 docker_images_to_build=unifi-collector,gha-runner
 rackvm5 docker_images_to_build=sourcebot,control4-driver-scraper,gha-runner
 
@@ -64,7 +65,7 @@ rackvm[4:5]
 [docker_labels]
 rackvm1  docker_labels=identity,edge,webhooks
 rackvm2  docker_labels=home,mqtt,youtrack
-rackvm3  docker_labels=media
+rackvm3  docker_labels=media,notifier
 rackvm4  docker_labels=grafana,metrics
 rackvm5  docker_labels=sourcebot
 

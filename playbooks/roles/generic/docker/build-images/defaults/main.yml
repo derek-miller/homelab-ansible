@@ -31,6 +31,12 @@ available_docker_images:
       - unifi-collector/collector.py
     image_name: unifi-collector
     image_tag: "1.3.2"
+  c4-release-notifier:
+    dockerfile: c4-release-notifier/Dockerfile
+    build_files:
+      - c4-release-notifier/notifier.py
+    image_name: c4-release-notifier
+    image_tag: "1.0.0"
   gha-runner:
     dockerfile: gha-runner/Dockerfile
     build_files:
