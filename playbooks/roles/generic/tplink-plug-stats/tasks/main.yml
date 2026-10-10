@@ -8,6 +8,7 @@
     - name: install python dependencies
       pip:
         virtualenv: "{{ tplink_plug_stats_virtualenv_path }}"
+        virtualenv_command: "{{ darwin_venv_python | default('/usr/bin/python3') }} -m venv"
         name:
           - click
           - python-kasa
