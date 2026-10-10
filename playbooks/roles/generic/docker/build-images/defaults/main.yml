@@ -36,7 +36,7 @@ available_docker_images:
     build_files:
       - c4-release-notifier/notifier.py
     image_name: c4-release-notifier
-    image_tag: "1.0.0"
+    image_tag: "1.1.0"
   gha-runner:
     dockerfile: gha-runner/Dockerfile
     build_files:

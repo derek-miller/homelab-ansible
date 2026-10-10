@@ -1,9 +1,13 @@
 """Post new Control4 Composer and Control4.Jailbreak releases to Discord.
 
 Two sources, each with its own webhook:
-  composer   Control4's Updates SOAP service; a release is a GetVersions
-             entry ending in "+Composer", with its installers listed by
-             GetPackagesByVersion
+  composer   two feeds, one card per full version:
+             installer      Control4's Updates SOAP service; a release is a
+                            GetVersions entry ending in "+Composer", with its
+                            installers listed by GetPackagesByVersion
+             in-app update  Snap One's public resource catalog, which Composer's
+                            own updater reads; it holds only the current build
+                            per product, and betas are never announced
   jailbreak  GitHub releases of garrynewman/Control4.Jailbreak, keyed on tag
 
 A release is announced the first time it is seen, not when it compares
@@ -13,6 +17,7 @@ numbering, so "newest" is not a stable ordering across the change.
 To post a release again, e.g. to test the webhooks, drop it from state and
 wait for the next poll or restart the service:
   python notifier.py forget composer 2026.9.16.642
+  python notifier.py forget composer 2026.9.16.717
   python notifier.py forget jailbreak v9
 """
 
@@ -40,10 +45,13 @@ ONCE = os.environ.get("ONCE", "false").strip().lower() == "true"
 
 UPDATES_NS = "http://services.control4.com/updates/v2_0/"
 UPDATES_URL = "https://services.control4.com/Updates2x/v2_0/Updates.asmx"
+# Composer's updater adds an X-Context header naming the dealer account, which
+# makes the catalog serve that account's targeted betas.
+CATALOG_URL = "https://resources.snapone.com/api/v1/public/resources/application"
 JAILBREAK_REPO = os.environ.get("JAILBREAK_REPO", "garrynewman/Control4.Jailbreak").strip()
 RESCAN_NEWEST_VERSIONS = 3
 
-USER_AGENT = "c4-release-notifier (+https://github.com/derek-miller/homelab-ansible)"
+USER_AGENT = "c4-release-notifier"
 COMPOSER_COLOR = 0xE6332A
 JAILBREAK_COLOR = 0x24292F
 
@@ -166,7 +174,9 @@ def composer_installers():
     items, failed, fetched, empty, quiet = [], set(), set(), set(), []
     for version in to_scan:
         try:
-            found = [{**p, "version": version} for p in composer_packages(version)]
+            found = [
+                {**p, "version": version, "feed": "installer"} for p in composer_packages(version)
+            ]
         except Exception as e:
             log(f"composer: looking up {version} failed, will retry: {describe(e)}")
             failed.add(version)
@@ -191,10 +201,76 @@ def composer_installers():
     return items
 
 
+def catalog_installers():
+    """Return the catalog's current general-release Composer installers.
+
+    Betas are dropped here, never recorded, so one announces if it is later
+    promoted. Recorded without posting: everything on the first successful
+    fetch over existing state, and any build whose full version the installer
+    feed has already announced.
+    """
+    entries, page, pages = [], 1, 1
+    while page <= pages:
+        r = session.get(CATALOG_URL, params={"page": page}, timeout=30)
+        r.raise_for_status()
+        body = r.json()
+        entries.extend(body["data"])
+        pages = body["pagination"]["totalPages"]
+        page += 1
+    items = [
+        {
+            "name": e["filename"],
+            "version": e["metadata"]["fullVersion"],
+            "size": e["fileSize"],
+            "feed": "in-app update",
+        }
+        for e in entries
+        if e.get("isBeta") is False and e["filename"].lower().startswith("composer")
+    ]
+    with locked_state() as s:
+        if "composer" in s:
+            seeding = not s.get("composer_catalog_seeded")
+            announced = {
+                full_version(k.split("/", 1)[0]) for k in s["composer"] if "+Composer" in k
+            }
+            quiet = [i for i in items if seeding or i["version"] in announced]
+            s["composer"] = sorted(set(s["composer"]) | {composer_key(i) for i in quiet})
+            if seeding:
+                log(f"composer: recorded {len(quiet)} in-app update items without posting")
+        s["composer_catalog_seeded"] = True
+    return items
+
+
+def composer_items():
+    """Return both feeds' items, oldest full version first.
+
+    Either feed failing is logged and the other still runs, except before the
+    first seed, when the installer feed must succeed so check() seeds from it.
+    """
+    try:
+        items = composer_installers()
+    except Exception as e:
+        if "composer" not in load_state():
+            raise
+        log(f"composer: installer feed failed: {describe(e)}")
+        items = []
+    try:
+        items += catalog_installers()
+    except Exception as e:
+        log(f"composer: in-app update feed failed: {describe(e)}")
+    return sorted(items, key=lambda i: version_key(i["version"]))
+
+
+def full_version(version):
+    return version.removesuffix("+Composer").removesuffix("-res")
+
+
 def composer_settle(state, items):
     posted = set(state.get("composer", []))
     keys = {}
     for i in items:
+        if i["feed"] != "installer":
+            continue
         keys.setdefault(i["version"], []).append(composer_key(i))
     done = {v for v, ks in keys.items() if all(k in posted for k in ks)}
     state["composer_scanned"] = sorted(set(state.get("composer_scanned", [])) | done)
@@ -205,18 +281,26 @@ def composer_key(item):
 
 
 def installer_label(name):
-    return re.sub(r"^Composer(?=\w)", "Composer ", name.split("-")[0])
+    return re.sub(r"^Composer(?=\w)", "Composer ", re.split(r"[-_]", name)[0])
 
 
 def composer_embed(installers):
-    version = installers[0]["version"].removesuffix("+Composer").removesuffix("-res")
-    lines = [
-        f"**{installer_label(i['name'])}**: [download]({i['url']}) ({i['size'] / 1e6:.0f} MB)"
-        for i in installers
-    ]
+    feeds, lines = [], []
+    for feed in ("installer", "in-app update"):
+        members = [i for i in installers if i["feed"] == feed]
+        if not members:
+            continue
+        feeds.append(feed)
+        if feed == "in-app update":
+            lines.append("Available through Composer's in-app update:")
+        for i in members:
+            size = f"{i['size'] / 1e6:.0f} MB"
+            if feed == "installer":
+                size = f"[download]({i['url']}) ({size})"
+            lines.append(f"**{installer_label(i['name'])}**: {size}")
     return {
         "author": {"name": "Control4 Composer"},
-        "title": version,
+        "title": f"{full_version(installers[0]['version'])} ({', '.join(feeds)})",
         "color": COMPOSER_COLOR,
         "description": "\n".join(lines),
     }
@@ -387,9 +471,9 @@ def main():
         Source(
             name="composer",
             webhook=COMPOSER_WEBHOOK_URL,
-            fetch=composer_installers,
+            fetch=composer_items,
             key=composer_key,
-            group=lambda i: i["version"],
+            group=lambda i: full_version(i["version"]),
             embed=composer_embed,
             settle=composer_settle,
         ),
