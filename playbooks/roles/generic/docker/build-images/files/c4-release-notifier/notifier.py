@@ -51,12 +51,10 @@ CATALOG_URL = "https://resources.snapone.com/api/v1/public/resources/application
 JAILBREAK_REPO = os.environ.get("JAILBREAK_REPO", "garrynewman/Control4.Jailbreak").strip()
 RESCAN_NEWEST_VERSIONS = 3
 
-USER_AGENT = "c4-release-notifier"
 COMPOSER_COLOR = 0xE6332A
 JAILBREAK_COLOR = 0x24292F
 
 session = requests.Session()
-session.headers["User-Agent"] = USER_AGENT
 jailbreak_cache = {"etag": None, "releases": []}
 
 
@@ -205,9 +203,8 @@ def catalog_installers():
     """Return the catalog's current general-release Composer installers.
 
     Betas are dropped here, never recorded, so one announces if it is later
-    promoted. Recorded without posting: everything on the first successful
-    fetch over existing state, and any build whose full version the installer
-    feed has already announced.
+    promoted. A build whose full version the installer feed has already
+    announced is recorded without posting.
     """
     entries, page, pages = [], 1, 1
     while page <= pages:
@@ -229,15 +226,11 @@ def catalog_installers():
     ]
     with locked_state() as s:
         if "composer" in s:
-            seeding = not s.get("composer_catalog_seeded")
             announced = {
                 full_version(k.split("/", 1)[0]) for k in s["composer"] if "+Composer" in k
             }
-            quiet = [i for i in items if seeding or i["version"] in announced]
+            quiet = [i for i in items if i["version"] in announced]
             s["composer"] = sorted(set(s["composer"]) | {composer_key(i) for i in quiet})
-            if seeding:
-                log(f"composer: recorded {len(quiet)} in-app update items without posting")
-        s["composer_catalog_seeded"] = True
     return items
 
 
