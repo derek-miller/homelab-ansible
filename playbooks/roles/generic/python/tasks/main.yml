@@ -3,12 +3,14 @@
     that: python_state == 'present'
     quiet: yes
 
-- name: set up pip3 and virtualenv (apt-based)
+- name: set up pip3 and venv (apt-based)
   when: ansible_os_family == 'Debian'
   block:
-    - name: install pip3
+    - name: install pip3 and venv
       apt:
-        name: python3-pip
+        name:
+          - python3-pip
+          - python3-venv
         state: latest
 
     - name: probe pip3 presence (always passes --disable-pip-version-check below)
@@ -42,12 +44,18 @@
         not (ansible_distribution == 'Ubuntu' and ansible_distribution_major_version | int >= 24)
         and not (ansible_distribution == 'Debian' and ansible_distribution_major_version | int >= 12)
 
-    - name: install/upgrade virtualenv
+    - name: check for a pip-installed virtualenv
+      stat:
+        path: /usr/local/bin/virtualenv
+      register: python_pip_virtualenv
+
+    - name: uninstall the pip-installed virtualenv
       pip:
-        name: virtualenv{{ virtualenv_version_spec }}
+        name: virtualenv
         executable: pip3
         extra_args: "{{ '--break-system-packages' if pip_break_system_packages else '' }} --disable-pip-version-check"
-        state: latest
+        state: absent
+      when: python_pip_virtualenv.stat.exists
 
 - name: install Python via Homebrew (macOS)
   # Apple's /usr/bin/python3 is pinned at 3.9 (EOL); build the remote venv from a

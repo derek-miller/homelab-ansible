@@ -23,7 +23,6 @@ docker_volume_backup_age_public_key: age1nzyr0mk08nwy7x0w2wjw462kvnyq6lwhmgufzyz
 pip_default_index_url: https://pypi.python.org/simple
 pip_version_spec:
 setuptools_version_spec:
-virtualenv_version_spec:
 
 pki_tls_ca_bundle: /etc/ssl/certs/ca-certificates.crt
 pki_tls_dir: /etc/ssl
