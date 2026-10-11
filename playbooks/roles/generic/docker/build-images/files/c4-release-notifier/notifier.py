@@ -14,6 +14,11 @@ A release is announced the first time it is seen, not when it compares
 greater than the last one: Composer moved from 4.x to 2026.M.D.build
 numbering, so "newest" is not a stable ordering across the change.
 
+The catalog's download links are signed and expire 6 hours after they are
+issued, so a card with in-app update links is edited every poll with fresh
+ones while the catalog serves its build, and once more to withdraw them when
+it stops. Installer and jailbreak cards are never edited.
+
 To post a release again, e.g. to test the webhooks, drop it from state and
 wait for the next poll or restart the service:
   python notifier.py forget composer 2026.9.16.642
@@ -29,6 +34,7 @@ import random
 import re
 import sys
 import time
+import uuid
 import xml.etree.ElementTree as ET
 from typing import Callable, NamedTuple, Optional
 
@@ -46,7 +52,9 @@ ONCE = os.environ.get("ONCE", "false").strip().lower() == "true"
 UPDATES_NS = "http://services.control4.com/updates/v2_0/"
 UPDATES_URL = "https://services.control4.com/Updates2x/v2_0/Updates.asmx"
 # Composer's updater adds an X-Context header naming the dealer account, which
-# makes the catalog serve that account's targeted betas.
+# makes the catalog serve that account's targeted betas. Responses are cached
+# for 4 hours unless the query carries an unseen downloadNonce, so a plain
+# request can return download links that have already expired.
 CATALOG_URL = "https://resources.snapone.com/api/v1/public/resources/application"
 JAILBREAK_REPO = os.environ.get("JAILBREAK_REPO", "garrynewman/Control4.Jailbreak").strip()
 RESCAN_NEWEST_VERSIONS = 3
@@ -56,6 +64,9 @@ JAILBREAK_COLOR = 0x24292F
 
 session = requests.Session()
 jailbreak_cache = {"etag": None, "releases": []}
+# Full versions of the general Composer builds the catalog served this poll,
+# or None if it could not be read.
+catalog_served = {"versions": None}
 
 
 def log(message):
@@ -205,10 +216,18 @@ def catalog_installers():
     Betas are dropped here, never recorded, so one announces if it is later
     promoted. A build whose full version the installer feed has already
     announced is recorded without posting.
+
+    State from before cards were tracked has no composer_cards. Its in-app
+    builds were posted without links, so on the first read they are dropped
+    from the posted set to be posted again with links and tracked.
     """
     entries, page, pages = [], 1, 1
     while page <= pages:
-        r = session.get(CATALOG_URL, params={"page": page}, timeout=30)
+        r = session.get(
+            CATALOG_URL,
+            params={"page": page, "downloadNonce": uuid.uuid4().hex},
+            timeout=30,
+        )
         r.raise_for_status()
         body = r.json()
         entries.extend(body["data"])
@@ -219,6 +238,7 @@ def catalog_installers():
             "name": e["filename"],
             "version": e["metadata"]["fullVersion"],
             "size": e["fileSize"],
+            "url": e["downloadUrl"],
             "feed": "in-app update",
         }
         for e in entries
@@ -231,6 +251,11 @@ def catalog_installers():
             }
             quiet = [i for i in items if i["version"] in announced]
             s["composer"] = sorted(set(s["composer"]) | {composer_key(i) for i in quiet})
+            if "composer_cards" not in s:
+                repost = {composer_key(i) for i in items if i["version"] not in announced}
+                s["composer"] = [k for k in s["composer"] if k not in repost]
+        s.setdefault("composer_cards", {})
+    catalog_served["versions"] = {i["version"] for i in items}
     return items
 
 
@@ -247,6 +272,7 @@ def composer_items():
             raise
         log(f"composer: installer feed failed: {describe(e)}")
         items = []
+    catalog_served["versions"] = None
     try:
         items += catalog_installers()
     except Exception as e:
@@ -277,26 +303,81 @@ def installer_label(name):
     return re.sub(r"^Composer(?=\w)", "Composer ", re.split(r"[-_]", name)[0])
 
 
-def composer_embed(installers):
+def composer_embed(version, installers, withdrawn=False):
+    """Build a card; withdrawn replaces its in-app update links with a note."""
     feeds, lines = [], []
     for feed in ("installer", "in-app update"):
         members = [i for i in installers if i["feed"] == feed]
+        if feed == "in-app update" and withdrawn:
+            feeds.append(feed)
+            lines.append("Control4 no longer offers this build through the in-app update.")
+            continue
         if not members:
             continue
         feeds.append(feed)
         if feed == "in-app update":
             lines.append("Available through Composer's in-app update:")
         for i in members:
-            size = f"{i['size'] / 1e6:.0f} MB"
-            if feed == "installer":
-                size = f"[download]({i['url']}) ({size})"
-            lines.append(f"**{installer_label(i['name'])}**: {size}")
-    return {
+            lines.append(
+                f"**{installer_label(i['name'])}**: "
+                f"[download]({i['url']}) ({i['size'] / 1e6:.0f} MB)"
+            )
+    embed = {
         "author": {"name": "Control4 Composer"},
-        "title": f"{full_version(installers[0]['version'])} ({', '.join(feeds)})",
+        "title": f"{version} ({', '.join(feeds)})",
         "color": COMPOSER_COLOR,
         "description": "\n".join(lines),
     }
+    if "in-app update" in feeds and not withdrawn:
+        embed["footer"] = {"text": "In-app update links are refreshed automatically"}
+        embed["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    return embed
+
+
+def composer_track(state, label, members, message):
+    if any(i["feed"] == "in-app update" for i in members):
+        state.setdefault("composer_cards", {})[label] = {
+            "id": message["id"],
+            "installers": [i for i in members if i["feed"] == "installer"],
+        }
+
+
+def composer_refresh(webhook, items, just_posted):
+    """Edit every tracked card the catalog was read for this poll.
+
+    A build the catalog still serves gets its current links. One it has
+    stopped serving, while it serves some other general build, has its links
+    withdrawn and is no longer tracked. A failed edit is retried next poll; a
+    404 means the card was deleted, so it is dropped without posting again.
+    """
+    served = catalog_served["versions"]
+    if served is None:
+        return
+    cards = load_state().get("composer_cards", {})
+    for version, card in cards.items():
+        if version in just_posted:
+            continue
+        current = [i for i in items if i["feed"] == "in-app update" and i["version"] == version]
+        withdrawn = not current
+        if withdrawn and not served:
+            continue
+        embed = composer_embed(version, card["installers"] + current, withdrawn)
+        try:
+            edit(webhook, card["id"], embed)
+        except Exception as e:
+            if getattr(getattr(e, "response", None), "status_code", None) != 404:
+                log(f"composer: editing {version} failed, will retry next poll: {describe(e)}")
+                continue
+            log(f"composer: the {version} card was deleted, stopped tracking it")
+        else:
+            if not withdrawn:
+                log(f"composer: refreshed the {version} card")
+                continue
+            log(f"composer: {version} is no longer offered, withdrew its links")
+        with locked_state() as s:
+            tracked = s.get("composer_cards", {})
+            if tracked.get(version, {}).get("id") == card["id"]:
+                del tracked[version]
 
 
 def jailbreak_releases():
@@ -361,15 +442,24 @@ def describe(e):
     return f"{type(e).__name__}: {e}"
 
 
-def post(webhook, embed):
+def send(method, url, embed, **kwargs):
     for _ in range(5):
-        r = session.post(webhook, json={"embeds": [embed]}, timeout=30)
+        r = session.request(method, url, json={"embeds": [embed]}, timeout=30, **kwargs)
         if r.status_code == 429:
             time.sleep(float(r.json().get("retry_after", 1)) + 0.5)
             continue
         r.raise_for_status()
-        return
+        return r
     raise RuntimeError("Discord kept rate limiting the webhook")
+
+
+def post(webhook, embed):
+    """Post a card and return the message Discord created."""
+    return send("POST", webhook, embed, params={"wait": "true"}).json()
+
+
+def edit(webhook, message_id, embed):
+    send("PATCH", f"{webhook}/messages/{message_id}", embed)
 
 
 class Source(NamedTuple):
@@ -380,6 +470,8 @@ class Source(NamedTuple):
     group: Callable[[dict], str]
     embed: Callable[[list], dict]
     settle: Optional[Callable[[dict, list], None]] = None
+    track: Optional[Callable[[dict, str, list, dict], None]] = None
+    refresh: Optional[Callable[[str, list, set], None]] = None
 
 
 def check(source):
@@ -404,12 +496,12 @@ def check(source):
             log(f"{name}: seeded {len(state[name])} older items, posting the newest")
         if source.settle:
             source.settle(state, items)
-    groups = {}
+    groups, posted = {}, set()
     for item in new:
         groups.setdefault(group(item), []).append(item)
     for label, members in groups.items():
         try:
-            post(source.webhook, source.embed(members))
+            message = post(source.webhook, source.embed(members))
         except Exception as e:
             log(f"{name}: posting {label} failed, will retry next poll: {describe(e)}")
             continue
@@ -417,8 +509,13 @@ def check(source):
             state[name] = sorted(set(state.get(name, [])) | {key(i) for i in members})
             if source.settle:
                 source.settle(state, items)
+            if source.track:
+                source.track(state, label, members, message)
+        posted.add(label)
         log(f"{name}: posted {label} ({len(members)} items)")
     log(f"{name}: {len(items)} items, {len(groups)} to post")
+    if source.refresh:
+        source.refresh(source.webhook, items, posted)
 
 
 def forget(source, target):
@@ -449,6 +546,9 @@ def forget_entries(state, source, target):
         state["composer_scanned"] = [
             v for v in state.get("composer_scanned", []) if v not in versions
         ]
+        cards = state.get("composer_cards", {})
+        for v in versions:
+            cards.pop(full_version(v), None)
     return dropped
 
 
@@ -467,8 +567,10 @@ def main():
             fetch=composer_items,
             key=composer_key,
             group=lambda i: full_version(i["version"]),
-            embed=composer_embed,
+            embed=lambda members: composer_embed(full_version(members[0]["version"]), members),
             settle=composer_settle,
+            track=composer_track,
+            refresh=composer_refresh,
         ),
         Source(
             name="jailbreak",
