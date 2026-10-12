@@ -38,7 +38,7 @@ proxmox_guest:
     3363
   cores: 4
   # 20 GiB not 24: shares pve1 with another guest.
-  memory: 20480
+  memory: 18432
   balloon: 12288
   disks:
     - iface: scsi0
