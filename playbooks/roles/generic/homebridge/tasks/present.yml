@@ -108,6 +108,7 @@
     owner: "{{ homebridge_user }}"
     group: admin
     recurse: true
+    follow: false
   loop:
     - "{{ homebridge_node_bin | dirname | dirname }}/lib/node_modules"
     - "{{ homebridge_node_bin | dirname }}"
