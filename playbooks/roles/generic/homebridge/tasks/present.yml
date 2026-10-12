@@ -91,9 +91,24 @@
 - name: keep Node.js at the Homebridge-managed version
   command: >-
     {{ homebridge_hbservice_bin }} update-node
+    --user {{ homebridge_user }}
     {% if homebridge_node_version is truthy %}{{ homebridge_node_version }}{% endif %}
   environment:
     PATH: "/usr/local/bin:/opt/homebrew/bin:{{ ansible_env.PATH | default('/usr/bin:/bin:/usr/sbin:/sbin') }}"
   register: _hb_update_node
   changed_when: "'Installing Node.js' in (_hb_update_node.stdout | default(''))"
   notify: homebridge changed
+
+# The Config UI installs and updates plugins as homebridge_user, so that
+# account must own the global npm tree. Tasks above write to it as root.
+- name: keep the global npm tree owned by the homebridge user
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ homebridge_user }}"
+    group: admin
+    recurse: true
+    follow: false
+  loop:
+    - "{{ homebridge_node_bin | dirname | dirname }}/lib/node_modules"
+    - "{{ homebridge_node_bin | dirname }}"
