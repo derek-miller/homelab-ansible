@@ -107,7 +107,8 @@
 #
 #   make run-proxmox tags=proxmox-reboot ANSIBLE_FLAGS="-e proxmox_reboot_enabled=yes"
 #
-# Defaults to group order; append -e proxmox_reboot_order='["pve3","pve1"]' to change it.
+# Defaults to group order; append -e '{"proxmox_reboot_order":["pve3","pve1"]}' to change it.
+# The order has to be passed as JSON: a key=value list arrives as a string.
 - name: proxmox rolling reboot
   hosts: localhost
   gather_facts: no

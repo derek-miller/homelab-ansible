@@ -43,8 +43,10 @@ Drop `proxmox_upgrade_enabled` for a reboot with no package changes. `proxmox_re
 **The play runs from `hosts: localhost` and delegates to each node in turn** — `serial`/`order` can't express a custom reboot order, so it loops once from the controller instead of running per-host. That means **`hosts=`/`--limit` does nothing to it**: `localhost` doesn't match a node-limited pattern, so the whole play is silently skipped rather than narrowed, same failure shape as the swarm-migration `hosts=` trap above. To reboot specific nodes, set the order directly:
 
 ```bash
-make run-proxmox tags=proxmox-reboot ANSIBLE_FLAGS="-e proxmox_reboot_enabled=yes -e proxmox_reboot_order='[\"pve3\"]'"
+make run-proxmox tags=proxmox-reboot ANSIBLE_FLAGS="-e proxmox_reboot_enabled=yes -e '{\"proxmox_reboot_order\":[\"pve3\"]}'"
 ```
+
+The order has to be passed as JSON. In `key=value` form the list arrives as a string and the loop fails before touching a node.
 
 Default order is `groups['proxmox']` (pve1-5).
 
