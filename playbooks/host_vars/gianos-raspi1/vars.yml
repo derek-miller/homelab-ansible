@@ -110,6 +110,7 @@ docker_compose_definition:
         BACKUP_PRUNING_PREFIX: backup-
         BACKUP_RETENTION_DAYS: 7
         AGE_PUBLIC_KEYS: "{{ docker_volume_backup_age_public_key }}"
+        NOTIFICATION_URLS: "{{ docker_volume_backup_notification_urls }}"
         BACKUP_EXCLUDE_REGEXP: ^.*-(wal|shm|journal)$$
       volumes:
         - /mnt/Backups/Volumes/gianos-raspi1:/archive

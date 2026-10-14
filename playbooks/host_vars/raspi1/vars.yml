@@ -98,6 +98,7 @@ docker_compose_definition:
         BACKUP_PRUNING_PREFIX: backup-
         BACKUP_RETENTION_DAYS: 7
         AGE_PUBLIC_KEYS: "{{ docker_volume_backup_age_public_key }}"
+        NOTIFICATION_URLS: "{{ docker_volume_backup_notification_urls }}"
       volumes:
         - /mnt/Backups/Volumes/raspi1:/archive
         # volumes to backup:
