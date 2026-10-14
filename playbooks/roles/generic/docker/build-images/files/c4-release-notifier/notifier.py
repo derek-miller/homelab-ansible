@@ -8,7 +8,7 @@ Two sources, each with its own webhook:
              in-app update  Snap One's public resource catalog, which Composer's
                             own updater reads; it holds only the current build
                             per product, and betas are never announced
-  jailbreak  GitHub releases of garrynewman/Control4.Jailbreak, keyed on tag
+  jailbreak  GitHub releases of black-ops-drivers/Control4.Jailbreak, keyed on tag
 
 A release is announced the first time it is seen, not when it compares
 greater than the last one: Composer moved from 4.x to 2026.M.D.build
@@ -56,7 +56,7 @@ UPDATES_URL = "https://services.control4.com/Updates2x/v2_0/Updates.asmx"
 # for 4 hours unless the query carries an unseen downloadNonce, so a plain
 # request can return download links that have already expired.
 CATALOG_URL = "https://resources.snapone.com/api/v1/public/resources/application"
-JAILBREAK_REPO = os.environ.get("JAILBREAK_REPO", "garrynewman/Control4.Jailbreak").strip()
+JAILBREAK_REPO = os.environ.get("JAILBREAK_REPO", "black-ops-drivers/Control4.Jailbreak").strip()
 RESCAN_NEWEST_VERSIONS = 3
 
 COMPOSER_COLOR = 0xE6332A
