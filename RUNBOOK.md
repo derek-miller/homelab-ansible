@@ -66,6 +66,8 @@ A final play reapplies `generic/proxmox` (`scope: node`) across the whole cluste
 
 The glob is load bearing. `filecount` emits **one series per entry in `directories`**, and `recursive` only controls how deep it walks to build that one aggregate — so pointing it at the root with `recursive = true` yields a single series whose `newest_file_timestamp` is whichever target ran most recently. Every stalled target hides behind a healthy one. Globbing the children instead gives one series per target and is layout agnostic, so a new backup service needs no monitoring change.
 
+Every backup container, on the swarm and on the Pis, also posts failed runs to the Homelab Backups Discord webhook through `NOTIFICATION_URLS` (`docker_volume_backup_notification_urls`, vaulted in `group_vars/all`). That covers a run that starts and fails, including a copy to the share that breaks off partway; the rules below cover a run that never starts.
+
 It runs on one host (`[volume-backup-stats]`, currently `rackvm4`), since every rackvm mounts the same share and 14 duplicate copies of the same numbers buy nothing.
 
 Anything placed under `docker_volume_backup_root` is monitored, unconditionally. There is no exclusion list and no name matching, which is what keeps a new backup target from needing a monitoring change to be covered — and what stops a rename from silently dropping one out of coverage.
@@ -85,6 +87,8 @@ Three alert rules, in the Grafana rule group `backup`, because one threshold doe
 What none of this catches: a backup target directory being **deleted** disappears from the glob silently, the same shape as the absent case but scoped to one target. A pruned service leaves its directory behind, so the ordinary stop-producing case is covered; only an actual `rm -rf` of the target is not.
 
 Nor does it catch a *partial* archive. `offen` builds the archive under `/tmp` inside the container and then byte-copies it onto the share under its final name, and it does not unlink the destination if that copy dies partway (`internal/storage/local/local.go`: `os.Create` then `io.Copy`, no rename anywhere in the tree). A copy interrupted by a dropped mount leaves a truncated `backup-<ts>.tar.gz` carrying a current mtime, which reads as fresh. Freshness here means an archive arrived, not that it is complete or restorable.
+
+YouTrack writes its own scheduled backups into the `youtrack-backups` volume (Database Backup settings: location `/opt/youtrack/backups`, TAR.GZ, keep 2), and `backup_youtrack` archives that volume with the rest. Telegraf cannot read inside node-local volumes, so `youtrack-backup-check` watches it instead: it exits after 60 s whenever no `*.tar.gz` there is newer than 26 h, and a stopped schedule therefore shows as **Container Crash Loop (Swarm)** for that service.
 
 ## macOS hosts: manual steps at bootstrap
 
@@ -116,6 +120,39 @@ Four consequences:
 **A dry run of this role is not inert.** Listing an encrypted archive requires decrypting it, so `--check` (`make dry-run`, or the command above with `--check` appended) installs `age` on the target and stages the identity at 0600 exactly as a real run does, removing it afterward. Only the volume writes are simulated: the volume create, the extract, and the ownership fix.
 
 The pipeline sets `pipefail`, so a wrong or missing identity fails the run at the listing step with age's own error. Without it a failed decrypt exits 0 through `tar` and the play reports a successful restore of nothing.
+
+## Restoring one volume from a VM backup
+
+The nightly vzdump of each rackvm (VMIDs 201-205 for rackvm1-5, 03:30 America/Chicago, to the `unas-backup` storage) includes the data disk, so any volume can come back from it, including ones no archive covers. Extract on a pve node, which mounts the dumps; nothing is restored as a VM:
+
+```bash
+F=/mnt/pve/unas-backup/dump/vzdump-qemu-<vmid>-<timestamp>.vma.zst
+D=$(mktemp -d /var/tmp/vzrestore.XXXX); mkdir "$D/m"
+zstd -q -d -c "$F" | vma extract - "$D/x"
+mount -o ro,loop,noload "$D/x/disk-drive-scsi1.raw" "$D/m"
+tar -C "$D/m/docker/volumes" -czf /mnt/pve/unas-backup/restore-<volume>.tgz rackvms_<volume>/_data
+umount "$D/m"; rm -rf "$D"
+```
+
+- **Do not pass `-r` to `vma extract`.** That option reads a device map from a FIFO, so the extract waits on it forever and writes nothing.
+- **Do not use `qmrestore`.** It creates a second VM with the same MAC, address and `onboot`.
+- **Scratch space is small.** The raw images are sparse and the pool compresses zeros; rackvm1's took 66 s and about 5.4 GiB.
+
+The archive appears on the rackvms as `/mnt/Backups/Proxmox/restore-<volume>.tgz`, outside the monitored root. Put it back with merges to master held, since a deploy resets replicas:
+
+```bash
+docker service scale rackvms_<service>=0
+V=/mnt/data/docker/volumes/rackvms_<volume>
+mv "$V/_data" "$V/_data.pre-restore" && mkdir "$V/_data"
+tar -C "$V" --strip-components=1 -xzpf /mnt/Backups/Proxmox/restore-<volume>.tgz rackvms_<volume>/_data
+docker service scale rackvms_<service>=1
+```
+
+Run `docker service scale` on a manager and the rest on the node that holds the volume. Once the service works, remove `_data.pre-restore` and the `.tgz`. A Postgres data directory from a VM backup runs crash recovery on its first start; that is expected.
+
+| Date | VM backup | Volumes | Result |
+|---|---|---|---|
+| 2026-10-14 | 201 (rackvm1), 03:30 | `keycloak-pg-data`, `portainer-ee-data`, `letsencrypt` | Extracted to a scratch copy, not swapped in. Postgres recovered and was ready 11 s after unpacking; Keycloak's realm, client, user, credential and role counts matched production; `acme.json` parsed. |
 
 ## docker-volume-backup on a Pi is unhealthy
 
