@@ -69,6 +69,16 @@ rackvm3  docker_labels=media,notifier
 rackvm4  docker_labels=grafana,metrics
 rackvm5  docker_labels=sourcebot
 
+[k3s_server]
+rackvm1 k3s_role=server
+
+[k3s_agent]
+rackvm5
+
+[k3s:children]
+k3s_server
+k3s_agent
+
 [project-files]
 rackvm1
 rackvm2

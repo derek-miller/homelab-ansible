@@ -1,0 +1,26 @@
+[Unit]
+Description=Lightweight Kubernetes ({{ k3s_role }})
+Documentation=https://k3s.io
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor={{ k3s_data_dir | replace('%', '%%') }}
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=notify
+# Pods outlive a k3s restart; only the k3s process itself is stopped.
+KillMode=process
+Delegate=yes
+User=root
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+TimeoutStartSec=0
+Restart=always
+RestartSec=5s
+ExecStartPre=-/sbin/modprobe br_netfilter
+ExecStartPre=-/sbin/modprobe overlay
+ExecStart=/usr/local/bin/k3s {{ k3s_role }}

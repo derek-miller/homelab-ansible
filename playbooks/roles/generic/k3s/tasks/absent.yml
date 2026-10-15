@@ -1,0 +1,80 @@
+---
+# k3s absent — reverse present.yml. Never the stock k3s-uninstall.sh: its
+# killall clears Tailscale's advertised routes and rewrites all of iptables.
+# Runtime sysctls, the role's and kube-proxy's, stay until the next reboot.
+
+- name: find the k3s units
+  stat:
+    path: "/etc/systemd/system/{{ item }}.service"
+  loop:
+    - k3s
+    - k3s-agent
+  register: _k3s_units
+
+- name: stop and disable the k3s units
+  systemd:
+    name: "{{ item.item }}"
+    state: stopped
+    enabled: no
+  loop: "{{ _k3s_units.results | selectattr('stat.exists') | list }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: remove the pods, mounts, interfaces and firewall state k3s left
+  script: "k3s-teardown.py {{ k3s_data_dir | quote }}"
+  args:
+    executable: python3
+  register: _k3s_teardown
+  changed_when: (_k3s_teardown.stdout | from_json).changed
+
+- name: remove the k3s units
+  file:
+    path: "/etc/systemd/system/{{ item }}.service"
+    state: absent
+  loop:
+    - k3s
+    - k3s-agent
+  register: _k3s_units_removed
+
+- name: reload systemd units
+  systemd:
+    daemon_reload: yes
+  when: _k3s_units_removed is changed
+
+- name: find the k3s tool links
+  stat:
+    path: "/usr/local/bin/{{ item }}"
+  loop:
+    - kubectl
+    - crictl
+  register: _k3s_links
+
+- name: remove the k3s tool links
+  file:
+    path: "{{ item.stat.path }}"
+    state: absent
+  when: item.stat.islnk | default(false) and item.stat.lnk_target == 'k3s'
+  loop: "{{ _k3s_links.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: remove k3s's files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/k3s
+    - /etc/rancher/k3s
+    - /etc/rancher/node
+    - "{{ k3s_data_dir }}"
+    - /var/lib/kubelet
+    - /var/lib/cni
+    - /run/k3s
+    - /run/flannel
+    - /etc/sysctl.d/90-k3s.conf
+
+- name: remove /etc/rancher if nothing else uses it
+  command: rmdir /etc/rancher
+  register: _k3s_rancher_rmdir
+  failed_when: false
+  changed_when: _k3s_rancher_rmdir.rc == 0

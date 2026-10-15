@@ -1,0 +1,12 @@
+---
+- assert:
+    that:
+      - k3s_state in ('present', 'absent')
+      - k3s_role in ('server', 'agent')
+    quiet: yes
+
+- include_tasks: present.yml
+  when: k3s_state == 'present'
+
+- include_tasks: absent.yml
+  when: k3s_state == 'absent'
