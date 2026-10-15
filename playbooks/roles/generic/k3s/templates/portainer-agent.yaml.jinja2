@@ -63,6 +63,8 @@ spec:
     metadata:
       labels:
         app: portainer-agent
+      annotations:
+        checksum/edge-credentials: {{ (k3s_portainer_edge_id ~ '/' ~ k3s_portainer_edge_key) | hash('sha256') | to_json }}
     spec:
       serviceAccountName: portainer-sa-clusteradmin
       containers:
