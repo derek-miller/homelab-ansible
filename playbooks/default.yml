@@ -439,7 +439,7 @@
       changed_when: false
       delegate_to: "{{ _docker_upgrade_peer }}"
       until: _docker_upgrade_settled.stdout | trim | length == 0
-      retries: 6
+      retries: 5
       delay: 1
 
     - name: report the node's engine version
