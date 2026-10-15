@@ -33,6 +33,10 @@ available_docker_images:
       - c4-release-notifier/notifier.py
     image_name: c4-release-notifier
     image_tag: "1.2.1"
+    # docker stack deploy returns before swarm starts the new task, so the
+    # docker-prune play can sweep a freshly built tag before anything uses it.
+    labels:
+      homelab.prune.exclude: "true"
   gha-runner:
     dockerfile: gha-runner/Dockerfile
     build_files:
