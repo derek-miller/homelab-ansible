@@ -57,6 +57,17 @@
         state: absent
       when: python_pip_virtualenv.stat.exists
 
+    # pip removes a directory outright once every file in it belongs to the
+    # package, so uninstalling virtualenv can take /usr/local/bin with it, and
+    # nothing else recreates it.
+    - name: keep /usr/local/bin
+      file:
+        path: /usr/local/bin
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
 - name: install Python via Homebrew (macOS)
   # Apple's /usr/bin/python3 is pinned at 3.9 (EOL); build the remote venv from a
   # Homebrew interpreter instead so it tracks the same dependency versions as the
