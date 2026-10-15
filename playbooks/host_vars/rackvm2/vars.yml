@@ -51,6 +51,8 @@ disk_mounts:
     path: /mnt/data
     fstype: ext4
     opts: "defaults,nofail,x-systemd.device-timeout=10s"
+    required_by:
+      - docker.service
     symlinks:
       - src: /mnt/data/docker/volumes
         dest: /var/lib/docker/volumes

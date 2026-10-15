@@ -6,6 +6,30 @@ the infrastructure. For getting a dev environment working against this repo,
 see [CONTRIBUTING.md](CONTRIBUTING.md); for repo conventions and gotchas
 relevant to editing the Ansible itself, see [CLAUDE.md](CLAUDE.md).
 
+## Pausing deploys
+
+Every merge to master runs `.github/workflows/deploy.yml`, which redeploys the stack and resets every service's replicas. During a restore or any other hand-run change, pause it with a repository variable:
+
+```bash
+gh variable set DEPLOY_PAUSED --body true -R derek-miller/homelab-ansible
+```
+
+Runs that start after that are skipped, but one already running or queued still runs. Wait for each one listed to finish before touching any service; cancelling can stop the playbook partway:
+
+```bash
+gh run list --workflow Deploy -R derek-miller/homelab-ansible --json databaseId,status --jq '.[] | select(.status != "completed") | .databaseId'
+gh run watch <id> -R derek-miller/homelab-ansible
+```
+
+To resume, delete the variable and deploy whatever merged in the meantime:
+
+```bash
+gh variable delete DEPLOY_PAUSED -R derek-miller/homelab-ansible
+gh workflow run Deploy -R derek-miller/homelab-ansible
+```
+
+A local `make run` ignores the variable.
+
 ## Moving a swarm workload to another host
 
 Swarm does not move local volumes, so a move happens in two halves: copy the data while the services are stopped, and only then let the label follow. `generic/docker/migrate-labels` does both, driven by the inventory.
@@ -138,7 +162,7 @@ umount "$D/m"; rm -rf "$D"
 - **Do not use `qmrestore`.** It creates a second VM with the same MAC, address and `onboot`.
 - **Scratch space is small.** The raw images are sparse and the pool compresses zeros; rackvm1's took 66 s and about 5.4 GiB.
 
-The archive appears on the rackvms as `/mnt/Backups/Proxmox/restore-<volume>.tgz`, outside the monitored root. Put it back with merges to master held, since a deploy resets replicas:
+The archive appears on the rackvms as `/mnt/Backups/Proxmox/restore-<volume>.tgz`, outside the monitored root. Put it back with [deploys paused](#pausing-deploys), since a deploy resets replicas:
 
 ```bash
 docker service scale rackvms_<service>=0
@@ -166,7 +190,7 @@ mv /mnt/data/docker/volumes/rackvms_<db>-pg-dump/_data/<db>.sql.gz /root/<db>.sq
 
 ### Loading a dump
 
-Hold merges to master throughout, since a deploy resets replicas. A dump service dumps as soon as it starts, so it stays at 0 until the load has succeeded; otherwise it replaces the dump you are loading. For Keycloak, on a manager:
+[Pause deploys](#pausing-deploys) throughout, since a deploy resets replicas. A dump service dumps as soon as it starts, so it stays at 0 until the load has succeeded; otherwise it replaces the dump you are loading. For Keycloak, on a manager:
 
 ```bash
 docker service scale rackvms_keycloak=0 rackvms_keycloak-pg-dump=0
@@ -210,6 +234,15 @@ make run hosts=rackvm1 tags=docker-restore-volumes ANSIBLE_FLAGS="-e docker_rest
 That takes the newest archive, which is last night's. For an earlier one, also pass `-e '{\"docker_restore_volumes_archive_patterns\":[\"backup-<ts>.tar.gz.age\"]}'` with the file name from `/mnt/Backups/Volumes/identity`, and check the `Restoring from:` line.
 
 The run drains every host in `hosts=`. rackvm1 also carries `edge`, so everything behind Traefik is down while it runs. Sourcebot's node is a worker, so its run needs a manager in `hosts=` as well, with label `sourcebot` and `[\"sourcebot-pg-dump\"]`. That manager is drained too and is left with its own `rackvms_sourcebot-pg-dump`; remove it there afterwards with `docker volume rm rackvms_sourcebot-pg-dump`.
+
+### Drills
+
+Each drill loads the dump from the volume into a scratch Postgres (production's image) on an `--internal` Docker network on the database's own node, using the load chain above. To check Keycloak itself, start production's Keycloak image against the copy with `KC_PROXY_HEADERS=xforwarded` and request each realm's `/.well-known/openid-configuration` with `X-Forwarded-Proto: https`. Every realm requires HTTPS, so plain HTTP gets 403.
+
+| Date | Dump | Result |
+|---|---|---|
+| 2026-10-14 | `keycloak.sql.gz`, 21:06 | Loaded in 5 s. Realm, client, user, credential, role and component counts and schema version 26.8.1 matched production. Keycloak started on it in 8.5 s, and all three realms answered 200. |
+| 2026-10-14 | `sourcebot.sql.gz`, 21:15 | Loaded in 4 s. All 37 tables matched production's row counts. |
 
 ## docker-volume-backup on a Pi is unhealthy
 

@@ -126,6 +126,27 @@
     label: "{{ item.path }}"
   notify: reload systemd units
 
+- name: create drop-in directories for units that need a mount
+  file:
+    path: "/etc/systemd/system/{{ item.1 }}.d"
+    state: directory
+    mode: '0755'
+  loop: "{{ disk_mounts | subelements('required_by', skip_missing=true) }}"
+  loop_control:
+    label: "{{ item.1 }}"
+
+- name: make units wait for the mounts they need
+  copy:
+    dest: "/etc/systemd/system/{{ item.1 }}.d/disk-mount-{{ item.0.path | regex_replace('^/', '') | replace('/', '-') }}.conf"
+    content: |
+      [Unit]
+      RequiresMountsFor="{{ item.0.path | replace('%', '%%') }}"
+    mode: '0644'
+  loop: "{{ disk_mounts | subelements('required_by', skip_missing=true) }}"
+  loop_control:
+    label: "{{ item.1 }} -> {{ item.0.path }}"
+  notify: reload systemd units
+
 - name: link fixed paths that this disk has moved
   file:
     src: "{{ item.1.src }}"
