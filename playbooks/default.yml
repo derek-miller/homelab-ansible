@@ -151,6 +151,31 @@
     - disk-mount
 
 - hosts: docker
+  pre_tasks:
+    - name: read the installed Docker Engine version
+      command: dpkg-query -W -f=${Version} docker-ce
+      register: _docker_engine_installed
+      changed_when: false
+      failed_when: false
+      check_mode: no
+      tags:
+        - docker-daemon
+
+    # dockerd refuses to start on a daemon.json key it does not know, and the
+    # role below restarts it on every node at once.
+    - name: the installed engine must understand default-stop-timeout
+      assert:
+        that: >-
+          'default-stop-timeout' not in (docker_daemon_options | default({}))
+          or _docker_engine_installed.rc != 0
+          or (_docker_engine_installed.stdout | regex_replace('^[0-9]+:', '') | regex_replace('-.*$', ''))
+             is version('29.7.0', '>=')
+        fail_msg: >-
+          {{ inventory_hostname }} runs docker-ce {{ _docker_engine_installed.stdout }}, which has no
+          default-stop-timeout. Upgrade it with the docker-upgrade play (RUNBOOK.md) first.
+        quiet: yes
+      tags:
+        - docker-daemon
   roles:
     - role: galaxy/docker
       # Necessary so telegraf can read from the socket
@@ -161,8 +186,260 @@
       docker_stats_state: "{{ 'present' if docker_service_enabled else 'absent' }}"
       tags:
         - docker-stats
+  post_tasks:
+    - name: give docker.service longer to stop than its containers get
+      when: "'default-stop-timeout' in (docker_daemon_options | default({}))"
+      block:
+        - name: create the docker.service drop-in directory
+          file:
+            path: /etc/systemd/system/docker.service.d
+            state: directory
+            mode: '0755'
+
+        - name: set docker.service's stop timeout
+          copy:
+            dest: /etc/systemd/system/docker.service.d/stop-timeout.conf
+            content: |
+              [Service]
+              TimeoutStopSec={{ docker_daemon_options['default-stop-timeout'] | int + 60 }}
+            mode: '0644'
+          register: _docker_stop_timeout_dropin
+      tags:
+        - docker-daemon
+
+    - name: remove docker.service's stop timeout
+      file:
+        path: /etc/systemd/system/docker.service.d/stop-timeout.conf
+        state: absent
+      register: _docker_stop_timeout_removed
+      when: "'default-stop-timeout' not in (docker_daemon_options | default({}))"
+      tags:
+        - docker-daemon
+
+    - name: reload systemd units
+      systemd:
+        daemon_reload: yes
+      when: >-
+        (_docker_stop_timeout_dropin is changed)
+        or (_docker_stop_timeout_removed is changed)
+      tags:
+        - docker-daemon
   tags:
     - docker
+
+# Rolling Docker Engine upgrade of the swarm, run only on request (RUNBOOK.md).
+# It writes daemon.json itself rather than through galaxy/docker, whose restart
+# handler would bounce the node again after it is back in service.
+- hosts: docker_swarm_worker:docker_swarm_manager
+  serial: 1
+  order: reverse_sorted
+  any_errors_fatal: true
+  vars:
+    _docker_upgrade_peer: >-
+      {{ groups['docker_swarm_manager'] | reject('equalto', inventory_hostname)
+         | select('in', ansible_play_hosts_all) | first | default('') }}
+    _docker_upgrade_stack: "{{ hostvars[groups['docker_swarm_manager'][0]].docker_stack_name }}"
+    _docker_upgrade_ignore: >-
+      {{ docker_upgrade_ignore_services | default([])
+         | map('regex_escape') | map('regex_replace', '^', _docker_upgrade_stack ~ '_') | join('|') }}
+    _docker_upgrade_daemon_json: "{{ docker_daemon_options | default({}) | to_nice_json }}"
+    # A task waiting out its restart delay is desired-state ready, not running.
+    _docker_upgrade_tasks_cmd: >-
+      docker node ps {{ inventory_hostname }}
+      --filter desired-state=running --filter desired-state=ready
+      --format '{% raw %}{{.Name}}|{{.CurrentState}}|{{.ID}}{% endraw %}'
+    # Upgrading any of these restarts dockerd; the plugins below do not.
+    docker_upgrade_packages:
+      - docker-ce
+      - docker-ce-cli
+      - docker-ce-rootless-extras
+      - containerd.io
+    docker_upgrade_plugin_packages:
+      - docker-buildx-plugin
+      - docker-compose-plugin
+  tasks:
+    - name: another swarm manager must be in this run
+      assert:
+        that: _docker_upgrade_peer | length > 0
+        fail_msg: >-
+          {{ inventory_hostname }} is drained and made active again through another swarm
+          manager, but none is in this run. Add one to hosts=.
+        quiet: yes
+
+    - name: refresh the apt cache
+      apt:
+        update_cache: yes
+
+    - name: upgrade the Docker CLI plugins in place
+      apt:
+        name: "{{ docker_upgrade_plugin_packages }}"
+        state: latest
+
+    - name: list engine packages with a newer version available
+      shell: >-
+        apt-get -s install --only-upgrade {{ docker_upgrade_packages | join(' ') }}
+        | awk '/^Inst /{print $2}'
+      register: _docker_upgradable
+      changed_when: false
+      check_mode: no
+
+    - name: read daemon.json
+      slurp:
+        src: /etc/docker/daemon.json
+      register: _docker_daemon_json
+      failed_when: false
+
+    - name: every swarm node is ready, every manager reachable, and none but this one is drained
+      command: >-
+        docker node ls
+        --format '{% raw %}{{.Hostname}} {{.ManagerStatus}} {{.Status}} {{.Availability}}{% endraw %}'
+      register: _docker_upgrade_nodes
+      changed_when: false
+      check_mode: no
+      delegate_to: "{{ _docker_upgrade_peer }}"
+      failed_when: >-
+        _docker_upgrade_nodes.rc != 0
+        or (_docker_upgrade_nodes.stdout_lines | reject('search', ' Ready ') | list | length > 0)
+        or (_docker_upgrade_nodes.stdout_lines | select('search', ' Unreachable ') | list | length > 0)
+        or (_docker_upgrade_nodes.stdout_lines | reject('match', inventory_hostname ~ ' ')
+            | reject('search', ' Active$') | list | length > 0)
+
+    - name: report what this node needs
+      debug:
+        msg: >-
+          {{ inventory_hostname }}: engine packages to upgrade:
+          {{ _docker_upgradable.stdout_lines | join(', ') or 'none' }};
+          daemon.json {{ 'up to date' if (_docker_daemon_json.content | default('') | b64decode)
+          == _docker_upgrade_daemon_json else 'to be rewritten' }}
+
+    - name: skip a node that is already up to date
+      meta: end_host
+      when:
+        - _docker_upgradable.stdout_lines | length == 0
+        - (_docker_daemon_json.content | default('') | b64decode) == _docker_upgrade_daemon_json
+        - _docker_upgrade_nodes.stdout_lines | select('match', inventory_hostname ~ ' ')
+          | select('search', ' Active$') | list | length > 0
+
+    - name: stop here in a dry run
+      meta: end_host
+      when: ansible_check_mode
+
+    - name: drain the node
+      command: "docker node update --availability drain {{ inventory_hostname }}"
+      delegate_to: "{{ _docker_upgrade_peer }}"
+
+    - name: wait for the node's tasks to stop
+      command: "docker node ps {{ inventory_hostname }} --filter desired-state=running -q"
+      register: _docker_upgrade_running
+      changed_when: false
+      delegate_to: "{{ _docker_upgrade_peer }}"
+      until: _docker_upgrade_running.stdout | trim | length == 0
+      retries: 30
+      delay: 10
+
+    - name: wait for the node's task containers to exit
+      command: docker ps -q --filter label=com.docker.swarm.task
+      register: _docker_upgrade_containers
+      changed_when: false
+      until: _docker_upgrade_containers.stdout | trim | length == 0
+      retries: 30
+      delay: 5
+
+    - name: upgrade the Docker engine packages
+      apt:
+        name: "{{ docker_upgrade_packages }}"
+        state: latest
+
+    - name: read the upgraded Docker Engine version
+      command: dpkg-query -W -f=${Version} docker-ce
+      register: _docker_upgraded
+      changed_when: false
+
+    - name: the upgraded engine must understand default-stop-timeout
+      assert:
+        that: >-
+          'default-stop-timeout' not in (docker_daemon_options | default({}))
+          or (_docker_upgraded.stdout | regex_replace('^[0-9]+:', '') | regex_replace('-.*$', ''))
+             is version('29.7.0', '>=')
+        fail_msg: "{{ inventory_hostname }} is still on docker-ce {{ _docker_upgraded.stdout }}."
+        quiet: yes
+
+    - name: write daemon.json
+      copy:
+        content: "{{ _docker_upgrade_daemon_json }}"
+        dest: /etc/docker/daemon.json
+        mode: '0644'
+      when: docker_daemon_options | default({}) | length > 0
+
+    - name: restart Docker
+      systemd:
+        name: docker
+        state: restarted
+        daemon_reload: yes
+
+    - name: wait for Docker to rejoin the swarm
+      command: docker info --format '{% raw %}{{.Swarm.LocalNodeState}}{% endraw %}'
+      register: _docker_upgrade_swarm
+      changed_when: false
+      until: _docker_upgrade_swarm.stdout | trim == 'active'
+      retries: 30
+      delay: 5
+
+    - name: wait for the manager to see the node ready
+      command: "docker node inspect {{ inventory_hostname }} --format '{% raw %}{{.Status.State}}{% endraw %}'"
+      register: _docker_upgrade_state
+      changed_when: false
+      delegate_to: "{{ _docker_upgrade_peer }}"
+      until: _docker_upgrade_state.stdout | trim == 'ready'
+      retries: 30
+      delay: 5
+
+    - name: make the node active
+      command: "docker node update --availability active {{ inventory_hostname }}"
+      delegate_to: "{{ _docker_upgrade_peer }}"
+
+    - name: wait for the node's tasks to be running
+      command: "{{ _docker_upgrade_tasks_cmd }}"
+      register: _docker_upgrade_tasks
+      changed_when: false
+      delegate_to: "{{ _docker_upgrade_peer }}"
+      until: >-
+        _docker_upgrade_tasks.stdout_lines | length > 0
+        and (_docker_upgrade_tasks.stdout_lines
+             | reject('match', '^(' ~ _docker_upgrade_ignore ~ ')\.')
+             | reject('search', '\|Running ')
+             | list | length == 0)
+      retries: 60
+      delay: 10
+
+    # A crash-looping task replaces itself with a new task ID on each restart.
+    - name: give a failing task time to restart
+      pause:
+        seconds: 30
+
+    - name: the same tasks are still running
+      command: "{{ _docker_upgrade_tasks_cmd }}"
+      register: _docker_upgrade_settled
+      changed_when: false
+      delegate_to: "{{ _docker_upgrade_peer }}"
+      failed_when: >-
+        _docker_upgrade_settled.rc != 0
+        or (_docker_upgrade_settled.stdout_lines
+            | reject('match', '^(' ~ _docker_upgrade_ignore ~ ')\.')
+            | reject('search', '\|Running ') | list | length > 0)
+        or (_docker_upgrade_settled.stdout_lines
+            | reject('match', '^(' ~ _docker_upgrade_ignore ~ ')\.')
+            | map('regex_replace', '^.*\|', '') | sort)
+           != (_docker_upgrade_tasks.stdout_lines
+            | reject('match', '^(' ~ _docker_upgrade_ignore ~ ')\.')
+            | map('regex_replace', '^.*\|', '') | sort)
+
+    - name: report the node's engine version
+      debug:
+        msg: "{{ inventory_hostname }}: docker-ce {{ _docker_upgraded.stdout }}"
+  tags:
+    - never
+    - docker-upgrade
 
 - hosts: docker
   tasks:

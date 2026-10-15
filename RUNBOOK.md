@@ -54,6 +54,30 @@ Without `docker_migrate_labels=yes` the move is only reported and the label reco
 - **Host-network services** — not on the overlay, so Traefik routes them from `external-rules.yaml` by address rather than by discovery. That address is not a label and does not follow the move; repoint it or the service works locally and 502s through Traefik.
 - **Endpoints other hosts write to** — `influxdb3_url` follows the `metrics` label out of the inventory, but each Telegraf agent only picks up the new address when its config is rewritten. Run `make run tags=telegraf` across every host after moving `metrics`, or the agents keep writing to the old address: nothing errors, the graphs just stop filling.
 
+## Upgrading Docker Engine on the swarm
+
+A deploy installs Docker but never upgrades it. The `docker-upgrade` play does, one swarm node at a time, and only when asked for by tag. [Pause deploys](#pausing-deploys) for the whole run, then:
+
+```bash
+make run tags=docker-upgrade
+```
+
+It takes rackvm5 first and the managers last, and stops at the first failure. For each node it:
+
+1. upgrades the Docker CLI plugins in place, which needs no restart;
+2. drains the node through another manager, after checking that every node is ready, every manager is reachable and no other node is drained;
+3. upgrades the engine packages (`docker-ce`, its CLI and rootless extras, `containerd.io`) and writes `daemon.json`;
+4. restarts Docker and makes the node active once it has rejoined;
+5. waits until every task placed back on it is running, and fails if 30 s later they are not the same tasks still running.
+
+A node with nothing to upgrade and a matching `daemon.json` is skipped without being drained, so a stopped run can be run again. If it stopped with a node still drained, make that node active from a manager first, with `docker node update --availability active <node>`. A `hosts=` limit has to include a manager other than the node being upgraded. `make dry-run tags=docker-upgrade` reports what each node needs and stops before draining anything.
+
+While a node is drained, the services pinned to it are down: a few minutes each, longer for influxdb3 and YouTrack. Everything behind Traefik is down while rackvm1 is drained, and containers started outside the stack are stopped with Docker. Run it outside the 01:00–05:30 UTC backup window. A service that cannot stay up anyway, such as zigbee2mqtt with its coordinator unplugged, fails step 5 and stops the run; leave it out with `ANSIBLE_FLAGS="-e '{\"docker_upgrade_ignore_services\":[\"zigbee2mqtt\"]}'"`.
+
+The play writes `daemon.json` from the checkout it runs from. A deploy writes it from master and, whenever the two differ, restarts Docker on every node at once. So a `daemon.json` change goes in through this play: pause deploys, merge it, run the play from an up-to-date master, then resume deploys and run Deploy, which finds `daemon.json` already in place and restarts nothing.
+
+A deploy refuses to write `default-stop-timeout` on an engine older than 29.7, where Docker would refuse to start. That check covers only this one key; an option that needs a newer engine needs its own clause in the assert at the top of the `docker` play.
+
 ## Applying updates and rebooting pve1-5
 
 Upgrading packages and rebooting are two opt-in flags on one play (`generic/proxmox-reboot`), not separate playbooks — but only one direction is independent. `proxmox_reboot_enabled` alone reboots without upgrading; `proxmox_upgrade_enabled` alone upgrades nothing, since the upgrade task lives inside this same role behind the same `proxmox_reboot_enabled` guard below. It still has an effect on its own, though: the final node-config reapply play is gated on `proxmox_upgrade_enabled` alone, so setting it without `proxmox_reboot_enabled` reapplies `generic/proxmox` config across all five nodes despite nothing having been upgraded. A routine update sets both:
