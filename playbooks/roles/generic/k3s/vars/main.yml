@@ -1,0 +1,24 @@
+---
+_k3s_service: "{{ 'k3s' if k3s_role == 'server' else 'k3s-agent' }}"
+
+_k3s_config: >-
+  {{
+    {
+      'node-name': inventory_hostname,
+      'node-ip': k3s_node_ip,
+      'flannel-iface': ansible_default_ipv4.interface,
+      'data-dir': k3s_data_dir,
+      'token': k3s_token,
+      'kube-proxy-arg': k3s_kube_proxy_args,
+    }
+    | combine(
+        {
+          'disable': k3s_server_disable,
+          'secrets-encryption': true,
+          'tls-san': k3s_tls_san,
+        }
+        if k3s_role == 'server' else
+        {'server': 'https://' ~ k3s_server_address ~ ':6443'}
+      )
+    | combine(k3s_config_extra)
+  }}

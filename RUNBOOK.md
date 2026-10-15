@@ -78,6 +78,39 @@ The play writes `daemon.json` from the checkout it runs from. A deploy writes it
 
 A deploy refuses to write `default-stop-timeout` on an engine older than 29.7, where Docker would refuse to start. That check covers only this one key; an option that needs a newer engine needs its own clause in the assert at the top of the `docker` play.
 
+## k3s beside Docker
+
+k3s runs on the rackvms next to Docker while workloads move off Swarm: one server on rackvm1 (`[k3s_server]`) and agents in `[k3s_agent]`. Its data directory is `/mnt/data/k3s`, so like Docker it waits for the data disk at boot. A deploy installs it; to run just this part:
+
+```bash
+make run tags=k3s
+```
+
+The server goes first, then the agents one at a time, and each waits for its node to report Ready. kubectl runs as root on rackvm1: `sudo kubectl get nodes`.
+
+**Upgrading.** Bump `k3s_version` and `k3s_sha256` in `generic/k3s/defaults/main.yml` together; the checksum is the `k3s` line of the release's `sha256sum-amd64.txt`. The deploy replaces the binary and restarts k3s, the server before the agents. Pods keep running through a k3s restart.
+
+**Removing it from a node.** Remove agents before the server, since removing the server deletes the cluster's datastore:
+
+```bash
+make run hosts=rackvm5 tags=k3s ANSIBLE_FLAGS="-e k3s_state=absent"
+```
+
+That stops k3s, kills its pods, and removes its mounts, network namespaces, interfaces, iptables chains, ipsets, units, binary and data directory. Data a pod kept in a host path outside `/mnt/data/k3s` stays where it is. Then delete the node on rackvm1 with `sudo kubectl delete node rackvm5`, which also drops the password it registered with; until then the server refuses the same name from a reinstalled agent. Last, take the host out of its `k3s_*` group, or the next deploy installs it again. Sysctls set while it ran, the role's inotify limits and kube-proxy's `net.ipv4.conf.all.route_localnet` among them, stay until the next reboot.
+
+Never run k3s's own `k3s-uninstall.sh` or `k3s-killall.sh` here. Besides removing k3s they clear the node's Tailscale advertised routes, which withdraws the NAS route rackvm1-5 carry, and pipe all of iptables through `iptables-restore` underneath Docker.
+
+**Rebuilding the server.** The cluster's identity and state live in rackvm1's `/mnt/data/k3s/server`: the SQLite datastore, the cluster CA and the service-account keys. The token in `group_vars/k3s/vars.yml` unlocks that state but cannot recreate it.
+
+- *rackvm1 restored from its replica or a vzdump.* Start it; k3s comes back as of the copy. A restored datastore rewinds the resource version, and a client watching from a later one can miss changes, so restart every agent and CoreDNS once the server answers:
+
+  ```bash
+  sudo kubectl -n kube-system rollout restart deploy/coredns
+  ```
+
+  and `sudo systemctl restart k3s-agent` on each agent.
+- *No usable copy.* Run `make run hosts=rackvm1 tags=k3s` for a fresh server with the same token, then `make run tags=k3s` for the agents. An agent that will not rejoin is removed with `k3s_state=absent` and installed again. Everything the cluster ran is then redeployed from the repo; data on the nodes' disks is untouched.
+
 ## Applying updates and rebooting pve1-5
 
 Upgrading packages and rebooting are two opt-in flags on one play (`generic/proxmox-reboot`), not separate playbooks — but only one direction is independent. `proxmox_reboot_enabled` alone reboots without upgrading; `proxmox_upgrade_enabled` alone upgrades nothing, since the upgrade task lives inside this same role behind the same `proxmox_reboot_enabled` guard below. It still has an effect on its own, though: the final node-config reapply play is gated on `proxmox_upgrade_enabled` alone, so setting it without `proxmox_reboot_enabled` reapplies `generic/proxmox` config across all five nodes despite nothing having been upgraded. A routine update sets both:

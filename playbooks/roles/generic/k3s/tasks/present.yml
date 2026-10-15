@@ -1,0 +1,101 @@
+---
+- name: check the inputs
+  assert:
+    that:
+      - k3s_token | length > 0
+      - k3s_node_ip | length > 0
+      # flannel-iface is taken from the default route, so it has to be the
+      # interface that carries node-ip.
+      - ansible_default_ipv4.address == k3s_node_ip
+      - k3s_role == 'server' or k3s_server_address | length > 0
+    quiet: yes
+
+- name: set the kernel limits k3s needs
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/90-k3s.conf
+    reload: yes
+  loop: "{{ k3s_sysctls | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}={{ item.value }}"
+
+- name: create /usr/local/bin
+  file:
+    path: /usr/local/bin
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  register: _k3s_bindir
+
+- name: install the k3s binary
+  get_url:
+    url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version | urlencode }}/k3s"
+    checksum: "sha256:{{ k3s_sha256 }}"
+    dest: /usr/local/bin/k3s
+    owner: root
+    group: root
+    mode: '0755'
+  when: not (ansible_check_mode and _k3s_bindir is changed)
+  notify: restart k3s
+
+# No ctr link: /usr/local/bin would shadow Docker's containerd ctr.
+- name: link the k3s tools
+  file:
+    src: k3s
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+    force: yes
+  loop:
+    - kubectl
+    - crictl
+
+- name: create the k3s config directory
+  file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: '0755'
+
+- name: write the k3s config
+  copy:
+    dest: /etc/rancher/k3s/config.yaml
+    content: "{{ _k3s_config | to_nice_yaml(indent=2) }}"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  notify: restart k3s
+
+- name: install the k3s unit
+  template:
+    src: k3s.service.jinja2
+    dest: "/etc/systemd/system/{{ _k3s_service }}.service"
+    mode: '0644'
+  register: _k3s_unit
+  notify: restart k3s
+
+- meta: flush_handlers
+
+# In check mode on a fresh host there is no unit or binary to act on yet.
+- name: start k3s
+  systemd:
+    name: "{{ _k3s_service }}"
+    state: started
+    enabled: yes
+    daemon_reload: yes
+  when: not (ansible_check_mode and _k3s_unit is changed)
+
+# An agent has no admin kubeconfig, but its kubelet's may read its own Node.
+- name: wait for the node to report Ready
+  command: >-
+    k3s kubectl
+    {{ '' if k3s_role == 'server' else '--kubeconfig ' ~ (k3s_data_dir ~ '/agent/kubelet.kubeconfig') | quote }}
+    get node {{ inventory_hostname }}
+    -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status}'
+  register: _k3s_node_ready
+  until: _k3s_node_ready.stdout == 'True'
+  retries: 30
+  delay: 10
+  changed_when: false
+  when: not ansible_check_mode
