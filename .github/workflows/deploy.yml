@@ -19,6 +19,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: vars.DEPLOY_PAUSED != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

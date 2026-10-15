@@ -12,4 +12,8 @@ disk_mount_state: present
 #   fstype:  filesystem type
 #   opts:    defaults to "defaults,nofail". On exfat/ntfs set uid=/gid=/fmask=
 #            here - the mount point can't be chowned once mounted.
+#   required_by: optional list of systemd units that must not start without
+#            this mount, e.g. [docker.service] when its data-root lives here.
+#            Each gets a RequiresMountsFor= drop-in; nothing is restarted, so it
+#            applies from the unit's next start.
 disk_mounts: []
