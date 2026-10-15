@@ -68,7 +68,7 @@ It takes rackvm5 first and the managers last, and stops at the first failure. Fo
 2. drains the node through another manager, after checking that every node is ready, every manager is reachable and no other node is drained;
 3. upgrades the engine packages (`docker-ce`, its CLI and rootless extras, `containerd.io`) and writes `daemon.json`;
 4. restarts Docker and makes the node active once it has rejoined;
-5. waits until every task placed back on it is running, and fails if 30 s later they are not the same tasks still running.
+5. waits until every task placed back on it is running and then holds for 30 s with no task replaced. It allows up to six such rounds, so a service that restarts while its dependencies come up (oauth2-proxy while Keycloak starts) can settle, but a crash loop fails the run.
 
 A node with nothing to upgrade and a matching `daemon.json` is skipped without being drained, so a stopped run can be run again. If it stopped with a node still drained, make that node active from a manager first, with `docker node update --availability active <node>`. A `hosts=` limit has to include a manager other than the node being upgraded. `make dry-run tags=docker-upgrade` reports what each node needs and stops before draining anything.
 
