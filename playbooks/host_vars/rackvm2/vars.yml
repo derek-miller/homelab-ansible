@@ -59,6 +59,7 @@ disk_mounts:
 
 docker_daemon_options:
   data-root: /mnt/data/docker
+  default-stop-timeout: 60
 
 project_files:
   - src: "plaintext/{{ inventory_hostname }}/var/docker/mosquitto/config/mosquitto.conf"

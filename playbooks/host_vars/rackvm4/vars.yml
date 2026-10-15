@@ -59,6 +59,7 @@ disk_mounts:
 
 docker_daemon_options:
   data-root: /mnt/data/docker
+  default-stop-timeout: 60
 
 nut_stats_targets:
   - wan-ups
