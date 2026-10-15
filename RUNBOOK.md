@@ -154,6 +154,63 @@ Run `docker service scale` on a manager and the rest on the node that holds the 
 |---|---|---|---|
 | 2026-10-14 | 201 (rackvm1), 03:30 | `keycloak-pg-data`, `portainer-ee-data`, `letsencrypt` | Extracted to a scratch copy, not swapped in. Postgres recovered and was ready 11 s after unpacking; Keycloak's realm, client, user, credential and role counts matched production; `acme.json` parsed. |
 
+## Restoring a Postgres database from its dump
+
+`keycloak-pg-dump` and `sourcebot-pg-dump` dump their database every hour at :15 into their own volume, as `keycloak.sql.gz` and `sourcebot.sql.gz` (plain SQL, gzip). `backup_identity` and `backup_sourcebot` archive those volumes nightly, so the last hour comes from the volume and an earlier night from the archive.
+
+A dump service waits up to 5 min for its database when it starts. On any failure it exits after 60 s, which shows as **Container Crash Loop (Swarm)**, and `docker service logs rackvms_<db>-pg-dump` says which: `pg_dump failed`, `postgres not ready after 5 min`, or `dump shrank from <old> to <new> bytes, previous dump kept`. A dump under half the previous size is refused, so a real shrink (expired Keycloak events or sessions, repos removed from Sourcebot) loops until you accept it. On the node with that label, move the old dump aside and delete it once a new one is in place:
+
+```bash
+mv /mnt/data/docker/volumes/rackvms_<db>-pg-dump/_data/<db>.sql.gz /root/<db>.sql.gz.pre-shrink
+```
+
+### Loading a dump
+
+Hold merges to master throughout, since a deploy resets replicas. A dump service dumps as soon as it starts, so it stays at 0 until the load has succeeded; otherwise it replaces the dump you are loading. For Keycloak, on a manager:
+
+```bash
+docker service scale rackvms_keycloak=0 rackvms_keycloak-pg-dump=0
+```
+
+Then on the node with the `identity` label. The chain stops at the first failure: a damaged dump leaves the database untouched, and `keycloak_pre_restore` must not already exist.
+
+```bash
+set -o pipefail
+F=/mnt/data/docker/volumes/rackvms_keycloak-pg-dump/_data/keycloak.sql.gz
+C=$(docker ps -qf name=rackvms_keycloak-postgres)
+gunzip -t "$F" &&
+  docker exec $C psql -X -v ON_ERROR_STOP=1 -U keycloak -d postgres -c 'ALTER DATABASE keycloak RENAME TO keycloak_pre_restore' -c 'CREATE DATABASE keycloak OWNER keycloak TEMPLATE template0' &&
+  gunzip -c "$F" | docker exec -i $C psql -X -q -v ON_ERROR_STOP=1 --single-transaction -U keycloak -d keycloak >/dev/null
+```
+
+If the load fails, the new database is empty, since the load is one transaction. Swap the names back; both renames run as one transaction, so nothing changes unless both succeed:
+
+```bash
+docker exec $C psql -X -v ON_ERROR_STOP=1 -U keycloak -d postgres -c 'ALTER DATABASE keycloak RENAME TO keycloak_failed_restore; ALTER DATABASE keycloak_pre_restore RENAME TO keycloak'
+```
+
+Then bring up only Keycloak with `docker service scale rackvms_keycloak=1`, leave the dump service at 0, fix the cause and retry.
+
+Once the load succeeds, scale both back up on a manager with `docker service scale rackvms_keycloak=1 rackvms_keycloak-pg-dump=1`. Once logins work, drop the kept copies:
+
+```bash
+docker exec $C psql -U keycloak -d postgres -c 'DROP DATABASE IF EXISTS keycloak_pre_restore' -c 'DROP DATABASE IF EXISTS keycloak_failed_restore'
+```
+
+Sourcebot is the same with `sourcebot` in place of `keycloak`, on the node with the `sourcebot` label.
+
+### Loading an earlier night's dump
+
+Scale both services to 0 as above first, then put the dump volume back from its label's archive and load it as above, skipping the scale-down. The list has to be JSON, as with `proxmox_reboot_order`:
+
+```bash
+make run hosts=rackvm1 tags=docker-restore-volumes ANSIBLE_FLAGS="-e docker_restore_volumes=yes -e docker_restore_volumes_label=identity -e docker_restore_volumes_force=yes -e '{\"docker_restore_volumes_only\":[\"keycloak-pg-dump\"]}'"
+```
+
+That takes the newest archive, which is last night's. For an earlier one, also pass `-e '{\"docker_restore_volumes_archive_patterns\":[\"backup-<ts>.tar.gz.age\"]}'` with the file name from `/mnt/Backups/Volumes/identity`, and check the `Restoring from:` line.
+
+The run drains every host in `hosts=`. rackvm1 also carries `edge`, so everything behind Traefik is down while it runs. Sourcebot's node is a worker, so its run needs a manager in `hosts=` as well, with label `sourcebot` and `[\"sourcebot-pg-dump\"]`. That manager is drained too and is left with its own `rackvms_sourcebot-pg-dump`; remove it there afterwards with `docker volume rm rackvms_sourcebot-pg-dump`.
+
 ## docker-volume-backup on a Pi is unhealthy
 
 `raspi1`, `gianos-raspi1`, `quinn-raspi1` and `mertins-raspi1` each run an `offen/docker-volume-backup` container on a `0 0 * * *` cron, writing to `/mnt/Backups/Volumes/<host>` over the `unas_over_ts` CIFS mount. The container's healthcheck asserts that directory holds a `backup-*` file newer than 26h, so the **Container Unhealthy** alert is what pages when a nightly stops landing.
