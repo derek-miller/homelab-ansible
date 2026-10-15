@@ -73,7 +73,7 @@ rackvm5  docker_labels=sourcebot
 rackvm1 k3s_role=server
 
 [k3s_agent]
-rackvm5
+rackvm[2:5]
 
 [k3s:children]
 k3s_server
