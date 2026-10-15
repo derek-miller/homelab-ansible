@@ -37,3 +37,9 @@ k3s_kube_proxy_args:
 
 # Merged over the generated /etc/rancher/k3s/config.yaml.
 k3s_config_extra: {}
+
+# The server runs a Portainer Edge agent while both are set, and removes it
+# once they are cleared. The tag is resolved to its digest on every run.
+k3s_portainer_edge_id: ""
+k3s_portainer_edge_key: ""
+k3s_portainer_agent_image: portainer/agent:latest

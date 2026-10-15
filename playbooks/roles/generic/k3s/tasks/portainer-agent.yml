@@ -1,0 +1,54 @@
+---
+# k3s applies whatever is in server/manifests, and reapplies it on change.
+- name: deploy the Portainer edge agent
+  when:
+    - k3s_portainer_edge_id | length > 0
+    - k3s_portainer_edge_key | length > 0
+  block:
+    - name: pull the Portainer agent image
+      command: "k3s crictl pull {{ k3s_portainer_agent_image | quote }}"
+      changed_when: false
+      check_mode: no
+
+    - name: read the Portainer agent image digest
+      command: "k3s crictl inspecti -o json {{ k3s_portainer_agent_image | quote }}"
+      register: _k3s_portainer_agent_inspect
+      changed_when: false
+      check_mode: no
+
+    - name: write the Portainer edge agent manifest
+      template:
+        src: portainer-agent.yaml.jinja2
+        dest: "{{ k3s_data_dir }}/server/manifests/portainer-agent.yaml"
+        owner: root
+        group: root
+        mode: '0600'
+      vars:
+        _k3s_portainer_agent_image: >-
+          {{ k3s_portainer_agent_image }}@{{
+          (_k3s_portainer_agent_inspect.stdout | from_json).status.repoDigests[0].split('@')[1] }}
+      no_log: true
+
+- name: remove the Portainer edge agent
+  when: k3s_portainer_edge_id | length == 0 or k3s_portainer_edge_key | length == 0
+  block:
+    - name: find the Portainer edge agent manifest
+      stat:
+        path: "{{ k3s_data_dir }}/server/manifests/portainer-agent.yaml"
+      register: _k3s_portainer_manifest
+
+    - name: remove the Portainer edge agent manifest and its objects
+      when: _k3s_portainer_manifest.stat.exists
+      block:
+        - name: remove the manifest
+          file:
+            path: "{{ k3s_data_dir }}/server/manifests/portainer-agent.yaml"
+            state: absent
+
+        - name: delete what the manifest created
+          command: "k3s kubectl delete {{ item }} --ignore-not-found"
+          loop:
+            - -n kube-system addon portainer-agent
+            - clusterrolebinding portainer-crb-clusteradmin
+            - namespace portainer
+          changed_when: true
