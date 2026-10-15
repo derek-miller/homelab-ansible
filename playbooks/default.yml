@@ -242,6 +242,9 @@
     _docker_upgrade_ignore: >-
       {{ docker_upgrade_ignore_services | default([])
          | map('regex_escape') | map('regex_replace', '^', _docker_upgrade_stack ~ '_') | join('|') }}
+    _docker_upgrade_ignore_names: >-
+      {{ docker_upgrade_ignore_services | default([])
+         | map('regex_replace', '^', _docker_upgrade_stack ~ '_') | join(' ') }}
     _docker_upgrade_daemon_json: "{{ docker_daemon_options | default({}) | to_nice_json }}"
     # A task waiting out its restart delay is desired-state ready, not running.
     _docker_upgrade_tasks_cmd: >-
@@ -413,26 +416,31 @@
       delay: 10
 
     # A crash-looping task replaces itself with a new task ID on each restart.
-    - name: give a failing task time to restart
-      pause:
-        seconds: 30
-
-    - name: the same tasks are still running
-      command: "{{ _docker_upgrade_tasks_cmd }}"
+    # One that restarts while its dependencies come up (oauth2-proxy while
+    # Keycloak starts) settles within a few rounds; a crash loop never does.
+    - name: wait for the node's tasks to stay up for 30 s
+      shell: |
+        set -o pipefail
+        list() {
+          {{ _docker_upgrade_tasks_cmd }} \
+            | awk -F'|' -v ign=' {{ _docker_upgrade_ignore_names }} ' \
+                '{ split($1, p, "."); if (index(ign, " " p[1] " ") == 0) print }' \
+            | sort
+        }
+        before=$(list) || { echo "could not list the node's tasks"; exit 0; }
+        sleep 30
+        after=$(list) || { echo "could not list the node's tasks"; exit 0; }
+        printf '%s\n' "$after" | grep -v '|Running ' || true
+        [ "$(printf '%s\n' "$before" | cut -d'|' -f3)" = "$(printf '%s\n' "$after" | cut -d'|' -f3)" ] \
+          || echo "a task was replaced within 30 s"
+      args:
+        executable: /bin/bash
       register: _docker_upgrade_settled
       changed_when: false
       delegate_to: "{{ _docker_upgrade_peer }}"
-      failed_when: >-
-        _docker_upgrade_settled.rc != 0
-        or (_docker_upgrade_settled.stdout_lines
-            | reject('match', '^(' ~ _docker_upgrade_ignore ~ ')\.')
-            | reject('search', '\|Running ') | list | length > 0)
-        or (_docker_upgrade_settled.stdout_lines
-            | reject('match', '^(' ~ _docker_upgrade_ignore ~ ')\.')
-            | map('regex_replace', '^.*\|', '') | sort)
-           != (_docker_upgrade_tasks.stdout_lines
-            | reject('match', '^(' ~ _docker_upgrade_ignore ~ ')\.')
-            | map('regex_replace', '^.*\|', '') | sort)
+      until: _docker_upgrade_settled.stdout | trim | length == 0
+      retries: 6
+      delay: 1
 
     - name: report the node's engine version
       debug:
