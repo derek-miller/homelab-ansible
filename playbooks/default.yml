@@ -646,6 +646,13 @@
         volumes: yes
         builder_cache: yes
         timeout: 300
+    # A kept image's earlier build loses its tag when a rebuild takes it.
+    - name: prune untagged images, kept ones included
+      community.docker.docker_prune:
+        images: yes
+        images_filters:
+          dangling: "true"
+        timeout: 300
   tags:
     - docker
     - docker-prune
