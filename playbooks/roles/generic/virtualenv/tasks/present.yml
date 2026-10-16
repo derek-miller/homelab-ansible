@@ -14,7 +14,7 @@
   command: "{{ virtualenv_python }} --version"
   register: virtualenv_python_version
   changed_when: false
-  failed_when: false
+  failed_when: virtualenv_python_version.rc != 0 and not ansible_check_mode
   check_mode: no
   when: virtualenv_pyvenv_cfg.content is defined
 
