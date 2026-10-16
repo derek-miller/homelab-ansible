@@ -80,7 +80,8 @@
     quiet: yes
   when: not ansible_check_mode
 
-- name: check the release moves at most one minor
+# Agents only match the server, so one that missed deploys can catch up at once.
+- name: check the server moves at most one minor
   assert:
     that:
       - (_k3s_release.split('.')[1] | int) >= _k3s_minor | int
@@ -89,7 +90,10 @@
       k3s cannot go from {{ _k3s_installed_release }} to {{ _k3s_release }}: it never goes
       back a minor, and Kubernetes cannot skip one.
     quiet: yes
-  when: _k3s_release | length > 0 and _k3s_installed_release | length > 0
+  when:
+    - k3s_role == 'server'
+    - _k3s_release | length > 0
+    - _k3s_installed_release | length > 0
 
 - name: install the k3s binary
   get_url:

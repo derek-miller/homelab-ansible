@@ -120,6 +120,25 @@
     owner: root
     group: root
     mode: '0600'
+  register: _flux_instance_manifest
+
+# Otherwise the reconcile below can still run against the previous spec.
+- name: wait for k3s to apply the FluxInstance manifest
+  when: _flux_instance_manifest is changed and not ansible_check_mode
+  block:
+    - name: hash the FluxInstance manifest
+      stat:
+        path: "{{ _flux_manifests_dir }}/flux.yaml"
+        checksum_algorithm: sha256
+      register: _flux_instance_file
+
+    - name: wait for k3s to apply the FluxInstance manifest
+      command: k3s kubectl -n kube-system get addon flux -o 'jsonpath={.spec.checksum}'
+      register: _flux_instance_addon
+      until: _flux_instance_addon.stdout == _flux_instance_file.stat.checksum
+      retries: 12
+      delay: 5
+      changed_when: false
 
 - name: choose a reconcile request
   set_fact:
@@ -154,7 +173,7 @@
     -o 'jsonpath={.status.lastAppliedRevision}'
   register: _flux_applied
   changed_when: false
-  failed_when: not ansible_check_mode and (_flux_applied.rc != 0 or _flux_version | length == 0)
+  failed_when: not ansible_check_mode and (_flux_applied.rc != 0 or _flux_version is not match('^\d+\.\d+\.\d+$'))
   check_mode: no
 
 - name: read the flux CLI version
