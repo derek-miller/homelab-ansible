@@ -1,8 +1,7 @@
 ---
 # The pip module only builds a venv when one is absent — it won't rebuild an
-# existing venv whose base interpreter changed. Compare the venv's Python minor
-# in pyvenv.cfg with the interpreter's, and remove the venv on a mismatch so
-# it's recreated below with the current interpreter.
+# existing venv whose base interpreter or site-packages setting changed. Compare
+# pyvenv.cfg with both, and remove the venv on a mismatch so it's recreated below.
 - name: check existing venv base interpreter
   slurp:
     src: "{{ virtualenv_path }}/pyvenv.cfg"
@@ -18,7 +17,7 @@
   check_mode: no
   when: virtualenv_pyvenv_cfg.content is defined
 
-- name: remove stale venv built with a different Python minor
+- name: remove a venv built with a different Python minor or site-packages setting
   file:
     path: "{{ virtualenv_path }}"
     state: absent
@@ -28,9 +27,12 @@
          | regex_search('(?m)^version(_info)? *= *[0-9]+[.][0-9]+') | default('', true)
          | regex_replace('^.*= *', '') }}
     _python_minor: "{{ virtualenv_python_version.stdout | regex_search('[0-9]+[.][0-9]+') | default('', true) }}"
+    _venv_site_packages: >-
+      {{ virtualenv_pyvenv_cfg.content | b64decode
+         | regex_search('(?m)^include-system-site-packages *= *true') is not none }}
   when:
     - virtualenv_pyvenv_cfg.content is defined
-    - _venv_minor != _python_minor
+    - _venv_minor != _python_minor or _venv_site_packages | bool != virtualenv_site_packages | bool
 
 - name: create virtualenv dir
   file:

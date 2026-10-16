@@ -68,12 +68,29 @@
         group: root
         mode: '0755'
 
+# Apple's /usr/bin/python3 is 3.9; venvs build from Homebrew's Python instead.
 - name: install Python via Homebrew (macOS)
-  # Apple's /usr/bin/python3 is pinned at 3.9 (EOL); build the remote venv from a
-  # Homebrew interpreter instead so it tracks the same dependency versions as the
-  # Linux hosts. generic/virtualenv builds every venv from darwin_venv_python.
-  community.general.homebrew:
-    name: "{{ darwin_python_formula }}"
-    state: latest
-  become_user: "{{ mac_user }}"
   when: ansible_os_family == 'Darwin'
+  block:
+    # Brew can't upgrade or remove a keg holding files root wrote.
+    - name: hand root-owned files in the Homebrew Python kegs back to mac_user
+      command: >-
+        find {{ homebrew_prefix }}/Cellar -depth 1 ! -name 'python@*' -prune
+        -o -user root -print -exec chown -h {{ mac_user }} {} +
+      register: _python_keg_root_files
+      changed_when: _python_keg_root_files.stdout | length > 0
+
+    - name: install the Homebrew Python formula
+      community.general.homebrew:
+        name: "{{ python_homebrew_formula }}"
+        state: latest
+      become_user: "{{ mac_user }}"
+
+    # Compiled ahead as mac_user, root's module runs only read the bytecode.
+    - name: compile the Homebrew Python standard library
+      command: >-
+        {{ python_base_interpreter }} -m compileall -j0 -x /test/
+        {{ python_homebrew_stdlib }}
+      register: _python_compileall
+      changed_when: "'Compiling ' in _python_compileall.stdout"
+      become_user: "{{ mac_user }}"
