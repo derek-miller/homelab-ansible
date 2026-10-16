@@ -1,0 +1,136 @@
+---
+- name: check the inputs
+  assert:
+    that:
+      - flux_apps_path | length > 0
+      - flux_registry_password | length > 0
+      - flux_registry_htpasswd.startswith(flux_registry_user ~ ':')
+    quiet: yes
+
+- name: read the flux CLI version
+  command: /usr/local/bin/flux --version
+  register: _flux_cli
+  changed_when: false
+  failed_when: false
+  check_mode: no
+
+- name: install the flux CLI
+  when: _flux_cli.stdout | default('') != 'flux version ' ~ flux_cli_version
+  block:
+    - name: download the flux CLI
+      get_url:
+        url: "https://github.com/fluxcd/flux2/releases/download/v{{ flux_cli_version }}/flux_{{ flux_cli_version }}_linux_amd64.tar.gz"
+        checksum: "sha256:{{ flux_cli_sha256 }}"
+        dest: /root/flux_linux_amd64.tar.gz
+        mode: '0600'
+        timeout: 60
+      register: _flux_download
+      until: _flux_download is succeeded
+      retries: 3
+      delay: 15
+
+    - name: unpack the flux CLI
+      unarchive:
+        src: /root/flux_linux_amd64.tar.gz
+        dest: /usr/local/bin
+        remote_src: yes
+        include:
+          - flux
+        owner: root
+        group: root
+        mode: '0755'
+      when: not ansible_check_mode
+  always:
+    - name: remove the flux CLI download
+      file:
+        path: /root/flux_linux_amd64.tar.gz
+        state: absent
+
+- name: create the registry's volume
+  file:
+    path: "{{ flux_registry_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: write the Flux Operator and Reloader manifests
+  template:
+    src: "{{ item }}.yaml.jinja2"
+    dest: "{{ _flux_manifests_dir }}/{{ item }}.yaml"
+    owner: root
+    group: root
+    mode: '0600'
+  loop:
+    - flux-operator
+    - reloader
+
+- name: write the registry manifest
+  template:
+    src: zot.yaml.jinja2
+    dest: "{{ _flux_manifests_dir }}/zot.yaml"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+
+- name: wait for the FluxInstance API
+  command: >-
+    k3s kubectl get crd fluxinstances.fluxcd.controlplane.io
+    -o 'jsonpath={.status.conditions[?(@.type=="Established")].status}'
+  register: _flux_crd
+  until: _flux_crd.stdout == 'True'
+  retries: 30
+  delay: 10
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: write the FluxInstance manifest
+  template:
+    src: flux.yaml.jinja2
+    dest: "{{ _flux_manifests_dir }}/flux.yaml"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: wait for Flux
+  command: >-
+    k3s kubectl -n flux-system get fluxinstance flux
+    -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status}'
+  register: _flux_ready
+  until: _flux_ready.stdout == 'True'
+  retries: 30
+  delay: 10
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: wait for the registry
+  command: k3s kubectl -n zot rollout status statefulset/zot --timeout=10s
+  register: _flux_registry_ready
+  until: _flux_registry_ready is succeeded
+  retries: 30
+  delay: 10
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: write the sync manifest
+  template:
+    src: flux-sync.yaml.jinja2
+    dest: "{{ _flux_manifests_dir }}/flux-sync.yaml"
+    owner: root
+    group: root
+    mode: '0600'
+  register: _flux_sync
+  no_log: true
+
+- name: wait for k3s to apply the sync manifest
+  command: k3s kubectl -n flux-system get kustomization apps -o name
+  register: _flux_sync_applied
+  until: _flux_sync_applied is succeeded
+  retries: 12
+  delay: 5
+  changed_when: false
+  when: not ansible_check_mode
+
+- include_tasks: deliver.yml
+  when: not (ansible_check_mode and _flux_sync is changed)

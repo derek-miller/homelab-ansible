@@ -1,0 +1,109 @@
+---
+# The deploy log is public, so nothing here may print a manifest or an image.
+- name: find the registry
+  command: k3s kubectl -n zot get service zot -o 'jsonpath={.spec.clusterIP}'
+  register: _flux_registry_ip
+  changed_when: false
+  check_mode: no
+
+- name: package and apply the apps
+  vars:
+    _flux_artifact: "oci://{{ _flux_registry_ip.stdout }}:5000/apps:latest"
+    _flux_git: "git -C {{ flux_apps_path | quote }}"
+  environment:
+    DOCKER_CONFIG: "{{ _flux_work }}/docker"
+    KUBECONFIG: "{{ _flux_kubeconfig }}"
+  block:
+    - name: clear the staging directory
+      file:
+        path: "{{ _flux_work }}"
+        state: absent
+      changed_when: false
+      check_mode: no
+
+    - name: create the staging directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      loop:
+        - "{{ _flux_work }}/apps"
+        - "{{ _flux_work }}/docker"
+      changed_when: false
+      check_mode: no
+
+    - name: stage the registry credentials
+      copy:
+        dest: "{{ _flux_work }}/docker/config.json"
+        content: "{{ {'auths': {_flux_registry_ip.stdout ~ ':5000': {'auth': _flux_registry_auth}}} | to_json }}"
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+      changed_when: false
+      check_mode: no
+
+    - name: stage the apps, decrypting vaulted files
+      copy:
+        src: "{{ flux_apps_path }}/"
+        dest: "{{ _flux_work }}/apps/"
+        owner: root
+        group: root
+        mode: '0600'
+        directory_mode: '0700'
+      no_log: true
+      changed_when: false
+      check_mode: no
+
+    - name: pin each image to its current digest
+      script: "flux-pin-images.py {{ (_flux_work ~ '/apps') | quote }}"
+      args:
+        executable: python3
+      changed_when: false
+      check_mode: no
+
+    - name: compare the apps with the last ones pushed
+      command: >-
+        flux diff artifact {{ _flux_artifact | quote }}
+        --path={{ (_flux_work ~ '/apps') | quote }}
+        --insecure-registry
+      register: _flux_diff
+      changed_when: _flux_diff.rc != 0
+      failed_when: false
+      check_mode: no
+
+    - name: push the apps
+      command: >-
+        flux push artifact {{ _flux_artifact | quote }}
+        --path={{ (_flux_work ~ '/apps') | quote }}
+        --source={{ lookup('pipe', _flux_git ~ ' remote get-url origin') | quote }}
+        --revision={{ (lookup('pipe', _flux_git ~ ' rev-parse --abbrev-ref HEAD') ~ '@sha1:' ~ lookup('pipe', _flux_git ~ ' rev-parse HEAD')) | quote }}
+        --reproducible
+        --insecure-registry
+      when: _flux_diff.rc != 0 and not ansible_check_mode
+
+    - name: apply the apps
+      command: >-
+        flux reconcile kustomization apps
+        --namespace=flux-system
+        --with-source
+        --timeout={{ flux_apply_timeout | quote }}
+      register: _flux_apply
+      changed_when: false
+      failed_when: false
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: report a failed apply
+      fail:
+        msg: "Flux did not apply the apps; `flux get kustomizations -A` on {{ inventory_hostname }} says why."
+      when: _flux_apply.rc | default(0) != 0
+  always:
+    - name: remove the staging directory
+      file:
+        path: "{{ _flux_work }}"
+        state: absent
+      changed_when: false
+      check_mode: no

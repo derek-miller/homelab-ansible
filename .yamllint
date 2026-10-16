@@ -13,6 +13,7 @@ ignore: |
   playbooks/roles/galaxy/
   playbooks/files/vault/
   playbooks/host_vars/*/vault.yml
+  kubernetes/**/*.vault.yaml
   # third-party/worktree YAML under the dev + CI venv and Claude worktrees; not ours to lint
   .venv/
   .claude/

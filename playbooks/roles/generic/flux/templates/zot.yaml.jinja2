@@ -1,0 +1,87 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zot
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: zot
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: zot
+    name: zot-data
+  local:
+    path: {{ flux_registry_path | to_json }}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - {{ inventory_hostname | to_json }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zot-data
+  namespace: zot
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+  volumeName: zot
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: zot-htpasswd
+  namespace: zot
+type: Opaque
+stringData:
+  htpasswd: {{ flux_registry_htpasswd | to_json }}
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: zot
+  namespace: kube-system
+spec:
+  repo: https://zotregistry.dev/helm-charts
+  chart: zot
+  version: {{ zot_chart_version | string | to_json }}
+  targetNamespace: zot
+  valuesContent: |-
+    service:
+      type: ClusterIP
+    persistence: true
+    pvc:
+      create: false
+      name: zot-data
+    externalSecrets:
+      - secretName: zot-htpasswd
+        mountPath: /secret
+    mountConfig: true
+    configFiles:
+      config.json: |-
+        {
+          "storage": { "rootDirectory": "/var/lib/registry", "gc": true },
+          "http": {
+            "address": "0.0.0.0",
+            "port": "5000",
+            "compat": ["docker2s2"],
+            "auth": { "htpasswd": { "path": "/secret/htpasswd" } }
+          },
+          "log": { "level": "info" }
+        }

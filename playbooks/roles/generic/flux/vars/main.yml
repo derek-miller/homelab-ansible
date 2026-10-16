@@ -1,0 +1,13 @@
+---
+_flux_manifests_dir: "{{ k3s_data_dir }}/server/manifests"
+_flux_manifests:
+  - flux-operator
+  - reloader
+  - zot
+  - flux
+  - flux-sync
+
+_flux_kubeconfig: /etc/rancher/k3s/k3s.yaml
+_flux_work: /run/flux
+_flux_registry_cluster_address: zot.zot.svc.cluster.local:5000
+_flux_registry_auth: "{{ (flux_registry_user ~ ':' ~ flux_registry_password) | b64encode }}"

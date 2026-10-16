@@ -1,0 +1,11 @@
+---
+- assert:
+    that:
+      - flux_state in ('present', 'absent')
+    quiet: yes
+
+- include_tasks: present.yml
+  when: flux_state == 'present'
+
+- include_tasks: absent.yml
+  when: flux_state == 'absent'

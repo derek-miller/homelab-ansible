@@ -653,6 +653,9 @@
 - hosts: k3s_server
   roles:
     - role: generic/k3s
+    - role: generic/flux
+      tags:
+        - flux
   tags:
     - k3s
 
