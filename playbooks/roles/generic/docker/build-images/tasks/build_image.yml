@@ -170,29 +170,6 @@
     _moving_tag_tags: >-
       {{ dict(_moving_tag_pairs | map(attribute='1') | zip(_moving_tag_pairs | map(attribute='0.Id'))) }}
 
-- name: List {{ image_name }} builds and the containers using them
-  community.docker.docker_host_info:
-    images: yes
-    images_filters:
-      reference: "{{ image_config.image_name }}"
-    containers: yes
-    containers_all: yes
-    verbose_output: yes
-  register: _image_builds
-
-# Exited task containers hold a build too; the prune play clears them, so the
-# next run removes what this one had to keep.
-- name: Remove older unused {{ image_name }} builds
-  community.docker.docker_image:
-    name: "{{ item }}"
-    state: absent
-  loop: >-
-    {{ _image_builds.images
-       | rejectattr('Id', 'in', _image_builds.containers | map(attribute='ImageID') | list)
-       | rejectattr('RepoTags', 'contains', image_config.image_name ~ ':' ~ image_config.image_tag)
-       | rejectattr('RepoTags', 'contains', image_config.image_name ~ ':' ~ image_config.moving_tag | default(image_config.image_tag))
-       | map(attribute='RepoTags') | flatten | list }}
-
 - name: Remove deploy key for {{ image_name }} from remote
   file:
     path: "/tmp/docker-image-builds/{{ image_name }}-deploy-key"

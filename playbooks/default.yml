@@ -639,20 +639,39 @@
         images: yes
         images_filters:
           dangling: "false"
-          # Keep one-shot job images (e.g. control4-driver-scraper) that
-          # have no container referencing them between scheduled runs.
+          # Images carrying this label are pruned below instead, down to the
+          # newest build of each, which may have no container yet (a one-shot
+          # job between runs, a just-built release swarm hasn't started).
           "label!": homelab.prune.exclude
         networks: yes
         volumes: yes
         builder_cache: yes
         timeout: 300
-    # A kept image's earlier build loses its tag when a rebuild takes it.
-    - name: prune untagged images, kept ones included
-      community.docker.docker_prune:
+    - name: list labelled images and the containers using them
+      community.docker.docker_host_info:
         images: yes
         images_filters:
-          dangling: "true"
-        timeout: 300
+          label: homelab.prune.exclude
+        containers: yes
+        containers_all: yes
+        verbose_output: yes
+      register: _labelled_images
+    - name: remove all but the newest build of each labelled image
+      community.docker.docker_image_remove:
+        name: "{{ item }}"
+        force: yes
+      loop: >-
+        {%- set ns = namespace(seen=[], out=[]) -%}
+        {%- set used = _labelled_images.containers | map(attribute='ImageID') | list -%}
+        {%- for image in _labelled_images.images | sort(attribute='Created', reverse=true) -%}
+          {%- set repo = (image.RepoTags or []) | first | default('') | regex_replace(':[^:]*$', '') -%}
+          {%- if repo and repo not in ns.seen -%}
+            {%- set ns.seen = ns.seen + [repo] -%}
+          {%- elif image.Id not in used -%}
+            {%- set ns.out = ns.out + [image.Id] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.out }}
   tags:
     - docker
     - docker-prune
