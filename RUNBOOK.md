@@ -111,6 +111,40 @@ Never run k3s's own `k3s-uninstall.sh` or `k3s-killall.sh` here. Besides removin
   and `sudo systemctl restart k3s-agent` on each agent.
 - *No usable copy.* Run `make run hosts=rackvm1 tags=k3s` for a fresh server with the same token, then `make run tags=k3s` for the agents. An agent that will not rejoin is removed with `k3s_state=absent` and installed again. Everything the cluster ran is then redeployed from the repo; data on the nodes' disks is untouched.
 
+## Apps on k3s
+
+Apps on the cluster are plain Kubernetes YAML under `kubernetes/`, which Flux applies. Ansible installs Flux and hands it the tree on every deploy, so adding, changing or removing an app is an edit there and a deploy, with no Ansible to write. To deploy just the apps:
+
+```bash
+make run tags=flux
+```
+
+The deploy copies the tree to rackvm1, decrypting vaulted files on the way, pins every `image:` to the digest its tag points at now, and pushes the result to the cluster's registry (Zot) when it differs from the last push. Flux applies it and waits for everything to become healthy, and the deploy fails if it doesn't. Floating tags therefore move on each deploy, as they do on Swarm. Every 10 minutes Flux re-applies the last push, undoing hand edits to the objects it owns, and an object whose file is deleted is deleted too.
+
+**Hidden apps.** Anything that shouldn't be public goes in a `*.vault.yaml` file, encrypted whole by `make vault-encrypt`, and so does every Secret. File names stay readable, so a hidden suite shares one neutral name (the *arr apps share `media.vault.yaml`), never an app's own. The deploy log is public as well, so the deploy prints no manifests or images, and a failed apply only says to look on rackvm1.
+
+**Status.** On rackvm1:
+
+```bash
+sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml flux get all -A
+```
+
+lists the source and the Kustomization with the revision last applied, or the error. Portainer's `rack-k3s` environment shows Flux's apps as external; change them in the repo, since Flux reverts edits made there.
+
+**Secrets.** Reloader restarts a workload whenever a Secret or ConfigMap it uses changes, so a rotated value takes effect with the deploy that ships it.
+
+**Portainer.** The cluster's Edge agent is `kubernetes/portainer/`. To re-key it, add the environment again in Portainer (Kubernetes, Edge Agent Standard) and take the Edge ID and key from the command it shows, without running it. Put them in `kubernetes/portainer/edge.vault.yaml`.
+
+**Upgrading.** Flux itself follows the newest 2.x release on its own. The flux CLI and the Flux Operator, Zot and Reloader charts are pinned in `generic/flux/defaults/main.yml`. Bump `flux_cli_version` and `flux_cli_sha256` together; the checksum is the `linux_amd64` line of the release's `flux_<version>_checksums.txt`.
+
+**Registry password.** Change `flux_registry_password` and `flux_registry_htpasswd` in `host_vars/rackvm1/vars.yml` together, each as `ansible-vault encrypt_string` output. `htpasswd -nB flux` prompts for the new password and prints the line for the second. The registry's volume, `/mnt/data/volumes/zot` on rackvm1, holds only what deploys pushed. If it is lost, apps keep running and Flux reports its source failing until the next deploy pushes again.
+
+**Removing it.** This deletes every app Flux applied, then Flux, Reloader and the registry with its volume. Run it before removing k3s from the server:
+
+```bash
+make run hosts=rackvm1 tags=flux ANSIBLE_FLAGS="-e flux_state=absent"
+```
+
 ## Applying updates and rebooting pve1-5
 
 Upgrading packages and rebooting are two opt-in flags on one play (`generic/proxmox-reboot`), not separate playbooks — but only one direction is independent. `proxmox_reboot_enabled` alone reboots without upgrading; `proxmox_upgrade_enabled` alone upgrades nothing, since the upgrade task lives inside this same role behind the same `proxmox_reboot_enabled` guard below. It still has an effect on its own, though: the final node-config reapply play is gated on `proxmox_upgrade_enabled` alone, so setting it without `proxmox_reboot_enabled` reapplies `generic/proxmox` config across all five nodes despite nothing having been upgraded. A routine update sets both:
