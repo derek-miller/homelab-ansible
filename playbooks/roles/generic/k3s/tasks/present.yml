@@ -29,20 +29,86 @@
     mode: '0755'
   register: _k3s_bindir
 
+- name: read the installed k3s release
+  command: /usr/local/bin/k3s --version
+  register: _k3s_installed
+  changed_when: false
+  failed_when: false
+  check_mode: no
+
+- name: list the k3s release channels
+  uri:
+    url: https://update.k3s.io/v1-release/channels
+  register: _k3s_channels
+  until: _k3s_channels is succeeded
+  retries: 3
+  delay: 10
+  check_mode: no
+  when: k3s_role == 'server' and not _k3s_exact
+
+- name: check k3s_version names a release or a channel
+  assert:
+    that: _k3s_exact or k3s_version in _k3s_channel_releases
+    fail_msg: k3s_version {{ k3s_version }} is neither a release nor a channel on update.k3s.io.
+    quiet: yes
+  when: k3s_role == 'server'
+
+- name: read the k3s release the server runs
+  command: >-
+    k3s kubectl --kubeconfig {{ (k3s_data_dir ~ '/agent/kubelet.kubeconfig') | quote }}
+    get --raw /version
+  register: _k3s_server_running
+  changed_when: false
+  failed_when: false
+  check_mode: no
+  when: k3s_role == 'agent'
+
+# An agent that has not joined yet has no credentials to ask with.
+- name: read the k3s release installed on the server
+  command: /usr/local/bin/k3s --version
+  delegate_to: "{{ k3s_server_host }}"
+  register: _k3s_server_installed
+  changed_when: false
+  failed_when: false
+  check_mode: no
+  when: k3s_role == 'agent' and _k3s_server_running.rc != 0
+
+- name: check the server runs k3s
+  assert:
+    that: _k3s_release | length > 0
+    fail_msg: Install the k3s server before its agents, and include it in the run when adding one.
+    quiet: yes
+  when: not ansible_check_mode
+
+- name: check the release moves at most one minor
+  assert:
+    that:
+      - (_k3s_release.split('.')[1] | int) >= _k3s_minor | int
+      - (_k3s_release.split('.')[1] | int) <= _k3s_minor | int + 1
+    fail_msg: >-
+      k3s cannot go from {{ _k3s_installed_release }} to {{ _k3s_release }}: it never goes
+      back a minor, and Kubernetes cannot skip one.
+    quiet: yes
+  when: _k3s_release | length > 0 and _k3s_installed_release | length > 0
+
 - name: install the k3s binary
   get_url:
-    url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version | urlencode }}/k3s"
-    checksum: "sha256:{{ k3s_sha256 }}"
+    url: "{{ _k3s_release_url }}/k3s"
+    checksum: "sha256:{{ _k3s_release_url }}/sha256sum-amd64.txt"
     dest: /usr/local/bin/k3s
     owner: root
     group: root
     mode: '0755'
     timeout: 60
+  vars:
+    _k3s_release_url: "https://github.com/k3s-io/k3s/releases/download/{{ _k3s_release | urlencode }}"
   register: _k3s_binary
   until: _k3s_binary is succeeded
   retries: 3
   delay: 15
-  when: not (ansible_check_mode and _k3s_bindir is changed)
+  when:
+    - _k3s_release | length > 0
+    - not (ansible_check_mode and _k3s_bindir is changed)
   notify: restart k3s
 
 # No ctr link: /usr/local/bin would shadow Docker's containerd ctr.
@@ -97,9 +163,9 @@
     k3s kubectl
     {{ '' if k3s_role == 'server' else '--kubeconfig ' ~ (k3s_data_dir ~ '/agent/kubelet.kubeconfig') | quote }}
     get node {{ inventory_hostname }}
-    -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status}'
+    -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status} {.status.nodeInfo.kubeletVersion}'
   register: _k3s_node_ready
-  until: _k3s_node_ready.stdout == 'True'
+  until: _k3s_node_ready.stdout == 'True ' ~ _k3s_release
   retries: 30
   delay: 10
   changed_when: false

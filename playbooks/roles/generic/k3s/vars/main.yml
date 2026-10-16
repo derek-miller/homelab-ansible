@@ -22,3 +22,19 @@ _k3s_config: >-
       )
     | combine(k3s_config_extra)
   }}
+
+_k3s_release_pattern: 'v\d+\.\d+\.\d+\+k3s\d+'
+_k3s_exact: "{{ k3s_version is match('^' ~ _k3s_release_pattern ~ '$') }}"
+_k3s_installed_release: "{{ _k3s_installed.stdout | default('') | regex_search(_k3s_release_pattern) | default('', true) }}"
+_k3s_channel_releases: "{{ _k3s_channels.json.data | default([]) | selectattr('latest', 'defined') | items2dict(key_name='id', value_name='latest') }}"
+_k3s_minor: "{{ _k3s_installed_release.split('.')[1] | default(0) | int }}"
+# One minor at a time: Kubernetes cannot skip one on the way up.
+_k3s_server_release: >-
+  {{ k3s_version if _k3s_exact
+     else _k3s_channel_releases['v1.' ~ (_k3s_minor | int + 1)]
+       if _k3s_installed_release and (_k3s_channel_releases[k3s_version].split('.')[1] | int) > _k3s_minor | int + 1
+     else _k3s_channel_releases[k3s_version] }}
+_k3s_release: >-
+  {{ _k3s_server_release if k3s_role == 'server'
+     else ((_k3s_server_running.stdout | default('')) ~ ' ' ~ (_k3s_server_installed.stdout | default('')))
+       | regex_search(_k3s_release_pattern) | default('', true) }}
