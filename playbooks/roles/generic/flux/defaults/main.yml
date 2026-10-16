@@ -5,11 +5,9 @@ flux_state: present
 # decrypted on the way; every image is pinned to its tag's current digest.
 flux_apps_path: ""
 
-# Bump both together, from the release's flux_<version>_checksums.txt.
-flux_cli_version: 2.9.6
-flux_cli_sha256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
-
-flux_operator_chart_version: 0.61.0
+# Each deploy moves the operator to its newest release in this major, which
+# brings the newest Flux 2.x it ships. An exact version holds it back.
+flux_operator_chart_version: 0.x
 flux_distribution_version: 2.x
 
 zot_chart_version: 0.1.128

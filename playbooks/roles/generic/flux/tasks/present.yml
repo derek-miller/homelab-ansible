@@ -7,45 +7,6 @@
       - flux_registry_htpasswd.startswith(flux_registry_user ~ ':')
     quiet: yes
 
-- name: read the flux CLI version
-  command: /usr/local/bin/flux --version
-  register: _flux_cli
-  changed_when: false
-  failed_when: false
-  check_mode: no
-
-- name: install the flux CLI
-  when: _flux_cli.stdout | default('') != 'flux version ' ~ flux_cli_version
-  block:
-    - name: download the flux CLI
-      get_url:
-        url: "https://github.com/fluxcd/flux2/releases/download/v{{ flux_cli_version }}/flux_{{ flux_cli_version }}_linux_amd64.tar.gz"
-        checksum: "sha256:{{ flux_cli_sha256 }}"
-        dest: /root/flux_linux_amd64.tar.gz
-        mode: '0600'
-        timeout: 60
-      register: _flux_download
-      until: _flux_download is succeeded
-      retries: 3
-      delay: 15
-
-    - name: unpack the flux CLI
-      unarchive:
-        src: /root/flux_linux_amd64.tar.gz
-        dest: /usr/local/bin
-        remote_src: yes
-        include:
-          - flux
-        owner: root
-        group: root
-        mode: '0755'
-      when: not ansible_check_mode
-  always:
-    - name: remove the flux CLI download
-      file:
-        path: /root/flux_linux_amd64.tar.gz
-        state: absent
-
 - name: create the registry's volume
   file:
     path: "{{ flux_registry_path }}"
@@ -54,16 +15,46 @@
     group: root
     mode: '0700'
 
-- name: write the Flux Operator and Reloader manifests
+- name: list the Flux Operator chart's releases
+  when: flux_operator_chart_version.endswith('.x')
+  block:
+    - name: get a token for the Flux Operator chart
+      uri:
+        url: "https://ghcr.io/token?scope=repository:{{ _flux_operator_chart_repo }}:pull"
+      register: _flux_operator_token
+      until: _flux_operator_token is succeeded
+      retries: 3
+      delay: 10
+      check_mode: no
+
+    # The list runs oldest first, so a second page would hide the newest.
+    - name: list the Flux Operator chart's tags
+      uri:
+        url: "https://ghcr.io/v2/{{ _flux_operator_chart_repo }}/tags/list?n=1000"
+        headers:
+          Authorization: "Bearer {{ _flux_operator_token.json.token }}"
+      register: _flux_operator_tags
+      until: _flux_operator_tags is succeeded
+      failed_when: _flux_operator_tags.status != 200 or _flux_operator_tags.link is defined
+      retries: 3
+      delay: 10
+      check_mode: no
+
+- name: write the Flux Operator manifest
   template:
-    src: "{{ item }}.yaml.jinja2"
-    dest: "{{ _flux_manifests_dir }}/{{ item }}.yaml"
+    src: flux-operator.yaml.jinja2
+    dest: "{{ _flux_manifests_dir }}/flux-operator.yaml"
     owner: root
     group: root
     mode: '0600'
-  loop:
-    - flux-operator
-    - reloader
+
+- name: write the Reloader manifest
+  template:
+    src: reloader.yaml.jinja2
+    dest: "{{ _flux_manifests_dir }}/reloader.yaml"
+    owner: root
+    group: root
+    mode: '0600'
 
 - name: write the registry manifest
   template:
@@ -93,16 +84,96 @@
     group: root
     mode: '0600'
 
-- name: wait for Flux
+- name: wait for k3s to roll out the Flux Operator release
   command: >-
-    k3s kubectl -n flux-system get fluxinstance flux
-    -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status}'
-  register: _flux_ready
-  until: _flux_ready.stdout == 'True'
+    k3s kubectl -n flux-system get deployment flux-operator
+    -o 'jsonpath={.metadata.labels.helm\.sh/chart}'
+  register: _flux_operator_chart
+  until: _flux_operator_chart.stdout == 'flux-operator-' ~ _flux_operator_chart_release
   retries: 30
   delay: 10
   changed_when: false
   when: not ansible_check_mode
+
+- name: wait for the Flux Operator
+  command: k3s kubectl -n flux-system rollout status deployment/flux-operator --timeout=5m
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: choose a reconcile request
+  set_fact:
+    _flux_reconcile_request: "{{ now(utc=true).isoformat() }}"
+
+# Ready alone can still be the previous operator's verdict.
+- name: ask the Flux Operator to reconcile Flux
+  command: >-
+    k3s kubectl -n flux-system annotate fluxinstance flux --overwrite
+    reconcile.fluxcd.io/requestedAt={{ _flux_reconcile_request | quote }}
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: wait for Flux
+  command: >-
+    k3s kubectl -n flux-system get fluxinstance flux
+    -o 'jsonpath={.status.lastHandledReconcileAt} {.status.conditions[?(@.type=="Ready")].status}'
+  register: _flux_ready
+  until: _flux_ready.stdout == _flux_reconcile_request ~ ' True'
+  retries: 30
+  delay: 10
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: read the Flux version the instance runs
+  command: >-
+    k3s kubectl -n flux-system get fluxinstance flux
+    -o 'jsonpath={.status.lastAppliedRevision}'
+  register: _flux_applied
+  changed_when: false
+  failed_when: not ansible_check_mode and (_flux_applied.rc != 0 or _flux_version | length == 0)
+  check_mode: no
+
+- name: read the flux CLI version
+  command: /usr/local/bin/flux --version
+  register: _flux_cli
+  changed_when: false
+  failed_when: false
+  check_mode: no
+
+- name: install the flux CLI the instance runs
+  when:
+    - _flux_version | length > 0
+    - _flux_cli.stdout | default('') != 'flux version ' ~ _flux_version
+  vars:
+    _flux_release_url: "https://github.com/fluxcd/flux2/releases/download/v{{ _flux_version }}"
+  block:
+    - name: download the flux CLI
+      get_url:
+        url: "{{ _flux_release_url }}/flux_{{ _flux_version }}_linux_amd64.tar.gz"
+        checksum: "sha256:{{ _flux_release_url }}/flux_{{ _flux_version }}_checksums.txt"
+        dest: /root/flux_linux_amd64.tar.gz
+        mode: '0600'
+        timeout: 60
+      register: _flux_download
+      until: _flux_download is succeeded
+      retries: 3
+      delay: 15
+
+    - name: unpack the flux CLI
+      unarchive:
+        src: /root/flux_linux_amd64.tar.gz
+        dest: /usr/local/bin
+        remote_src: yes
+        include:
+          - flux
+        owner: root
+        group: root
+        mode: '0755'
+      when: not ansible_check_mode
+  always:
+    - name: remove the flux CLI download
+      file:
+        path: /root/flux_linux_amd64.tar.gz
+        state: absent
 
 - name: wait for the registry
   command: k3s kubectl -n zot rollout status statefulset/zot --timeout=10s

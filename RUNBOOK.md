@@ -135,7 +135,7 @@ lists the source and the Kustomization with the revision last applied, or the er
 
 **Portainer.** The cluster's Edge agent is `kubernetes/portainer/`. To re-key it, add the environment again in Portainer (Kubernetes, Edge Agent Standard) and take the Edge ID and key from the command it shows, without running it. Put them in `kubernetes/portainer/edge.vault.yaml`.
 
-**Upgrading.** Flux itself follows the newest 2.x release on its own. The flux CLI and the Flux Operator, Zot and Reloader charts are pinned in `generic/flux/defaults/main.yml`. Bump `flux_cli_version` and `flux_cli_sha256` together; the checksum is the `linux_amd64` line of the release's `flux_<version>_checksums.txt`.
+**Upgrading.** Flux and the Flux Operator pin only their major, `flux_operator_chart_version` (`0.x`) and `flux_distribution_version` (`2.x`) in `generic/flux/defaults/main.yml`. Each deploy moves the operator to its newest release in that major. Each operator release brings the newest Flux 2.x it ships, and the deploy waits for that upgrade, then installs the flux CLI at the same version. To hold back or roll back a bad operator release, set `flux_operator_chart_version` to an exact version such as `0.61.0`. Crossing a major means changing those values. The Zot and Reloader charts are pinned in the same file.
 
 **Registry password.** Change `flux_registry_password` and `flux_registry_htpasswd` in `host_vars/rackvm1/vars.yml` together, each as `ansible-vault encrypt_string` output. `htpasswd -nB flux` prompts for the new password and prints the line for the second. The registry's volume, `/mnt/data/volumes/zot` on rackvm1, holds only what deploys pushed. If it is lost, apps keep running and Flux reports its source failing until the next deploy pushes again.
 

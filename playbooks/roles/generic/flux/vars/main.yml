@@ -11,3 +11,11 @@ _flux_kubeconfig: /etc/rancher/k3s/k3s.yaml
 _flux_work: /run/flux
 _flux_registry_cluster_address: zot.zot.svc.cluster.local:5000
 _flux_registry_auth: "{{ (flux_registry_user ~ ':' ~ flux_registry_password) | b64encode }}"
+
+_flux_operator_chart_repo: controlplaneio-fluxcd/charts/flux-operator
+_flux_operator_chart_release: >-
+  {{ flux_operator_chart_version if not flux_operator_chart_version.endswith('.x')
+     else _flux_operator_tags.json.tags
+       | select('match', '^' ~ (flux_operator_chart_version[:-2] | regex_escape) ~ '\.\d+\.\d+$')
+       | community.general.version_sort | last }}
+_flux_version: "{{ _flux_applied.stdout | default('') | regex_replace('@.*$', '') | regex_replace('^v', '') }}"
