@@ -5,7 +5,7 @@ metadata:
   name: flux-operator
   namespace: kube-system
 spec:
-  chart: oci://ghcr.io/{{ _flux_operator_chart_repo }}
-  version: {{ _flux_operator_chart_release | to_json }}
+  chart: oci://ghcr.io/{{ _flux_charts['flux-operator'].repo }}
+  version: {{ _flux_chart_releases['flux-operator'] | to_json }}
   targetNamespace: flux-system
   createNamespace: true

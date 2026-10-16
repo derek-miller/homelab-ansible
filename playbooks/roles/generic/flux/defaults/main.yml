@@ -5,13 +5,13 @@ flux_state: present
 # decrypted on the way; every image is pinned to its tag's current digest.
 flux_apps_path: ""
 
-# Each deploy moves the operator to its newest release in this major, which
-# brings the newest Flux 2.x it ships. An exact version holds it back.
+# Each deploy moves a chart to its newest release matching N.x or N.M.x; an
+# exact version holds it back. The operator's release brings the newest Flux
+# 2.x it ships.
 flux_operator_chart_version: 0.x
+reloader_chart_version: 2.x
+zot_chart_version: 0.x
 flux_distribution_version: 2.x
-
-zot_chart_version: 0.1.128
-reloader_chart_version: 2.2.18
 
 flux_registry_user: flux
 flux_registry_password: ""

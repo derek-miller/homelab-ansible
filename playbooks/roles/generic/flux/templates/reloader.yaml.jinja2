@@ -5,9 +5,8 @@ metadata:
   name: reloader
   namespace: kube-system
 spec:
-  repo: https://stakater.github.io/stakater-charts
-  chart: reloader
-  version: {{ reloader_chart_version | string | to_json }}
+  chart: oci://ghcr.io/{{ _flux_charts.reloader.repo }}
+  version: {{ _flux_chart_releases.reloader | to_json }}
   targetNamespace: reloader
   createNamespace: true
   valuesContent: |-
