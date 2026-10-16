@@ -639,14 +639,22 @@
         images: yes
         images_filters:
           dangling: "false"
-          # Images carrying this label are pruned below instead, down to the
-          # newest build of each, which may have no container yet (a one-shot
-          # job between runs, a just-built release swarm hasn't started).
+          # Images carrying this label may have no container yet (a one-shot
+          # job between runs, a release swarm hasn't started), so they are
+          # pruned below instead, keeping what services run and the newest.
           "label!": homelab.prune.exclude
         networks: yes
         volumes: yes
         builder_cache: yes
         timeout: 300
+    - name: list the images swarm services run
+      community.docker.docker_swarm_info:
+        services: yes
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
+      run_once: true
+      register: _swarm_services
+      failed_when: false
+      when: groups['docker_swarm_manager'] | default([]) | length > 0
     - name: list labelled images and the containers using them
       community.docker.docker_host_info:
         images: yes
@@ -656,22 +664,27 @@
         containers_all: yes
         verbose_output: yes
       register: _labelled_images
-    - name: remove all but the newest build of each labelled image
+    # Without the service list a held-back build would look superseded.
+    - name: remove labelled builds no service, container or newer build needs
       community.docker.docker_image_remove:
         name: "{{ item }}"
         force: yes
       loop: >-
         {%- set ns = namespace(seen=[], out=[]) -%}
         {%- set used = _labelled_images.containers | map(attribute='ImageID') | list -%}
+        {%- set wanted = _swarm_services.services | default([]) | map(attribute='Image')
+                         | map('regex_replace', '@.*$', '') | list -%}
         {%- for image in _labelled_images.images | sort(attribute='Created', reverse=true) -%}
-          {%- set repo = (image.RepoTags or []) | first | default('') | regex_replace(':[^:]*$', '') -%}
+          {%- set tags = (image.RepoTags or []) | reject('eq', '<none>:<none>') | list -%}
+          {%- set repo = tags | first | default('') | regex_replace(':[^:]*$', '') -%}
           {%- if repo and repo not in ns.seen -%}
             {%- set ns.seen = ns.seen + [repo] -%}
-          {%- elif image.Id not in used -%}
+          {%- elif image.Id not in used and not tags | intersect(wanted) -%}
             {%- set ns.out = ns.out + [image.Id] -%}
           {%- endif -%}
         {%- endfor -%}
         {{ ns.out }}
+      when: _swarm_services.services is defined or _swarm_services is skipped
   tags:
     - docker
     - docker-prune
