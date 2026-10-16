@@ -12,8 +12,8 @@
   template:
     src: control4-driver-scraper.service.jinja2
     dest: /etc/systemd/system/{{ control4_driver_scraper_service }}.service
-    owner: "{{ root_user|default('root') }}"
-    group: "{{ root_group|default('root') }}"
+    owner: root
+    group: root
     mode: 0644
   register: control4_driver_scraper_service_unit
 
@@ -21,8 +21,8 @@
   template:
     src: control4-driver-scraper.timer.jinja2
     dest: /etc/systemd/system/{{ control4_driver_scraper_service }}.timer
-    owner: "{{ root_user|default('root') }}"
-    group: "{{ root_group|default('root') }}"
+    owner: root
+    group: root
     mode: 0644
   register: control4_driver_scraper_timer_unit
 

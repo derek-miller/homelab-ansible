@@ -4,7 +4,7 @@ homebridge_state: present
 # Path to the Node.js install. Homebridge's wiki-recommended "Option 2"
 # native install uses the official nodejs.org .pkg installer which lands
 # under /usr/local. The role will download + install that .pkg on
-# bootstrap if Node.js is missing; existing installs are left alone.
+# bootstrap if Node.js is missing.
 homebridge_node_bin: /usr/local/bin/node
 homebridge_npm_bin: /usr/local/bin/npm
 homebridge_hbservice_bin: /usr/local/bin/hb-service
@@ -32,7 +32,7 @@ homebridge_packages:
   - homebridge-config-ui-x
 
 # ---- `hb-service install` flags ---------------------------------------
-# Fed into `hb-service install` on first-time bootstrap only (`when the
+# Fed into `hb-service install` on first-time bootstrap only (when the
 # LaunchDaemon plist is absent). Reinstalling hb-service on a host that
 # already has it would regenerate the plist + restart the service, which
 # we don't want on every ansible run.

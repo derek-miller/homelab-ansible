@@ -14,7 +14,7 @@
 - name: create nut configuration dir
   file:
     path: /etc/nut/
-    owner: "{{ root_user|default('root') }}"
+    owner: root
     group: nut
     mode: 0750
     state: directory
@@ -23,7 +23,7 @@
   template:
     src: "{{ item }}.j2"
     dest: /etc/nut/{{ item }}
-    owner: "{{ root_user|default('root') }}"
+    owner: root
     group: nut
     mode: 0640
   with_items:

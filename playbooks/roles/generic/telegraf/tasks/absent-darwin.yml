@@ -24,16 +24,8 @@
     path: "{{ telegraf_conf_dir }}"
     state: absent
 
-- name: switch become_user to mac_user (brew refuses root)
-  set_fact:
-    ansible_become_user: "{{ mac_user | mandatory }}"
-
-- block:
-    - name: brew uninstall telegraf
-      community.general.homebrew:
-        name: telegraf
-        state: absent
-  always:
-    - name: restore become_user to root
-      set_fact:
-        ansible_become_user: root
+- name: brew uninstall telegraf
+  community.general.homebrew:
+    name: telegraf
+    state: absent
+  become_user: "{{ mac_user }}"

@@ -17,8 +17,7 @@ smb_mount_map_path: "/etc/auto_{{ smb_mount_map_name }}"
 # live local authentication rather than process identity or connection
 # path — nothing scriptable. The role detects whether the line is
 # present and pauses with the exact command to run locally when it's
-# missing (see present.yml/absent.yml), the same pattern this project
-# uses for Plex's "Open at Login" and other unscriptable macOS steps.
+# missing (see present.yml/absent.yml).
 #
 # macOS OS updates periodically reset /etc/auto_master to the stock
 # system default and strip this line, so this manual step recurs after
@@ -54,7 +53,7 @@ smb_mount_idle_timeout: 600
 # in host_vars/<host>/vault.yml. Each share has its own mount_point —
 # /Volumes is owned by macOS DiskArbitration and refuses autofs triggers,
 # so most callers will use /mnt/<share> (which also requires /mnt to be
-# declared in mac_synthetic_links; see generic/common role).
+# declared in mac_synthetic_links; see the common role).
 #
 # Mounts trigger on first access to mount_point; idle-unmount after
 # smb_mount_idle_timeout seconds.

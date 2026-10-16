@@ -2,9 +2,9 @@
 # Homebridge absent — reverse what present.yml installed:
 #   - hb-service uninstall (stops + removes LaunchDaemon)
 #   - npm uninstall homebridge packages
-#   - (optionally) remove Node.js .pkg-installed binaries
+#   - Node.js (.pkg install) is left in place
 #
-# Data under /var/lib/homebridge and the user's config.json are NOT
+# Data under homebridge_user_storage_path and the user's config.json are NOT
 # removed — plugins, accessories, and pairings are preserved in case the
 # operator is re-deploying.
 
@@ -25,7 +25,6 @@
   file:
     path: "{{ homebridge_launchdaemon }}"
     state: absent
-  become: yes
 
 - name: check whether npm is still present
   stat:

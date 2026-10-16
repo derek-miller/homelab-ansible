@@ -1,32 +1,33 @@
 ---
 # ---- Node.js install (first-time bootstrap only) -----------------------
 # Homebridge's wiki "Option 2" native install uses the official nodejs.org
-# .pkg which lands under /usr/local/. We match that convention. If Node.js
-# is already present we don't touch it — upgrades are manual so users can
-# time them with Homebridge's compatibility matrix.
+# .pkg which lands under /usr/local/. The .pkg only bootstraps a host with
+# no Node.js; hb-service update-node below keeps it current.
 - name: check whether Node.js is installed
   stat:
     path: "{{ homebridge_node_bin }}"
   register: _hb_node_stat
 
-- name: download Node.js installer (first-time bootstrap)
-  get_url:
-    url: "{{ homebridge_node_pkg_url }}"
-    dest: "/tmp/node-{{ homebridge_node_version }}.pkg"
-    mode: '0644'
+- name: bootstrap Node.js from the nodejs.org .pkg
   when: not _hb_node_stat.stat.exists
+  vars:
+    _hb_node_pkg: "/tmp/{{ homebridge_node_pkg_url | basename }}"
+  block:
+    - name: download Node.js installer
+      get_url:
+        url: "{{ homebridge_node_pkg_url }}"
+        dest: "{{ _hb_node_pkg }}"
+        mode: '0644'
 
-- name: install Node.js from .pkg
-  command: "/usr/sbin/installer -pkg /tmp/node-{{ homebridge_node_version }}.pkg -target /"
-  when: not _hb_node_stat.stat.exists
-  register: _hb_node_install
-  changed_when: "'successful' in (_hb_node_install.stdout | default('')) | lower"
+    - name: install Node.js from .pkg
+      command: "/usr/sbin/installer -pkg {{ _hb_node_pkg | quote }} -target /"
+      register: _hb_node_install
+      changed_when: "'successful' in (_hb_node_install.stdout | default('')) | lower"
 
-- name: clean up Node.js installer
-  file:
-    path: "/tmp/node-{{ homebridge_node_version }}.pkg"
-    state: absent
-  when: not _hb_node_stat.stat.exists
+    - name: clean up Node.js installer
+      file:
+        path: "{{ _hb_node_pkg }}"
+        state: absent
 
 - name: verify Node.js is now present
   stat:

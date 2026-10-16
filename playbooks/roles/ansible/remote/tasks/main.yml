@@ -41,8 +41,8 @@
   copy:
     src: requirements.txt
     dest: "{{ ansible_python_dir }}/requirements.txt"
-    owner: "{{ root_user|default('root') }}"
-    group: "{{ root_group|default('root') }}"
+    owner: root
+    group: "{{ root_group }}"
     mode: 0644
   tags:
     - base

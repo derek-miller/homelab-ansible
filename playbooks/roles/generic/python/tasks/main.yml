@@ -72,19 +72,8 @@
   # Apple's /usr/bin/python3 is pinned at 3.9 (EOL); build the remote venv from a
   # Homebrew interpreter instead so it tracks the same dependency versions as the
   # Linux hosts. generic/virtualenv builds every venv from darwin_venv_python.
+  community.general.homebrew:
+    name: "{{ darwin_python_formula }}"
+    state: latest
+  become_user: "{{ mac_user }}"
   when: ansible_os_family == 'Darwin'
-  # The connection role set_facts ansible_become_user=root as a host fact, and
-  # set_fact outranks block vars, so swap the fact around the brew call (Homebrew
-  # refuses root) and restore it after — same pattern as the common role.
-  block:
-    - name: switch become_user to mac_user
-      set_fact:
-        ansible_become_user: "{{ mac_user | mandatory }}"
-    - name: install Homebrew Python formula
-      community.general.homebrew:
-        name: "{{ darwin_python_formula }}"
-        state: latest
-  always:
-    - name: restore become_user to root
-      set_fact:
-        ansible_become_user: root
