@@ -82,6 +82,10 @@
         --revision={{ (lookup('pipe', _flux_git ~ ' rev-parse --abbrev-ref HEAD') ~ '@sha1:' ~ lookup('pipe', _flux_git ~ ' rev-parse HEAD')) | quote }}
         --reproducible
         --insecure-registry
+      register: _flux_push
+      until: _flux_push is succeeded
+      retries: 3
+      delay: 20
       when: _flux_diff.rc != 0 and not ansible_check_mode
 
     - name: apply the apps
@@ -91,6 +95,9 @@
         --with-source
         --timeout={{ flux_apply_timeout | quote }}
       register: _flux_apply
+      until: _flux_apply.rc == 0
+      retries: 1
+      delay: 30
       changed_when: false
       failed_when: false
       no_log: true

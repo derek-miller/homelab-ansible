@@ -88,7 +88,7 @@ make run tags=k3s
 
 The server goes first, then the agents one at a time, and each waits for its node to report Ready. kubectl runs as root on rackvm1: `sudo kubectl get nodes`.
 
-**Upgrading.** Bump `k3s_version` and `k3s_sha256` in `generic/k3s/defaults/main.yml` together; the checksum is the `k3s` line of the release's `sha256sum-amd64.txt`. The deploy replaces the binary and restarts k3s, the server before the agents. Pods keep running through a k3s restart.
+**Upgrading.** `k3s_version` in `generic/k3s/defaults/main.yml` names a k3s release channel, `stable` by default, and each deploy moves the server to that channel's release, at most one minor at a time since Kubernetes can't skip one. Agents install whatever the server runs. The binary is checked against the release's `sha256sum-amd64.txt`, then k3s restarts, the server before the agents; pods keep running through a k3s restart. To hold back, set `k3s_version` to a minor channel such as `v1.36` or an exact release such as `v1.36.5+k3s1`. The deploy refuses any release that would go back a minor or skip one, exact or not.
 
 **Removing it from a node.** Remove agents before the server, since removing the server deletes the cluster's datastore:
 
@@ -135,7 +135,7 @@ lists the source and the Kustomization with the revision last applied, or the er
 
 **Portainer.** The cluster's Edge agent is `kubernetes/portainer/`. To re-key it, add the environment again in Portainer (Kubernetes, Edge Agent Standard) and take the Edge ID and key from the command it shows, without running it. Put them in `kubernetes/portainer/edge.vault.yaml`.
 
-**Upgrading.** Flux itself follows the newest 2.x release on its own. The flux CLI and the Flux Operator, Zot and Reloader charts are pinned in `generic/flux/defaults/main.yml`. Bump `flux_cli_version` and `flux_cli_sha256` together; the checksum is the `linux_amd64` line of the release's `flux_<version>_checksums.txt`.
+**Upgrading.** The Flux Operator, Reloader and Zot charts pin only their major in `generic/flux/defaults/main.yml`, and each deploy moves them to the newest release in it, waiting until k3s has rolled each one out. Flux follows `2.x`: each operator release brings the newest Flux it ships, and the deploy installs the flux CLI at that version. To hold a chart back, set it to a minor such as `0.61.x` or an exact version such as `0.61.0`; crossing a major means changing the value. An older operator can only take over while it ships the Flux minor the cluster already runs, so roll a bad operator forward rather than back once it has moved Flux up a minor.
 
 **Registry password.** Change `flux_registry_password` and `flux_registry_htpasswd` in `host_vars/rackvm1/vars.yml` together, each as `ansible-vault encrypt_string` output. `htpasswd -nB flux` prompts for the new password and prints the line for the second. The registry's volume, `/mnt/data/volumes/zot` on rackvm1, holds only what deploys pushed. If it is lost, apps keep running and Flux reports its source failing until the next deploy pushes again.
 

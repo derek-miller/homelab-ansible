@@ -58,9 +58,8 @@ metadata:
   name: zot
   namespace: kube-system
 spec:
-  repo: https://zotregistry.dev/helm-charts
-  chart: zot
-  version: {{ zot_chart_version | string | to_json }}
+  chart: oci://ghcr.io/{{ _flux_charts.zot.repo }}
+  version: {{ _flux_chart_releases.zot | to_json }}
   targetNamespace: zot
   valuesContent: |-
     service:

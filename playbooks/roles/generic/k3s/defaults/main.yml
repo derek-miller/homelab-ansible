@@ -4,9 +4,10 @@ k3s_state: present
 # server or agent. Agents join k3s_server_address.
 k3s_role: agent
 
-# Bump both together, from the release's sha256sum-amd64.txt.
-k3s_version: v1.36.5+k3s1
-k3s_sha256: d73847bcd3c5fccef0115b372e2f9a91f3032dc84bbf71518a4617565294d313
+# A release channel (stable, latest, v1.36) or an exact release such as
+# v1.36.5+k3s1 to hold back. The server moves at most one minor per deploy
+# either way, and agents run whatever the server runs.
+k3s_version: stable
 
 # On the data disk beside Docker's data-root; the unit waits for its mount.
 k3s_data_dir: /mnt/data/k3s
