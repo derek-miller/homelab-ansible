@@ -10,19 +10,18 @@ plex_cask_state: present
 plex_cask_name: plex-media-server
 
 # The LaunchAgent plist path Plex itself registers on first launch (after
-# GUI login). We only STAT it to know whether the user has done the
-# initial server claim yet. Auto-start
-# at login is handled by Plex's own menu-bar "Open at Login" toggle — a
-# one-time manual step after install.
+# GUI login). We only STAT it to know whether the user has done the initial
+# server claim yet. Auto-start at login is handled by Plex's own menu-bar
+# "Open at Login" toggle — a one-time manual step after install.
 plex_launchagent: "/Users/{{ mac_user | mandatory }}/Library/LaunchAgents/com.plexapp.plexmediaserver.plist"
 
 # When plex_state=absent, should state/cache/prefs/logs be deleted?
 #
-#   false (default): conservative teardown — remove the .app and
-#                    LaunchAgent, but leave the library
-#                    database, server identity (Plex claim token), watch
-#                    history, metadata, and caches intact so a subsequent
-#                    plex_state=present re-deploy brings everything back.
+#   false (default): conservative teardown — remove the .app and LaunchAgent,
+#                    but leave the library database, server identity (Plex
+#                    claim token), watch history, metadata, and caches intact
+#                    so a subsequent plex_state=present re-deploy brings
+#                    everything back.
 #   true:            scorched-earth — also wipe Application Support,
 #                    Caches, Preferences plist and Logs. Use when
 #                    decommissioning the host entirely.

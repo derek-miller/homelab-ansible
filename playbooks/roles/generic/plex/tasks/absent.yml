@@ -1,7 +1,7 @@
 ---
-# Plex absent — reverse what present.yml installed. Always removes the
-# cask and LaunchAgent. Whether library state is
-# also wiped depends on plex_wipe_state (default: false, preserve data).
+# Plex absent — reverse what present.yml installed. Always removes the cask
+# and LaunchAgent. Whether library state is also wiped depends on
+# plex_wipe_state (default: false, preserve data).
 
 - name: quit Plex Media Server
   command: osascript -e 'tell application "Plex Media Server" to quit'
