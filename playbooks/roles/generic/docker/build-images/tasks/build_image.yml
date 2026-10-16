@@ -3,6 +3,13 @@
   set_fact:
     image_config: "{{ available_docker_images[image_name] }}"
 
+- name: Hash the {{ image_name }} build files
+  set_fact:
+    _files_hash: >-
+      {{ query('ansible.builtin.file', image_config.dockerfile, *image_config.build_files)
+         | join('\n') | hash('sha256') }}
+  when: image_config.base_image is defined
+
 - name: Find the {{ image_name }} base release
   when: image_config.base_image is defined
   block:
@@ -30,21 +37,14 @@
       check_mode: no
       when: image_config.base_version.endswith('.x')
 
-    - name: Tag the {{ image_name }} build by its base release and files
+    - name: Pick the {{ image_name }} base release
       set_fact:
-        image_config: >-
-          {{ image_config | combine({'image_tag': _release ~ '-' ~ _files_hash[:8],
-                                     'build_args': {'BASE_RELEASE': _release}}) }}
-      vars:
-        _release: >-
+        _base_release: >-
           {{ image_config.base_version if not image_config.base_version.endswith('.x')
              else _base_tags.json.tags
                | select('match', '^' ~ (image_config.base_version[:-2] | regex_escape)
                         ~ '\.\d+' * (3 - image_config.base_version[:-2].split('.') | length) ~ '$')
                | community.general.version_sort | last }}
-        _files_hash: >-
-          {{ query('ansible.builtin.file', image_config.dockerfile, *image_config.build_files)
-             | join('\n') | hash('sha256') }}
   rescue:
     - name: Find the build the {{ image_name }} moving tag points at
       community.docker.docker_image_info:
@@ -53,18 +53,26 @@
 
     - name: Keep the current {{ image_name }} build while its base release is unknown
       set_fact:
-        image_config: "{{ image_config | combine({'image_tag': _current_tag}) }}"
-      vars:
-        _current_tag: >-
-          {{ (_moving_current.images | first).RepoTags
-             | reject('eq', image_config.image_name ~ ':' ~ image_config.moving_tag)
-             | first | regex_replace('^[^:]*:', '') }}
-      when: _moving_current.images | length > 0
+        _base_release: ""
+        _kept_tags: >-
+          {{ _moving_current.images | map(attribute='RepoTags') | flatten
+             | reject('eq', image_config.image_name ~ ':' ~ image_config.moving_tag) | list }}
 
     - name: Fail without a current {{ image_name }} build to keep
       fail:
         msg: "The {{ image_name }} base release could not be found and this node has no build to keep."
-      when: _moving_current.images | length == 0
+      when: _kept_tags | length == 0
+
+    - name: Use the current {{ image_name }} build
+      set_fact:
+        image_config: "{{ image_config | combine({'image_tag': _kept_tags | first | regex_replace('^[^:]*:', '')}) }}"
+
+- name: Tag the {{ image_name }} build by its base release and files
+  set_fact:
+    image_config: >-
+      {{ image_config | combine({'image_tag': _base_release ~ '-' ~ _files_hash[:8],
+                                 'build_args': {'BASE_RELEASE': _base_release}}) }}
+  when: image_config.base_image is defined and _base_release | length > 0
 
 - name: Check if {{ image_name }} image already exists
   community.docker.docker_image_info:
