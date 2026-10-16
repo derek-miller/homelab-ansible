@@ -9,10 +9,12 @@
   register: virtualenv_pyvenv_cfg
   failed_when: false
 
+# A dry run ahead of a minor bump probes an interpreter not installed yet.
 - name: check the interpreter's Python version
   command: "{{ virtualenv_python }} --version"
   register: virtualenv_python_version
   changed_when: false
+  failed_when: false
   check_mode: no
   when: virtualenv_pyvenv_cfg.content is defined
 
@@ -25,7 +27,7 @@
       {{ virtualenv_pyvenv_cfg.content | b64decode
          | regex_search('(?m)^version(_info)? *= *[0-9]+[.][0-9]+') | default('', true)
          | regex_replace('^.*= *', '') }}
-    _python_minor: "{{ virtualenv_python_version.stdout | regex_search('[0-9]+[.][0-9]+') }}"
+    _python_minor: "{{ virtualenv_python_version.stdout | regex_search('[0-9]+[.][0-9]+') | default('', true) }}"
   when:
     - virtualenv_pyvenv_cfg.content is defined
     - _venv_minor != _python_minor

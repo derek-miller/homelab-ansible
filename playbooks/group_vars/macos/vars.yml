@@ -12,7 +12,7 @@ homebrew_prefix: /opt/homebrew
 # `# Python 3.9 compat` caps in the remote requirements. Build the /opt/ansible
 # venv from a Homebrew-managed interpreter instead, so it tracks the same
 # dependency versions as the Linux hosts. generic/python installs the formula;
-# generic/virtualenv and ansible/remote pass `{{ darwin_venv_python }} -m venv`.
+# generic/virtualenv builds every venv from darwin_venv_python.
 # The newest Python the installed ansible-core runs modules on, so the venv
 # moves to a new minor once ansible-core supports it; a minor such as "3.13"
 # holds it back. Homebrew's own default can be ahead of ansible-core.
