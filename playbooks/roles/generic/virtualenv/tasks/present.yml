@@ -1,25 +1,36 @@
 ---
 # The pip module only builds a venv when one is absent — it won't rebuild an
-# existing venv whose base interpreter changed. On macOS we moved off Apple's
-# system python3 (3.9) to a Homebrew interpreter, so an older venv would keep
-# its stale 3.9 base forever. Detect the mismatch via pyvenv.cfg's `home =`
-# (which points under {{ homebrew_prefix }} only for a Homebrew-built venv) and
-# remove the venv so it's recreated below with the current interpreter.
-- name: check existing venv base interpreter (Darwin)
+# existing venv whose base interpreter changed. Compare the venv's Python minor
+# in pyvenv.cfg with the interpreter's, and remove the venv on a mismatch so
+# it's recreated below with the current interpreter.
+- name: check existing venv base interpreter
   slurp:
     src: "{{ virtualenv_path }}/pyvenv.cfg"
   register: virtualenv_pyvenv_cfg
   failed_when: false
-  when: ansible_os_family == 'Darwin'
 
-- name: remove stale venv built with a different interpreter (Darwin)
+# A dry run ahead of a minor bump probes an interpreter not installed yet.
+- name: check the interpreter's Python version
+  command: "{{ virtualenv_python }} --version"
+  register: virtualenv_python_version
+  changed_when: false
+  failed_when: virtualenv_python_version.rc != 0 and not ansible_check_mode
+  check_mode: no
+  when: virtualenv_pyvenv_cfg.content is defined
+
+- name: remove stale venv built with a different Python minor
   file:
     path: "{{ virtualenv_path }}"
     state: absent
+  vars:
+    _venv_minor: >-
+      {{ virtualenv_pyvenv_cfg.content | b64decode
+         | regex_search('(?m)^version(_info)? *= *[0-9]+[.][0-9]+') | default('', true)
+         | regex_replace('^.*= *', '') }}
+    _python_minor: "{{ virtualenv_python_version.stdout | regex_search('[0-9]+[.][0-9]+') | default('', true) }}"
   when:
-    - ansible_os_family == 'Darwin'
     - virtualenv_pyvenv_cfg.content is defined
-    - homebrew_prefix not in (virtualenv_pyvenv_cfg.content | b64decode)
+    - _venv_minor != _python_minor
 
 - name: create virtualenv dir
   file:
@@ -57,7 +68,7 @@
   pip:
     virtualenv: "{{ virtualenv_path }}"
     virtualenv_site_packages: "{{ virtualenv_site_packages }}"
-    virtualenv_command: "{{ darwin_venv_python | default('/usr/bin/python3') }} -m venv"
+    virtualenv_command: "{{ virtualenv_python }} -m venv"
     name: setuptools{{ setuptools_version_spec }}
     extra_args: --upgrade-strategy only-if-needed
     state: latest
@@ -66,7 +77,7 @@
   pip:
     virtualenv: "{{ virtualenv_path }}"
     virtualenv_site_packages: "{{ virtualenv_site_packages }}"
-    virtualenv_command: "{{ darwin_venv_python | default('/usr/bin/python3') }} -m venv"
+    virtualenv_command: "{{ virtualenv_python }} -m venv"
     name: pip{{ pip_version_spec }}
     extra_args: --upgrade-strategy only-if-needed
     state: latest
