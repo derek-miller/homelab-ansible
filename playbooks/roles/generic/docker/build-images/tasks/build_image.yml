@@ -45,6 +45,26 @@
         _files_hash: >-
           {{ query('ansible.builtin.file', image_config.dockerfile, *image_config.build_files)
              | join('\n') | hash('sha256') }}
+  rescue:
+    - name: Find the build the {{ image_name }} moving tag points at
+      community.docker.docker_image_info:
+        name: "{{ image_config.image_name }}:{{ image_config.moving_tag }}"
+      register: _moving_current
+
+    - name: Keep the current {{ image_name }} build while its base release is unknown
+      set_fact:
+        image_config: "{{ image_config | combine({'image_tag': _current_tag}) }}"
+      vars:
+        _current_tag: >-
+          {{ (_moving_current.images | first).RepoTags
+             | reject('eq', image_config.image_name ~ ':' ~ image_config.moving_tag)
+             | first | regex_replace('^[^:]*:', '') }}
+      when: _moving_current.images | length > 0
+
+    - name: Fail without a current {{ image_name }} build to keep
+      fail:
+        msg: "The {{ image_name }} base release could not be found and this node has no build to keep."
+      when: _moving_current.images | length == 0
 
 - name: Check if {{ image_name }} image already exists
   community.docker.docker_image_info:
