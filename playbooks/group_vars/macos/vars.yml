@@ -13,7 +13,13 @@ homebrew_prefix: /opt/homebrew
 # venv from a Homebrew-managed interpreter instead, so it tracks the same
 # dependency versions as the Linux hosts. generic/python installs the formula;
 # generic/virtualenv and ansible/remote pass `{{ darwin_venv_python }} -m venv`.
-darwin_python_version: "3.13"
+# The newest Python the installed ansible-core runs modules on, so the venv
+# moves to a new minor once ansible-core supports it; a minor such as "3.13"
+# holds it back. Homebrew's own default can be ahead of ansible-core.
+darwin_python_version: >-
+  {{ lookup('ansible.builtin.config', 'INTERPRETER_PYTHON_FALLBACK')
+     | select('match', '^python3[.][0-9]+$') | map('replace', 'python', '')
+     | community.general.version_sort | last }}
 darwin_python_formula: "python@{{ darwin_python_version }}"
 darwin_venv_python: "{{ homebrew_prefix }}/bin/python{{ darwin_python_version }}"
 

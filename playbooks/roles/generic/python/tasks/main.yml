@@ -83,7 +83,7 @@
     - name: install Homebrew Python formula
       community.general.homebrew:
         name: "{{ darwin_python_formula }}"
-        state: present
+        state: latest
   always:
     - name: restore become_user to root
       set_fact:
