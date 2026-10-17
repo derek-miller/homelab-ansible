@@ -11,8 +11,8 @@
   template:
     src: telegraf.conf.jinja2
     dest: "{{ telegraf_conf }}"
-    owner: "{{ telegraf_conf_owner|default(root_user|default('root')) }}"
-    group: "{{ telegraf_conf_group|default(root_group|default('root')) }}"
+    owner: root
+    group: "{{ root_group }}"
     mode: 0644
   notify: restart telegraf
 

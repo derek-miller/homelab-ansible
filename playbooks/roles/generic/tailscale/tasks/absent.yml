@@ -37,7 +37,6 @@
   block:
     - name: bootout tailscaled LaunchDaemon
       command: launchctl bootout system/homebrew.mxcl.tailscale
-      become: yes
       failed_when: false
       changed_when: true
 
@@ -45,24 +44,14 @@
       file:
         path: /Library/LaunchDaemons/homebrew.mxcl.tailscale.plist
         state: absent
-      become: yes
 
     - name: remove /usr/local/bin/tailscale symlink
       file:
         path: /usr/local/bin/tailscale
         state: absent
-      become: yes
 
-    - name: switch become_user to mac_user (brew refuses root)
-      set_fact:
-        ansible_become_user: "{{ mac_user | mandatory }}"
-
-    - block:
-        - name: brew uninstall tailscale
-          community.general.homebrew:
-            name: tailscale
-            state: absent
-      always:
-        - name: restore become_user to root
-          set_fact:
-            ansible_become_user: root
+    - name: brew uninstall tailscale
+      community.general.homebrew:
+        name: tailscale
+        state: absent
+      become_user: "{{ mac_user }}"

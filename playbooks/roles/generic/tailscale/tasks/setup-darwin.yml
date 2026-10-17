@@ -64,19 +64,11 @@
 - name: install tailscale via homebrew
   when: not tailscale_already_running
   block:
-    - name: switch become_user to mac_user
-      set_fact:
-        ansible_become_user: "{{ mac_user | mandatory }}"
-
-    - block:
-        - name: install tailscale (CLI/daemon formula)
-          community.general.homebrew:
-            name: tailscale
-            state: present
-      always:
-        - name: restore become_user to root
-          set_fact:
-            ansible_become_user: root
+    - name: install tailscale (CLI/daemon formula)
+      community.general.homebrew:
+        name: tailscale
+        state: present
+      become_user: "{{ mac_user }}"
 
     # Bypass `sudo brew services start` — it fails because brew refuses to
     # fetch formula.jws.json as root (and HOMEBREW_NO_AUTO_UPDATE doesn't

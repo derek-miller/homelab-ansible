@@ -1,6 +1,6 @@
 ---
-owner_default: "{{ root_user|default('root') }}"
-group_default: "{{ root_group|default('root') }}"
+owner_default: root
+group_default: "{{ root_group }}"
 file_mode_default: "0644"
 directory_mode_default: "0755"
 

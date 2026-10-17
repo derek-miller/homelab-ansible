@@ -1,22 +1,11 @@
 ---
-# Existing install is from plex.tv .pkg. The homebrew_cask module installs
-# `plex-media-server` cask which is a wrapper around the same installer.
-# Library and config (~/Library/Application Support/Plex Media Server/)
-# persist across the switch because Plex stores them independently of the
-# .app bundle.
-- name: switch become_user to mac_user
-  set_fact:
-    ansible_become_user: "{{ mac_user | mandatory }}"
-
-- block:
-    - name: install Plex Media Server via homebrew cask
-      community.general.homebrew_cask:
-        name: "{{ plex_cask_name }}"
-        state: "{{ plex_cask_state }}"
-  always:
-    - name: restore become_user to root
-      set_fact:
-        ansible_become_user: root
+# Library and config (~/Library/Application Support/Plex Media Server/) live
+# outside the .app and survive a cask reinstall.
+- name: install Plex Media Server via homebrew cask
+  community.general.homebrew_cask:
+    name: "{{ plex_cask_name }}"
+    state: "{{ plex_cask_state }}"
+  become_user: "{{ mac_user }}"
 
 - name: verify Plex LaunchAgent is registered
   stat:
