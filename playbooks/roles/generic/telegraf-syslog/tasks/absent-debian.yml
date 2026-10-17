@@ -1,0 +1,24 @@
+---
+# rsyslog stays installed: it may predate this role.
+- name: remove rsyslog remote configuration
+  file:
+    path: /etc/rsyslog.d/50-telegraf.conf
+    state: absent
+  notify: restart rsyslog
+
+# Restart first, or rsyslog saves the forward's queue again as it stops.
+- meta: flush_handlers
+
+- name: find the forward's leftover queue
+  find:
+    paths: /var/spool/rsyslog
+    patterns: 'srvrfwd*'
+  register: _telegraf_syslog_spool
+
+- name: remove the forward's leftover queue
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ _telegraf_syslog_spool.files }}"
+  loop_control:
+    label: "{{ item.path }}"

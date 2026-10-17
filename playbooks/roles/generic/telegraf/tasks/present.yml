@@ -1,11 +1,13 @@
 ---
 # Present path: install, render config, start service.
 
-- include_tasks: setup-debian.yml
-  when: ansible_os_family != 'Darwin'
+- include_tasks: "setup-{{ ansible_os_family | lower }}.yml"
 
-- include_tasks: setup-darwin.yml
-  when: ansible_os_family == 'Darwin'
+- name: ensure telegraf conf directory exists
+  file:
+    path: "{{ telegraf_conf_dir }}"
+    state: directory
+    mode: '0755'
 
 - name: config telegraf
   template:
@@ -18,8 +20,4 @@
 
 - include_tasks: cleanup-backups.yml
 
-- include_tasks: present-debian.yml
-  when: ansible_os_family != 'Darwin'
-
-- include_tasks: present-darwin.yml
-  when: ansible_os_family == 'Darwin'
+- include_tasks: "present-{{ ansible_os_family | lower }}.yml"
