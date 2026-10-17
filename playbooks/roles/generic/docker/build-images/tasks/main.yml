@@ -1,9 +1,11 @@
 ---
+# A dry run copies the deploy keys here too.
 - name: Create docker images build directory
   file:
     path: /tmp/docker-image-builds
     state: directory
     mode: '0755'
+  check_mode: no
   when: docker_images_to_build is defined
 
 - name: Parse comma-separated image list

@@ -14,6 +14,7 @@ available_docker_images:
       # overrides NODE_OPTIONS for the web program, so an env var can't do this.
       - sourcebot/web-heap-cap.patch
     image_name: sourcebot
+    hide_build_log: true
   openclaw-webhook-proxy:
     dockerfile: openclaw-webhook-proxy/Dockerfile
     build_files:
@@ -43,3 +44,4 @@ available_docker_images:
     # Read-only deploy key registered on the private GitHub repo.
     ssh_key: vault/control4-driver-scraper-id_ed25519
     image_name: control4-driver-scraper
+    hide_build_log: true
