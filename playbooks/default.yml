@@ -52,8 +52,6 @@
   roles:
     - role: generic/telegraf
     - role: generic/telegraf-syslog
-      # telegraf-syslog is rsyslog + systemd — skip on macOS.
-      when: ansible_os_family != 'Darwin'
   tags:
     - telegraf
 

@@ -1,27 +1,28 @@
 ---
-# Darwin teardown: unload the brew-installed LaunchAgent, remove the plist,
-# brew uninstall the formula.
+- name: check for the telegraf LaunchDaemon
+  stat:
+    path: "/Library/LaunchDaemons/{{ telegraf_launchd_label }}.plist"
+  register: _telegraf_plist
 
-- name: look up mac_user uid
-  command: "id -u {{ mac_user | mandatory }}"
-  register: _telegraf_user_uid
-  changed_when: false
-  failed_when: false
+- name: unload telegraf
+  community.general.launchd:
+    name: "{{ telegraf_launchd_label }}"
+    state: unloaded
+  when: _telegraf_plist.stat.exists
 
-- name: bootout telegraf LaunchAgent (user domain)
-  command: "launchctl bootout gui/{{ _telegraf_user_uid.stdout }}/homebrew.mxcl.telegraf"
-  when: _telegraf_user_uid.stdout | default('') | length > 0
-  failed_when: false
-  changed_when: true
-
-- name: remove telegraf LaunchAgent plist
+- name: remove telegraf LaunchDaemon
   file:
-    path: "/Users/{{ mac_user | mandatory }}/Library/LaunchAgents/homebrew.mxcl.telegraf.plist"
+    path: "/Library/LaunchDaemons/{{ telegraf_launchd_label }}.plist"
     state: absent
 
-- name: remove telegraf conf directory
+- name: remove telegraf logs
   file:
-    path: "{{ telegraf_conf_dir }}"
+    path: "{{ telegraf_logfile | dirname }}"
+    state: absent
+
+- name: remove telegraf config
+  file:
+    path: "{{ telegraf_conf | dirname }}"
     state: absent
 
 - name: brew uninstall telegraf

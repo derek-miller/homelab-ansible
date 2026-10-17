@@ -18,7 +18,7 @@
 [global_tags]
   # Tag every metric with the host OS family so Grafana dashboards can
   # filter panels that only make sense on one platform (e.g. Linux-only
-  # kernel/interrupt inputs, macOS-only thermal counters).
+  # kernel/interrupt inputs).
   os = "{{ ansible_os_family | lower }}"
 
 
@@ -70,7 +70,11 @@
   ## Run telegraf in quiet mode (error log messages only).
   quiet = false
   ## Specify the log file name. The empty string means to log to stderr.
-  logfile = ""
+  logfile = "{{ telegraf_logfile }}"
+{% if telegraf_logfile %}
+  logfile_rotation_max_size = "10MB"
+  logfile_rotation_max_archives = 3
+{% endif %}
 
   ## Override default hostname, if empty use os.Hostname()
   hostname = "{{ ansible_hostname }}"
@@ -1479,7 +1483,7 @@
   # name_templates = ["$ID_FS_LABEL","$DM_VG_NAME/$DM_LV_NAME"]
 
 
-{% if ansible_os_family != 'Darwin' %}
+{% if ansible_system == 'Linux' %}
 # Get kernel statistics from /proc/stat (Linux only)
 [[inputs.kernel]]
   # no configuration
@@ -2447,7 +2451,7 @@
   collect_memstats = true
 
 
-{% if ansible_os_family != 'Darwin' %}
+{% if ansible_system == 'Linux' %}
 # This plugin gathers interrupts data from /proc/interrupts and /proc/softirqs.
 # (Linux only)
 [[inputs.interrupts]]
@@ -2718,7 +2722,7 @@
 #   # insecure_skip_verify = false
 
 
-{% if ansible_os_family != 'Darwin' %}
+{% if ansible_system == 'Linux' %}
 # Get kernel statistics from /proc/vmstat (Linux only)
 [[inputs.kernel_vmstat]]
   # no configuration
@@ -2807,7 +2811,7 @@
 #   servers = ["127.0.0.1:4020"]
 
 
-{% if ansible_os_family != 'Darwin' %}
+{% if ansible_system == 'Linux' %}
 # Provides Linux sysctl fs metrics (Linux only)
 [[inputs.linux_sysctl_fs]]
   # no configuration
@@ -3196,7 +3200,7 @@
 #   # insecure_skip_verify = false
 
 
-{% if ansible_os_family != 'Darwin' %}
+{% if ansible_system == 'Linux' %}
 # Collect kernel snmp counters and network interface statistics (Linux only)
 [[inputs.nstat]]
   ## file paths for proc files. If empty default paths will be used:
@@ -3210,6 +3214,7 @@
 {% endif %}
 
 
+{% if ansible_system == 'Linux' %}
 # Get standard NTP query metrics, requires ntpq executable.
 [[inputs.ntpq]]
   ## Servers to query with ntpq.
@@ -3231,6 +3236,7 @@
   ##               the number of successful reaches, e.g. 37 -> 5
   ##   ratio   --  output the ratio of successful attempts e.g. 37 -> 5/8 = 0.625
   # reach_format = "octal"
+{% endif %}
 
 
 # # Pulls statistics from nvidia GPUs attached to the host
@@ -3531,7 +3537,7 @@
 #   # version = "39.0"
 
 
-{% if ansible_os_family != 'Darwin' %}
+{% if ansible_system == 'Linux' %}
 # Monitor sensors, requires lm-sensors package (Linux only)
 [[inputs.sensors]]
   ## Remove numbers from field names.

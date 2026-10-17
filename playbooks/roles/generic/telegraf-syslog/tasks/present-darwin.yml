@@ -1,0 +1,8 @@
+---
+# macOS updates can reset this file; the next run puts the line back.
+- name: forward syslog to telegraf
+  lineinfile:
+    path: /etc/syslog.conf
+    regexp: '@127\.0\.0\.1:{{ telegraf_syslog_port | int }}$'
+    line: "*.*\t\t\t\t\t\t@127.0.0.1:{{ telegraf_syslog_port | int }}"
+  notify: reload syslogd

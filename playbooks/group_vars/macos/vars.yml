@@ -21,11 +21,3 @@ root_group: wheel
 # `Etc/UTC`. GMT is functionally identical to UTC (no DST), so map the
 # Linux-side `Etc/UTC` default to `GMT` here for parity.
 timezone: GMT
-
-# Telegraf paths differ from the Debian defaults (/etc/telegraf/...)
-# because `brew install telegraf` places config directly under
-# $HOMEBREW_PREFIX/etc/ (no telegraf/ subdir), and the brew-installed
-# LaunchAgent's ProgramArguments reference those exact paths. Writing to
-# a different location would produce a silently-inert config.
-telegraf_conf: "{{ homebrew_prefix }}/etc/telegraf.conf"
-telegraf_conf_dir: "{{ homebrew_prefix }}/etc/telegraf.d"

@@ -4,3 +4,6 @@
     name: rsyslog
     state: restarted
     enabled: yes
+
+- name: reload syslogd
+  command: killall -HUP syslogd

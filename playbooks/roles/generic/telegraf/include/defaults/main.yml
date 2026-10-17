@@ -9,8 +9,7 @@ telegraf_conf_dir: /etc/telegraf/telegraf.d
 telegraf_apt_dependencies:
   - lm-sensors
 
-# PATH injected into the macOS LaunchAgent plist's EnvironmentVariables
-# so /usr/sbin tools (notably `ntpq`, required by [[inputs.ntpq]]) are
-# resolvable. brew's plist ships only HOME and relies on launchd's
-# defaults which don't include /usr/sbin in all session types.
-telegraf_darwin_path: /usr/sbin:/usr/bin:/bin:/opt/homebrew/bin:/opt/homebrew/sbin
+telegraf_launchd_label: com.influxdata.telegraf
+# Empty logs to stderr, which the journal keeps on Linux. launchd keeps
+# nothing, so macOS logs to a file Telegraf rotates itself.
+telegraf_logfile: "{{ '/var/log/telegraf/telegraf.log' if ansible_os_family == 'Darwin' else '' }}"

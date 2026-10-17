@@ -8,7 +8,8 @@
   ## When using tcp, consider using 'tcp4' or 'tcp6' to force the usage of IPv4
   ## or IPV6 respectively. There are cases, where when not specified, a system
   ## may force an IPv4 mapped IPv6 address.
-  server = "tcp4://127.0.0.1:{{ telegraf_syslog_port|int }}"
+{# macOS syslogd forwards only over UDP, in RFC 3164 (BSD) format. #}
+  server = "{{ 'udp4' if ansible_os_family == 'Darwin' else 'tcp4' }}://127.0.0.1:{{ telegraf_syslog_port|int }}"
 
   ## TLS Config
   # tls_allowed_cacerts = ["/etc/telegraf/ca.pem"]
@@ -47,7 +48,11 @@
   ## The RFC standard to use for message parsing
   ## By default RFC5424 is used. RFC3164 only supports UDP transport (no streaming support)
   ## Must be one of "RFC5424", or "RFC3164".
+{% if ansible_os_family == 'Darwin' %}
+  syslog_standard = "RFC3164"
+{% else %}
   # syslog_standard = "RFC5424"
+{% endif %}
 
   ## Character to prepend to SD-PARAMs (default = "_").
   ## A syslog message can contain multiple parameters and multiple identifiers within structured data section.

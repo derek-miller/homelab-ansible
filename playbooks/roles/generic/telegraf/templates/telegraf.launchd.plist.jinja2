@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{{ telegraf_launchd_label }}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{ homebrew_prefix }}/opt/telegraf/bin/telegraf</string>
+    <string>--config</string>
+    <string>{{ telegraf_conf }}</string>
+    <string>--config-directory</string>
+    <string>{{ telegraf_conf_dir }}</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardErrorPath</key>
+  <string>{{ telegraf_logfile | dirname }}/stderr.log</string>
+</dict>
+</plist>

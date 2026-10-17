@@ -5,9 +5,3 @@
     state: present
   become_user: "{{ mac_user }}"
   notify: restart telegraf
-
-- name: ensure telegraf conf directory exists
-  file:
-    path: "{{ telegraf_conf_dir }}"
-    state: directory
-    mode: '0755'
