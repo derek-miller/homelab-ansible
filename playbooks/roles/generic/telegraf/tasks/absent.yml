@@ -1,10 +1,10 @@
 ---
 # Telegraf absent — fully reverse what present.yml installed:
 #   - remove leftover config backups (first: the Debian purge takes the dir)
-#   - stop + disable service (systemd / launchd)
-#   - remove config file + conf.d dir
-#   - uninstall the package (apt / brew)
-#   - remove repo GPG key + apt source (Debian)
+#   - remove the config file, so its directory can empty
+#   - stop + disable service (systemd / launchd), remove conf.d, uninstall the
+#     package (apt / brew), remove the apt source and key (Debian)
+#   - remove the config directory once nothing else is in it
 
 - include_tasks: cleanup-backups.yml
 
@@ -14,3 +14,12 @@
     state: absent
 
 - include_tasks: "absent-{{ ansible_os_family | lower }}.yml"
+
+# rmdir leaves a directory something else still uses.
+- name: remove the emptied telegraf config directory
+  command: "rmdir {{ telegraf_conf | dirname }}"
+  args:
+    removes: "{{ telegraf_conf | dirname }}"
+  register: _telegraf_rmdir
+  failed_when: false
+  changed_when: _telegraf_rmdir is changed and _telegraf_rmdir.rc == 0

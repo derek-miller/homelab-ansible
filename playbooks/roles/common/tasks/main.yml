@@ -47,6 +47,16 @@
   changed_when: false
   when: ansible_os_family == 'Debian'
 
+# The homebrew module turns off Homebrew's own auto-update, so without this
+# its state: latest compares against a stale index and never upgrades.
+- name: update homebrew metadata
+  command: brew update
+  become_user: "{{ mac_user }}"
+  register: result
+  until: result is succeeded
+  changed_when: false
+  when: ansible_os_family == 'Darwin'
+
 - name: install common packages (apt)
   apt:
     name: "{{ common_pkgs.apt }}"
