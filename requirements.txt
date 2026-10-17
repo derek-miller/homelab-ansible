@@ -6,13 +6,13 @@
 #
 --index-url https://pypi.python.org/simple
 
-ansible==14.2.0
+ansible==14.5.0
     # via -r requirements.in
-ansible-core==2.21.2
+ansible-core==2.21.5
     # via ansible
 bcrypt==5.0.0
     # via paramiko
-black==26.5.1
+black==26.10.1
     # via -r requirements.in
 certifi==2026.7.22
     # via requests
@@ -20,22 +20,22 @@ cffi==2.1.1
     # via
     #   cryptography
     #   pynacl
-chardet==7.5.1
+chardet==7.6.0
     # via -r requirements.in
-charset-normalizer==3.4.9
+charset-normalizer==3.5.2
     # via requests
-click==8.4.2
+click==8.5.0
     # via
     #   -r requirements.in
     #   black
-cryptography==50.0.0
+cryptography==50.0.2
     # via
     #   -r requirements.in
     #   ansible-core
     #   paramiko
-dnspython==2.8.0
+dnspython==2.9.0
     # via -r requirements.in
-idna==3.18
+idna==3.20
     # via requests
 invoke==3.0.3
     # via paramiko
@@ -51,9 +51,9 @@ jinja2==3.1.6
     #   ansible-core
 keyring==25.7.0
     # via -r requirements.in
-markupsafe==3.0.3
+markupsafe==3.0.4
     # via jinja2
-more-itertools==11.1.0
+more-itertools==11.2.1
     # via
     #   jaraco-classes
     #   jaraco-functools
@@ -71,11 +71,11 @@ pathspec==1.1.1
     # via
     #   black
     #   yamllint
-platformdirs==4.11.1
+platformdirs==4.13.4
     # via black
 proxmoxer==2.3.0
     # via -r requirements.in
-pycparser==3.0
+pycparser==3.11
     # via cffi
 pynacl==1.6.2
     # via paramiko
@@ -94,9 +94,9 @@ resolvelib==1.2.1
     # via ansible-core
 semantic-version==2.10.0
     # via -r requirements.in
-urllib3==2.7.0
+urllib3==2.8.0
     # via requests
-websocket-client==1.9.0
+websocket-client==1.9.2
     # via -r requirements.in
 yamllint==1.38.0
     # via -r requirements.in

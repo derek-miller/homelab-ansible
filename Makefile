@@ -78,7 +78,7 @@ requirements.txt: requirements.in
 	$(pip_compile) $< -o $@
 
 playbooks/roles/ansible/remote/files/requirements.txt: playbooks/roles/ansible/remote/files/requirements.in
-	$(pip_compile) --pip-args='--no-build-isolation' $< -o $@
+	$(pip_compile) $< -o $@
 
 .PHONY: fmt
 fmt:
