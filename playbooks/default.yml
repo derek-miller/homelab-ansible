@@ -80,41 +80,77 @@
     - raspberry-pi
 
 - hosts: tailscale
+  # A failure later in the play must not drop a pending tailscaled restart: a
+  # later run sees nothing changed and never restarts it.
+  force_handlers: true
   roles:
     - role: generic/tailscale
   tasks:
-    - name: get tailscale ip addresses
-      command: tailscale ip
-      changed_when: false
-      register: tailscale_ip_result
-    - name: set tailscale ip address vars
-      set_fact:
-        tailscale_ip4_address: "{{ tailscale_ip_result.stdout_lines[0] }}"
-        tailscale_ip6_address: "{{ tailscale_ip_result.stdout_lines[1] }}"
-    - name: add Cloudflare DNS record for tailscale ipv4 address
-      community.general.cloudflare_dns:
-        zone: "{{ cloudflare_zone }}"
-        account_email: "{{ cloudflare_email }}"
-        account_api_token: "{{ cloudflare_api_key }}"
-        type: "A"
-        record: "{{ inventory_hostname }}.ts"
-        value: "{{ tailscale_ip4_address }}"
-        ttl: 1
-        proxied: no
-        solo: yes
-      when: create_cloudflare_ipv4_dns_record is defined and create_cloudflare_ipv4_dns_record is truthy
-    - name: add Cloudflare DNS record for tailscale ipv6 address
-      community.general.cloudflare_dns:
-        zone: "{{ cloudflare_zone }}"
-        account_email: "{{ cloudflare_email }}"
-        account_api_token: "{{ cloudflare_api_key }}"
-        type: "AAAA"
-        record: "{{ inventory_hostname }}.ts"
-        value: "{{ tailscale_ip6_address }}"
-        ttl: 1
-        proxied: no
-        solo: yes
-      when: create_cloudflare_ipv6_dns_record is defined and create_cloudflare_ipv6_dns_record is truthy
+    - name: publish the tailscale addresses
+      when: tailscale_state | default('present') == 'present'
+      block:
+        # A dry run ahead of a host's first real run has no address yet.
+        - name: get tailscale ip addresses
+          command: tailscale ip
+          changed_when: false
+          check_mode: no
+          register: tailscale_ip_result
+          failed_when: tailscale_ip_result.rc != 0 and not ansible_check_mode
+        - name: note that tailscale isn't up yet
+          debug:
+            msg: Tailscale isn't up on this host; a real run brings it up before publishing its addresses.
+          when: tailscale_ip_result.rc != 0
+        - when: tailscale_ip_result.rc == 0
+          block:
+            - name: set tailscale ip address vars
+              set_fact:
+                tailscale_ip4_address: "{{ tailscale_ip_result.stdout_lines[0] }}"
+                tailscale_ip6_address: "{{ tailscale_ip_result.stdout_lines[1] }}"
+            - name: add Cloudflare DNS record for tailscale ipv4 address
+              community.general.cloudflare_dns:
+                zone: "{{ cloudflare_zone }}"
+                account_email: "{{ cloudflare_email }}"
+                account_api_token: "{{ cloudflare_api_key }}"
+                type: "A"
+                record: "{{ inventory_hostname }}.ts"
+                value: "{{ tailscale_ip4_address }}"
+                ttl: 1
+                proxied: no
+                solo: yes
+              when: create_cloudflare_ipv4_dns_record is defined and create_cloudflare_ipv4_dns_record is truthy
+            - name: add Cloudflare DNS record for tailscale ipv6 address
+              community.general.cloudflare_dns:
+                zone: "{{ cloudflare_zone }}"
+                account_email: "{{ cloudflare_email }}"
+                account_api_token: "{{ cloudflare_api_key }}"
+                type: "AAAA"
+                record: "{{ inventory_hostname }}.ts"
+                value: "{{ tailscale_ip6_address }}"
+                ttl: 1
+                proxied: no
+                solo: yes
+              when: create_cloudflare_ipv6_dns_record is defined and create_cloudflare_ipv6_dns_record is truthy
+    - name: remove the tailscale DNS records
+      when: tailscale_state | default('present') == 'absent'
+      block:
+        - name: remove Cloudflare DNS record for tailscale ipv4 address
+          community.general.cloudflare_dns:
+            zone: "{{ cloudflare_zone }}"
+            account_email: "{{ cloudflare_email }}"
+            account_api_token: "{{ cloudflare_api_key }}"
+            type: "A"
+            record: "{{ inventory_hostname }}.ts"
+            state: absent
+          when: create_cloudflare_ipv4_dns_record is defined and create_cloudflare_ipv4_dns_record is truthy
+        - name: remove Cloudflare DNS record for tailscale ipv6 address
+          community.general.cloudflare_dns:
+            zone: "{{ cloudflare_zone }}"
+            account_email: "{{ cloudflare_email }}"
+            account_api_token: "{{ cloudflare_api_key }}"
+            type: "AAAA"
+            record: "{{ inventory_hostname }}.ts"
+            state: absent
+          when: create_cloudflare_ipv6_dns_record is defined and create_cloudflare_ipv6_dns_record is truthy
   tags:
     - tailscale
 
