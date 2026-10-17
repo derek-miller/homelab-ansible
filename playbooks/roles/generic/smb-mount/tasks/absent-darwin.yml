@@ -29,7 +29,8 @@
 
         sudo /usr/bin/sed -i '' "/^\/-[[:space:]]\\{1,\\}{{ smb_mount_map_path | basename }}$/d" /etc/auto_master
 
-      Then press Enter here to continue. Timing out after 10 minutes.
+      Then press Ctrl+C, then C, here. The play otherwise resumes on its
+      own after 10 minutes.
   when: _automaster_probe.rc == 0
 
 - name: flush handlers
@@ -42,3 +43,16 @@
     path: /etc/synthetic.conf
     regexp: '^{{ _link }}\t'
     state: absent
+
+# rmdir, never a recursive delete: a share still mounted under the target
+# would have its NAS contents removed. Anything left behind stays.
+- name: remove the emptied mount directories
+  vars:
+    _target: "/System/Volumes/Data/{{ (smb_mount_dir | regex_replace('^/+', '')).split('/') | first }}"
+  command: "rmdir {{ item }}"
+  args:
+    removes: "{{ item }}"
+  loop: "{{ smb_share_names | map('regex_replace', '^', _target ~ '/') | list + [_target] }}"
+  register: _smb_rmdir
+  failed_when: false
+  changed_when: _smb_rmdir is changed and _smb_rmdir.rc == 0

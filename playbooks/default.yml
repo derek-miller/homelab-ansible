@@ -151,19 +151,6 @@
     - cifs-shares
     - smb-mount
 
-# After the shares: Homebridge reads its TLS cert from one at startup.
-- hosts: homebridge
-  roles:
-    - role: generic/homebridge
-  tags:
-    - homebridge
-
-- hosts: plex
-  roles:
-    - role: generic/plex
-  tags:
-    - plex
-
 - hosts: project-files
   roles:
     - role: generic/project-files
@@ -760,6 +747,21 @@
     - role: generic/qemu-guest-agent
   tags:
     - qemu-guest-agent
+
+# After the shares, since Homebridge reads its TLS cert from one at startup.
+# Near the end because these groups hold one host: a failure there fails the
+# whole play, which would stop the run before the fleet-wide plays.
+- hosts: homebridge
+  roles:
+    - role: generic/homebridge
+  tags:
+    - homebridge
+
+- hosts: plex
+  roles:
+    - role: generic/plex
+  tags:
+    - plex
 
 # Last, so a host whose image kept its previous build still ran everything else.
 - name: report images that kept their previous build

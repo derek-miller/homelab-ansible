@@ -53,7 +53,9 @@
 
             sudo /sbin/shutdown -r now
 
-          then press Enter here to continue. Timing out after 10 minutes.
+          then log in at the Mac (FileVault keeps SSH down until someone
+          does) and press Ctrl+C, then C, here. The play otherwise resumes
+          on its own after 10 minutes.
       when: not (_synthetic_probe.stat.islnk | default(false)) or _synthetic_probe.stat.lnk_target != _target
 
 # ---- ensure mount_point parents exist ----------------------------------
@@ -105,7 +107,8 @@
 
         printf '/-\t{{ smb_mount_map_path | basename }}\n' | sudo tee -a /etc/auto_master && sudo /usr/sbin/automount -vc
 
-      Then press Enter here to continue. Timing out after 10 minutes.
+      Then press Ctrl+C, then C, here. The play otherwise resumes on its
+      own after 10 minutes.
   when: _automaster_probe.rc != 0
 
 - name: reload autofs

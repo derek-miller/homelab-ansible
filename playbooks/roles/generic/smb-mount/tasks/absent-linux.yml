@@ -8,3 +8,9 @@
   file:
     path: "{{ smb_credentials_path | mandatory }}"
     state: absent
+
+- name: uninstall cifs dependencies
+  apt:
+    name: cifs-utils
+    state: absent
+    purge: yes
