@@ -639,13 +639,33 @@
         images: yes
         images_filters:
           dangling: "false"
-          # Keep one-shot job images (e.g. control4-driver-scraper) that
-          # have no container referencing them between scheduled runs.
-          "label!": homelab.prune.exclude
+          # Local builds can't be pulled back, and one may be unused right now:
+          # a one-shot job between runs, a runner between jobs, or a rebuild
+          # whose service hasn't restarted yet. They're pruned below instead.
+          "label!": homelab.local-build
         networks: yes
         volumes: yes
         builder_cache: yes
         timeout: 300
+    - name: list local builds and the containers using them
+      community.docker.docker_host_info:
+        images: yes
+        images_filters:
+          label: homelab.local-build
+        containers: yes
+        containers_all: yes
+        verbose_output: yes
+      register: _local_builds
+    - name: remove local builds that are neither latest nor in use
+      community.docker.docker_image_remove:
+        name: "{{ item.Id }}"
+        force: yes
+      loop: >-
+        {{ _local_builds.images
+           | rejectattr('Id', 'in', _local_builds.containers | map(attribute='ImageID') | list) | list }}
+      loop_control:
+        label: "{{ item.RepoTags | default([], true) | join(',') or item.Id }}"
+      when: item.RepoTags | default([], true) | select('search', ':latest$') | list | length == 0
   tags:
     - docker
     - docker-prune
