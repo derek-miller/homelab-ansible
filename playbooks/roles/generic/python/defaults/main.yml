@@ -1,2 +1,18 @@
 ---
 python_state: present
+
+# The newest Python the installed ansible-core runs modules on, so venvs move to
+# a new minor once ansible-core supports it; a minor such as "3.13" holds it
+# back. Homebrew's own default can be ahead of ansible-core.
+python_homebrew_version: >-
+  {{ lookup('ansible.builtin.config', 'INTERPRETER_PYTHON_FALLBACK')
+     | select('match', '^python3[.][0-9]+$') | map('replace', 'python', '')
+     | community.general.version_sort | last }}
+python_homebrew_formula: "python@{{ python_homebrew_version }}"
+python_homebrew_stdlib: >-
+  {{ homebrew_prefix }}/opt/{{ python_homebrew_formula }}/Frameworks/Python.framework/Versions/{{ python_homebrew_version }}/lib/python{{ python_homebrew_version }}
+
+# The interpreter venvs are built from.
+python_base_interpreter: >-
+  {{ homebrew_prefix ~ '/bin/python' ~ python_homebrew_version
+     if ansible_os_family == 'Darwin' else '/usr/bin/python3' }}

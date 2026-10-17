@@ -1,3 +1,5 @@
 ---
 ansible_python_dir: /opt/ansible
 ansible_python_virtualenv: "{{ ansible_python_dir }}/virtualenv"
+# python3-apt, imported by the apt modules, exists only in the system site-packages.
+ansible_python_virtualenv_site_packages: "{{ ansible_os_family == 'Debian' }}"
