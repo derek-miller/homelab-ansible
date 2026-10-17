@@ -47,19 +47,25 @@
     # covers what isn't an input, such as unpinned packages in the Dockerfile.
     - name: Hash the {{ image_name }} build inputs
       set_fact:
-        image_config: "{{ image_config | combine({'image_tag': (_inputs | to_json | hash('sha256'))[:12]}) }}"
+        image_config: "{{ image_config | combine({'image_tag': (_inputs | to_json(sort_keys=True) | hash('sha256'))[:12]}) }}"
       vars:
         _inputs:
-          config: "{{ image_config }}"
+          config: >-
+            {{ image_config | dict2items | rejectattr('key', 'in', ['rollout', 'hide_build_log', 'ssh_key'])
+               | items2dict }}
           files: >-
             {{ query('ansible.builtin.file', *([image_config.dockerfile] if image_config.dockerfile is defined else [])
                      + image_config.build_files | default([]) + image_config.patches | default([])) }}
           bases: "{{ _base_images.results | default([]) | map(attribute='image.Id', default='') | list }}"
           commit: "{{ _source_commit.after | default('') }}"
+  # The current build stays and the deploy carries on; the last play in
+  # default.yml then fails it, so neither an outage nor a broken input goes
+  # unnoticed.
   rescue:
     - name: Keep the current {{ image_name }} build while its inputs can't be read
       set_fact:
         image_config: "{{ image_config | combine({'image_tag': 'latest'}) }}"
+        docker_build_images_failed: "{{ docker_build_images_failed | default([]) + [image_name ~ ' (inputs)'] }}"
 
 - name: Check if {{ image_name }} image already exists
   community.docker.docker_image_info:
@@ -140,8 +146,12 @@
       fail:
         msg: >-
           The {{ image_name }} build failed. To see why, run
-          `docker build /tmp/docker-image-builds/{{ image_name }}` on the host.
+          `DOCKER_BUILDKIT=0 docker build /tmp/docker-image-builds/{{ image_name }}` on the host.
       when: _build.failed_when_suppressed_exception is defined
+  rescue:
+    - name: Keep the current {{ image_name }} build
+      set_fact:
+        docker_build_images_failed: "{{ docker_build_images_failed | default([]) + [image_name ~ ' (build)'] }}"
 
 - name: Find the {{ image_name }} build and its latest tag
   community.docker.docker_image_info:
