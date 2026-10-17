@@ -1,6 +1,6 @@
 ---
-# macOS gates SSH on com.apple.access_ssh, which it provides; creating that
-# group on a Mac that admits all users would shut everyone else out.
+# com.apple.access_ssh exists only while Remote Login is set to "Only these
+# users", which the bootstrap needs; creating it would shut everyone else out.
 - name: ensure the surrogate's ssh group exists
   group:
     name: "{{ ansible_surrogate_ssh_group }}"
@@ -13,7 +13,6 @@
     system: yes
     groups: "{{ ansible_surrogate_ssh_group }}"
     append: yes
-    password_lock: yes
     shell: /bin/bash
     createhome: yes
 
@@ -25,4 +24,4 @@
   with_file:
     - "{{ ansible_surrogate_public_key_file }}"
 
-- include_tasks: sudoers.yml
+- include_tasks: surrogate.yml

@@ -1,7 +1,7 @@
 ---
 ansible_surrogate_user: ansible
 ansible_surrogate_ssh_group: ssh
-# Root's PATH for every become, through the surrogate's sudoers entry.
+# The PATH every become runs with, through the surrogate's sudoers entry.
 ansible_surrogate_secure_path: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 swarm_node_labels: >-

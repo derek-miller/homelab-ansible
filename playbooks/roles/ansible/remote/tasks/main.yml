@@ -1,10 +1,10 @@
 ---
-# First, so root's PATH is right for every later task that runs a command by
-# name; bootstrap only runs on request.
-- name: keep the surrogate's sudoers entry current
+# First, so the become PATH is right for every later task that runs a command
+# by name; bootstrap only runs on request.
+- name: keep the surrogate's sudoers entry and password lock current
   include_role:
     name: ansible/setup/bootstrap
-    tasks_from: sudoers.yml
+    tasks_from: surrogate.yml
 
 - name: install build dependencies (Debian)
   apt:

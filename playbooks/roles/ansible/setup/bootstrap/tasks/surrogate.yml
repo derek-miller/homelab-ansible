@@ -14,4 +14,12 @@
     owner: root
     group: "{{ root_group }}"
     mode: 0440
-    validate: "{{ 'visudo -cf %s' }}"
+    validate: /usr/sbin/visudo -cf %s
+
+# The user module has no password lock on macOS, and a bare user task there
+# would also unhide the account.
+- name: lock the surrogate's password
+  user:
+    name: "{{ ansible_surrogate_user }}"
+    password_lock: yes
+  when: ansible_os_family != 'Darwin'

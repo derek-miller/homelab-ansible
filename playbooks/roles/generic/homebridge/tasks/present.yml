@@ -59,8 +59,9 @@
   register: _hb_daemon_stat
 
 # `hb-service install` wires up the LaunchDaemon at homebridge_launchdaemon.
-# Idempotent: only invoked when the plist is missing — re-running hb-service install regenerates the plist
-# + restarts, which we don't want on every ansible run.
+# Idempotent: only invoked when the plist is missing — re-running
+# hb-service install regenerates the plist + restarts, which we don't want
+# on every ansible run.
 - name: install hb-service LaunchDaemon (first-time bootstrap)
   command: >-
     {{ homebridge_hbservice_bin }} install
