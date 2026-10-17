@@ -136,20 +136,17 @@
   tags:
     - tailscale
 
-- hosts: cifs-shares
+- hosts: smb-shares
   roles:
     - role: generic/smb-mount
-      smb_share_host: "{{ cifs_shares_host_configs[cifs_shares_host_config].host }}"
-      smb_share_username: "{{ cifs_shares_host_configs[cifs_shares_host_config].username }}"
-      smb_share_password: "{{ cifs_shares_host_configs[cifs_shares_host_config].password }}"
-      smb_share_names: "{{ cifs_share_names }}"
+      smb_share_host: "{{ smb_share_configs[smb_share_config].host }}"
+      smb_share_username: "{{ smb_share_configs[smb_share_config].username }}"
+      smb_share_password: "{{ smb_share_configs[smb_share_config].password }}"
+      smb_mount_options: "{{ smb_share_configs[smb_share_config].mount_options }}"
       smb_mount_dir: /mnt
-      smb_mount_cifs_options: "{{ cifs_shares_host_configs[cifs_shares_host_config].mount_options }}"
-      smb_credentials_path: "/etc/.{{ cifs_shares_host_config }}_cifs_creds"
   tags:
-    - cifs
-    - cifs-shares
     - smb-mount
+    - smb-shares
 
 - hosts: project-files
   roles:

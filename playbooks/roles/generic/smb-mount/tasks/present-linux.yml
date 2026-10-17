@@ -9,7 +9,7 @@
     content: |
       username={{ smb_share_username | mandatory }}
       password={{ smb_share_password | mandatory }}
-    dest: "{{ smb_credentials_path | mandatory }}"
+    dest: "{{ smb_mount_credentials_path }}"
     owner: root
     group: root
     mode: 0600

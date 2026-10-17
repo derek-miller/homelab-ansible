@@ -6,7 +6,7 @@
 
 - name: delete cifs credentials file
   file:
-    path: "{{ smb_credentials_path | mandatory }}"
+    path: "{{ smb_mount_credentials_path }}"
     state: absent
 
 - name: uninstall cifs dependencies

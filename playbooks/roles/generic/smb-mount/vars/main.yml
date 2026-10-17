@@ -1,0 +1,5 @@
+---
+# Where Linux keeps a config's credentials for mount.cifs. The name predates
+# this role; renaming it rewrites every unit that reads it and remounts the
+# share.
+smb_mount_credentials_path: "/etc/.{{ smb_share_config }}_cifs_creds"

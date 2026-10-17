@@ -1,5 +1,5 @@
 ---
-cifs_shares_host_configs:
+smb_share_configs:
   unas:
     host: !vault |
       $ANSIBLE_VAULT;1.1;AES256
