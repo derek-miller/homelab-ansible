@@ -1,0 +1,11 @@
+---
+# kickstart -k reuses the loaded plist, so a changed plist needs bootout + bootstrap.
+- name: reload claude-swap-notify
+  shell: |
+    domain=gui/{{ _csn_uid.stdout }}
+    launchctl bootout "$domain/{{ claude_swap_notify_label }}" 2>/dev/null || true
+    for _ in $(seq 50); do
+      launchctl print "$domain/{{ claude_swap_notify_label }}" >/dev/null 2>&1 || break
+      sleep 0.1
+    done
+    launchctl bootstrap "$domain" {{ claude_swap_notify_plist | quote }}

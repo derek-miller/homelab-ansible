@@ -75,6 +75,12 @@
   tags:
     - plex
 
+- hosts: claude-swap-notify
+  roles:
+    - role: generic/claude-swap-notify
+  tags:
+    - claude-swap-notify
+
 - hosts: raspberry-pi
   roles:
     - role: generic/raspberry-pi

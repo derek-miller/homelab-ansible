@@ -113,5 +113,8 @@ rackmini1
 [plex]
 rackmini1
 
+[claude-swap-notify]
+rackmini1
+
 [qemu-guest-agent]
 rackvm[1:5]
