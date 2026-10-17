@@ -1,5 +1,6 @@
 ---
-# artis3n logs the node out before it uninstalls.
+# Run this over the LAN (-e ansible_host=<LAN address>): Ansible reaches hosts
+# over Tailscale, and artis3n logs the node out before it uninstalls.
 - name: uninstall tailscale (artis3n)
   include_role:
     name: artis3n.tailscale.machine

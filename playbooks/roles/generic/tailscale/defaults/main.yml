@@ -1,8 +1,5 @@
 ---
 tailscale_state: present
 
-# Extra args passed to `tailscale up`. Same var the artis3n Linux role uses;
-# assembled in group_vars/tailscale from tailscale_common_args + tailscale_host_args.
-tailscale_args: ""
-
-tailscale_launchd_label: homebrew.mxcl.tailscale
+# Tailscale's own label for its system daemon (`tailscaled install-system-daemon`).
+tailscale_launchd_label: com.tailscale.tailscaled

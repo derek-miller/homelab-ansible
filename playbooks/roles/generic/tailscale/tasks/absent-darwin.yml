@@ -1,20 +1,23 @@
 ---
+# Run this over the LAN (-e ansible_host=<LAN address>): Ansible reaches hosts
+# over Tailscale, and the logout drops that connection.
 - name: check for the tailscale CLI
   stat:
     path: "{{ homebrew_prefix }}/bin/tailscale"
   register: _tailscale_cli
 
-- name: log the node out of the tailnet
-  command: tailscale logout
-  register: _tailscale_logout
-  changed_when: _tailscale_logout.rc == 0
-  failed_when: false
-  when: _tailscale_cli.stat.exists
-
 - name: check for the tailscaled LaunchDaemon
   stat:
     path: "/Library/LaunchDaemons/{{ tailscale_launchd_label }}.plist"
   register: _tailscaled_plist
+
+# A failed logout stops here, before the node key in /Library/Tailscale goes;
+# without it the device could never be logged out and stays in the tailnet.
+- name: log the node out of the tailnet
+  command: tailscale logout
+  register: _tailscale_logout
+  changed_when: _tailscale_logout.rc == 0
+  when: _tailscale_cli.stat.exists and _tailscaled_plist.stat.exists
 
 - name: unload tailscaled
   community.general.launchd:
