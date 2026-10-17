@@ -1,0 +1,19 @@
+---
+claude_swap_state: present
+
+claude_swap_user: "{{ mac_user | mandatory }}"
+claude_swap_home: "/Users/{{ claude_swap_user }}"
+
+claude_swap_uv_bin: /opt/homebrew/bin/uv
+claude_swap_cswap_bin: "{{ claude_swap_home }}/.local/bin/cswap"
+claude_swap_python: "{{ claude_swap_home }}/.local/share/uv/tools/claude-swap/bin/python"
+
+claude_swap_discord_webhook_url: "{{ undef(hint='Set claude_swap_discord_webhook_url to a Discord webhook URL') }}"
+
+# Extra flags for `cswap auto`; settings.json in cswap's backup root holds the defaults.
+claude_swap_auto_args: []
+
+claude_swap_notify_label: homelab.claude-swap-notify
+claude_swap_notify_script: "{{ claude_swap_home }}/.local/libexec/claude-swap-notify.py"
+claude_swap_notify_plist: "{{ claude_swap_home }}/Library/LaunchAgents/{{ claude_swap_notify_label }}.plist"
+claude_swap_notify_log: "{{ claude_swap_home }}/Library/Logs/claude-swap-notify.log"

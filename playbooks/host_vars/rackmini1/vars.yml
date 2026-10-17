@@ -68,7 +68,7 @@ smb_mounts:
       - name: Public
         mount_point: /mnt/Public
 
-claude_swap_notify_webhook_url: !vault |
+claude_swap_discord_webhook_url: !vault |
           $ANSIBLE_VAULT;1.1;AES256
           33366330653361653861633766323262393732353466613731316239313934383433303635646162
           3531373037313635373030666434363639353030666264630a643365396562663135333437616434

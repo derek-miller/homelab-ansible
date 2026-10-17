@@ -1,0 +1,28 @@
+---
+- name: bootout claude-swap-notify
+  command: "launchctl bootout gui/{{ _cs_uid.stdout }}/{{ claude_swap_notify_label }}"
+  register: _cs_bootout
+  changed_when: _cs_bootout.rc == 0
+  failed_when: false
+
+- name: remove claude-swap-notify files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ claude_swap_notify_plist }}"
+    - "{{ claude_swap_notify_script }}"
+    - "{{ claude_swap_notify_log }}"
+
+# Accounts and settings under cswap's backup root stay, as `cswap purge` is the way to drop them.
+- name: uninstall claude-swap
+  command: "{{ claude_swap_uv_bin }} tool uninstall claude-swap"
+  args:
+    removes: "{{ claude_swap_cswap_bin }}"
+  become_user: "{{ claude_swap_user }}"
+
+- name: uninstall uv
+  community.general.homebrew:
+    name: uv
+    state: absent
+  become_user: "{{ claude_swap_user }}"

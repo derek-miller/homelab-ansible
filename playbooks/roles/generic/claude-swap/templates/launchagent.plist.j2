@@ -6,19 +6,19 @@
   <string>{{ claude_swap_notify_label }}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>{{ claude_swap_notify_python | e }}</string>
+    <string>{{ claude_swap_python | e }}</string>
     <string>{{ claude_swap_notify_script | e }}</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>{{ claude_swap_notify_home }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>{{ claude_swap_home }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>CSWAP_BIN</key>
-    <string>{{ claude_swap_notify_cswap_bin | e }}</string>
+    <string>{{ claude_swap_cswap_bin | e }}</string>
     <key>CSWAP_AUTO_ARGS</key>
-    <string>{{ claude_swap_notify_auto_args | to_json | e }}</string>
+    <string>{{ claude_swap_auto_args | to_json | e }}</string>
     <key>DISCORD_WEBHOOK_URL</key>
-    <string>{{ claude_swap_notify_webhook_url | e }}</string>
+    <string>{{ claude_swap_discord_webhook_url | e }}</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>

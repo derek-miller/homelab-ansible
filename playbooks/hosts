@@ -113,7 +113,7 @@ rackmini1
 [plex]
 rackmini1
 
-[claude-swap-notify]
+[claude-swap]
 rackmini1
 
 [qemu-guest-agent]
