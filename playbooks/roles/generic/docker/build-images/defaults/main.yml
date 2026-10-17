@@ -44,7 +44,7 @@ available_docker_images:
     image_name: gha-runner
     # Bump with the FROM tag or any change to these files: a node builds only a
     # tag it does not have yet.
-    image_tag: "2.338.0"
+    image_tag: "2.337.0"
     # Each job ends its container, so between tasks nothing may reference the
     # image; keep the docker-prune play from sweeping it.
     labels:
