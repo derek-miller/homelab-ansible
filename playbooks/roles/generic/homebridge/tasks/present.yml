@@ -42,9 +42,6 @@
   failed_when: not _hb_npm_stat.stat.exists
 
 # ---- homebridge npm packages ------------------------------------------
-# community.general.npm shells out to `npm`, whose shebang is `#!/usr/bin/env
-# node`. node lives at /usr/local/bin which isn't on root's default PATH,
-# so we prepend it via environment + path parameter.
 - name: install/upgrade homebridge npm packages
   community.general.npm:
     name: "{{ item }}"
@@ -52,10 +49,7 @@
     state: "{{ homebridge_pkg_state }}"
     executable: "{{ homebridge_npm_bin }}"
     unsafe_perm: true
-    path: "{{ homebridge_node_bin | dirname }}"
   loop: "{{ homebridge_packages }}"
-  environment:
-    PATH: "{{ homebridge_node_bin | dirname }}:{{ ansible_env.PATH }}"
   notify: homebridge changed
 
 # ---- hb-service LaunchDaemon ------------------------------------------
@@ -65,10 +59,9 @@
   register: _hb_daemon_stat
 
 # `hb-service install` wires up the LaunchDaemon at homebridge_launchdaemon.
-# It shells out to /usr/local/bin/node (not on root's default PATH), so
-# prepend the npm prefix explicitly. Idempotent: only invoked when the
-# plist is missing — re-running hb-service install regenerates the plist
-# + restarts, which we don't want on every ansible run.
+# Idempotent: only invoked when the plist is missing — re-running
+# hb-service install regenerates the plist + restarts, which we don't want
+# on every ansible run.
 - name: install hb-service LaunchDaemon (first-time bootstrap)
   command: >-
     {{ homebridge_hbservice_bin }} install
@@ -77,8 +70,6 @@
     -S {{ homebridge_service_name }}
     {% if homebridge_plugin_path is truthy %}-P {{ homebridge_plugin_path | quote }}{% endif %}
     {% if homebridge_user_storage_path is truthy %}-U {{ homebridge_user_storage_path | quote }}{% endif %}
-  environment:
-    PATH: "/usr/local/bin:/opt/homebrew/bin:{{ ansible_env.PATH | default('/usr/bin:/bin:/usr/sbin:/sbin') }}"
   when: not _hb_daemon_stat.stat.exists
   register: _hb_install
   changed_when: "'Homebridge setup complete' in (_hb_install.stdout | default(''))"
@@ -94,8 +85,6 @@
     {{ homebridge_hbservice_bin }} update-node
     --user {{ homebridge_user }}
     {% if homebridge_node_version is truthy %}{{ homebridge_node_version }}{% endif %}
-  environment:
-    PATH: "/usr/local/bin:/opt/homebrew/bin:{{ ansible_env.PATH | default('/usr/bin:/bin:/usr/sbin:/sbin') }}"
   register: _hb_update_node
   changed_when: "'Installing Node.js' in (_hb_update_node.stdout | default(''))"
   notify: homebridge changed

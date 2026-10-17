@@ -89,11 +89,6 @@
       command: tailscale ip
       changed_when: false
       register: tailscale_ip_result
-      # macOS sudo's secure_path doesn't include /usr/local/bin where the
-      # brew-installed tailscale lives (via symlink from the tailscale role);
-      # prepend it so `tailscale` resolves without a full path. No-op on Linux.
-      environment:
-        PATH: "/usr/local/bin:{{ ansible_env.PATH | default('/usr/bin:/bin:/usr/sbin:/sbin') }}"
     - name: set tailscale ip address vars
       set_fact:
         tailscale_ip4_address: "{{ tailscale_ip_result.stdout_lines[0] }}"

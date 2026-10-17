@@ -1,6 +1,27 @@
 ---
-- include_tasks: setup-debian.yml
+# com.apple.access_ssh exists only while Remote Login is set to "Only these
+# users", which the bootstrap needs; creating it would shut everyone else out.
+- name: ensure the surrogate's ssh group exists
+  group:
+    name: "{{ ansible_surrogate_ssh_group }}"
+    state: present
   when: ansible_os_family != 'Darwin'
 
-- include_tasks: setup-darwin.yml
-  when: ansible_os_family == 'Darwin'
+- name: create ansible surrogate user
+  user:
+    name: "{{ ansible_surrogate_user }}"
+    system: yes
+    groups: "{{ ansible_surrogate_ssh_group }}"
+    append: yes
+    shell: /bin/bash
+    createhome: yes
+
+- name: authorize ansible surrogate ssh key
+  authorized_key:
+    user: "{{ ansible_surrogate_user }}"
+    key: "{{ item }}"
+    exclusive: yes
+  with_file:
+    - "{{ ansible_surrogate_public_key_file }}"
+
+- include_tasks: surrogate.yml

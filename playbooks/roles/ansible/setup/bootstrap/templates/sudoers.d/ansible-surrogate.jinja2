@@ -1,2 +1,3 @@
 {{ ansible_surrogate_user }} ALL = (ALL : ALL) NOPASSWD:ALL
 Defaults:{{ ansible_surrogate_user }} !requiretty
+Defaults:{{ ansible_surrogate_user }} secure_path="{{ ansible_surrogate_secure_path }}"

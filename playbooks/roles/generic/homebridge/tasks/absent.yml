@@ -15,8 +15,6 @@
 
 - name: hb-service uninstall (removes LaunchDaemon + stops service)
   command: "{{ homebridge_hbservice_bin }} uninstall"
-  environment:
-    PATH: "/usr/local/bin:/opt/homebrew/bin:{{ ansible_env.PATH | default('/usr/bin:/bin:/usr/sbin:/sbin') }}"
   when: _hb_svc_stat.stat.exists
   failed_when: false
   changed_when: true
@@ -38,9 +36,6 @@
     state: absent
     executable: "{{ homebridge_npm_bin }}"
     unsafe_perm: true
-    path: "{{ homebridge_node_bin | dirname }}"
   loop: "{{ homebridge_packages }}"
-  environment:
-    PATH: "{{ homebridge_node_bin | dirname }}:{{ ansible_env.PATH }}"
   when: _hb_npm_stat.stat.exists
   failed_when: false

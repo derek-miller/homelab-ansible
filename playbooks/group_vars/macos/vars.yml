@@ -9,12 +9,9 @@ homebrew_prefix: /opt/homebrew
 # mac_user (set in host_vars) must own {{ homebrew_prefix }}; brew tasks run as
 # it because Homebrew refuses root.
 
-# NOTE: additional_env_paths exists in this repo but only updates
-# `ansible_env` (a local representation) — it doesn't change the remote
-# shell's PATH used by `command:` tasks, and sudo's secure_path ignores
-# /etc/paths.d. Individual brew-installed CLIs that need to be callable
-# from tasks without a full path are symlinked into /usr/local/bin by
-# their owning roles (see generic/tailscale/tasks/setup-darwin.yml).
+ansible_surrogate_ssh_group: com.apple.access_ssh
+# System directories first, so nothing in the user-owned prefix shadows them.
+ansible_surrogate_secure_path: /usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:{{ homebrew_prefix }}/bin:{{ homebrew_prefix }}/sbin
 
 # gid 0 is named wheel on macOS.
 root_group: wheel

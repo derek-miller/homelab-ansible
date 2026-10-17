@@ -1,0 +1,25 @@
+---
+- name: ensure sudoers.d directory exists
+  file:
+    path: /etc/sudoers.d
+    owner: root
+    group: "{{ root_group }}"
+    mode: 0755
+    state: directory
+
+- name: grant ansible surrogate user passwordless sudoer
+  template:
+    src: sudoers.d/ansible-surrogate.jinja2
+    dest: /etc/sudoers.d/ansible-surrogate
+    owner: root
+    group: "{{ root_group }}"
+    mode: 0440
+    validate: /usr/sbin/visudo -cf %s
+
+# The user module has no password lock on macOS, and a bare user task there
+# would also unhide the account.
+- name: lock the surrogate's password
+  user:
+    name: "{{ ansible_surrogate_user }}"
+    password_lock: yes
+  when: ansible_os_family != 'Darwin'
