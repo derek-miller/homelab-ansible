@@ -574,6 +574,12 @@
         prune: yes
         compose:
           - "{{ docker_stack_definition }}"
+      # A service the build play just restarted can still be finishing its
+      # update, and swarm rejects a write made against the version read before.
+      register: _stack_deploy
+      until: _stack_deploy is succeeded or 'out of sequence' not in (_stack_deploy.stderr | default(''))
+      retries: 3
+      delay: 15
       tags:
         - docker-stack
 
@@ -639,13 +645,33 @@
         images: yes
         images_filters:
           dangling: "false"
-          # Keep one-shot job images (e.g. control4-driver-scraper) that
-          # have no container referencing them between scheduled runs.
-          "label!": homelab.prune.exclude
+          # Local builds can't be pulled back, and one may be unused right now:
+          # a one-shot job between runs, a runner between jobs, or a rebuild
+          # whose service hasn't restarted yet. They're pruned below instead.
+          "label!": homelab.local-build
         networks: yes
         volumes: yes
         builder_cache: yes
         timeout: 300
+    - name: list local builds and the containers using them
+      community.docker.docker_host_info:
+        images: yes
+        images_filters:
+          label: homelab.local-build
+        containers: yes
+        containers_all: yes
+        verbose_output: yes
+      register: _local_builds
+    - name: remove local builds that are neither latest nor in use
+      community.docker.docker_image_remove:
+        name: "{{ item.Id }}"
+        force: yes
+      loop: >-
+        {{ _local_builds.images
+           | rejectattr('Id', 'in', _local_builds.containers | map(attribute='ImageID') | list) | list }}
+      loop_control:
+        label: "{{ item.RepoTags | default([], true) | join(',') or item.Id }}"
+      when: item.RepoTags | default([], true) | select('search', ':latest$') | list | length == 0
   tags:
     - docker
     - docker-prune
@@ -708,3 +734,18 @@
     - role: generic/qemu-guest-agent
   tags:
     - qemu-guest-agent
+
+# Last, so a host whose image kept its previous build still ran everything else.
+- name: report images that kept their previous build
+  hosts: docker-build-images
+  gather_facts: no
+  tasks:
+    - name: fail if an image could not be rebuilt
+      fail:
+        msg: >-
+          {{ docker_build_images_failed | join(', ') }} kept the previous build;
+          the error is further up.
+      when: docker_build_images_failed | default([]) | length > 0
+  tags:
+    - docker
+    - docker-build-images

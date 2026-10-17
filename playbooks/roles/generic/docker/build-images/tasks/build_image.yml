@@ -3,77 +3,233 @@
   set_fact:
     image_config: "{{ available_docker_images[image_name] }}"
 
-- name: Check if {{ image_name }} image already exists
-  community.docker.docker_image_info:
-    name: "{{ image_config.image_name }}:{{ image_config.image_tag }}"
-  register: image_info
-
-- name: Create build directory for {{ image_name }}
-  file:
-    path: "/tmp/docker-image-builds/{{ image_name }}"
-    state: directory
-    mode: '0755'
-  when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.repo is not defined
-
+# A dry run needs the key too, to look up the commit. It's removed at the end,
+# so neither step is a change.
 - name: Copy deploy key for {{ image_name }} to remote
   copy:
     src: "{{ image_config.ssh_key }}"
     dest: "/tmp/docker-image-builds/{{ image_name }}-deploy-key"
     mode: '0600'
-  when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.ssh_key is defined
+  check_mode: no
+  changed_when: false
+  when: image_config.ssh_key is defined
 
-- name: Clone {{ image_name }} repository
-  git:
-    repo: "{{ image_config.repo }}"
-    dest: "/tmp/docker-image-builds/{{ image_name }}"
-    version: "{{ image_config.version }}"
-    force: yes
-    key_file: "{{ image_config.ssh_key is defined | ternary('/tmp/docker-image-builds/' + image_name + '-deploy-key', omit) }}"
-    accept_hostkey: yes
-  when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.repo is defined
+- name: Tag the {{ image_name }} build by its inputs
+  block:
+    # A dry run pulls too, since the tag depends on the base it gets.
+    - name: Pull the {{ image_name }} base images
+      community.docker.docker_image:
+        name: "{{ item }}"
+        source: pull
+        force_source: yes
+      loop: >-
+        {{ lookup('ansible.builtin.file', image_config.dockerfile)
+           | regex_findall('(?m)^FROM\s+(?:--\S+\s+)*(\S+)') | reject('eq', 'scratch') | list
+           if image_config.dockerfile is defined else [] }}
+      register: _base_images
+      until: _base_images is succeeded
+      retries: 2
+      delay: 10
+      changed_when: false
+      check_mode: no
 
-- name: Copy patches for {{ image_name }} to remote
-  copy:
-    src: "{{ item }}"
-    dest: "/tmp/docker-image-builds/{{ image_name }}-{{ item | basename }}"
-  loop: "{{ image_config.patches | default([]) }}"
-  when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.patches is defined
+    # Without a connect timeout, an unreachable GitHub address hangs each try
+    # for over two minutes.
+    - name: Find the {{ image_name }} source commit
+      git:
+        repo: "{{ image_config.repo }}"
+        version: "{{ image_config.version }}"
+        dest: "/tmp/docker-image-builds/{{ image_name }}-commit"
+        clone: no
+        update: no
+        key_file: "{{ image_config.ssh_key is defined | ternary('/tmp/docker-image-builds/' + image_name + '-deploy-key', omit) }}"
+        ssh_opts: -o ConnectTimeout=15
+        accept_hostkey: yes
+      register: _source_commit
+      until: _source_commit is succeeded
+      retries: 2
+      delay: 10
+      changed_when: false
+      when: image_config.repo is defined
 
-- name: Apply patches for {{ image_name }}
-  patch:
-    src: "/tmp/docker-image-builds/{{ image_name }}-{{ item | basename }}"
-    basedir: "/tmp/docker-image-builds/{{ image_name }}"
-    strip: 1
-    remote_src: true
-  loop: "{{ image_config.patches | default([]) }}"
-  when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.patches is defined
+    # A changed input changes the tag, so a node builds it. force_rebuild
+    # covers what isn't an input, such as unpinned packages in the Dockerfile.
+    - name: Hash the {{ image_name }} build inputs
+      set_fact:
+        image_config: "{{ image_config | combine({'image_tag': (_inputs | to_json(sort_keys=True) | hash('sha256'))[:12]}) }}"
+      vars:
+        _inputs:
+          config: >-
+            {{ image_config | dict2items | rejectattr('key', 'in', ['rollout', 'hide_build_log', 'ssh_key'])
+               | items2dict }}
+          files: >-
+            {{ query('ansible.builtin.file', *([image_config.dockerfile] if image_config.dockerfile is defined else [])
+                     + image_config.build_files | default([]) + image_config.patches | default([])) }}
+          bases: "{{ _base_images.results | default([]) | map(attribute='image.Id', default='') | list }}"
+          commit: "{{ _source_commit.after | default('') }}"
+  # The current build stays and the deploy carries on; the last play in
+  # default.yml then fails it, so neither an outage nor a broken input goes
+  # unnoticed.
+  rescue:
+    - name: Keep the current {{ image_name }} build while its inputs can't be read
+      set_fact:
+        image_config: "{{ image_config | combine({'image_tag': 'latest'}) }}"
+        docker_build_images_failed: "{{ docker_build_images_failed | default([]) + [image_name ~ ' (inputs)'] }}"
 
-- name: Copy custom Dockerfile for {{ image_name }}
-  copy:
-    src: "{{ image_config.dockerfile }}"
-    dest: "/tmp/docker-image-builds/{{ image_name }}/Dockerfile"
-  when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.dockerfile is defined
+- name: Check if {{ image_name }} image already exists
+  community.docker.docker_image_info:
+    name: "{{ image_config.image_name }}:{{ image_config.image_tag }}"
+  register: image_info
 
-- name: Copy build files for {{ image_name }}
-  copy:
-    src: "{{ item }}"
-    dest: "/tmp/docker-image-builds/{{ image_name }}/{{ item | basename }}"
-  loop: "{{ image_config.build_files | default([]) }}"
-  when: (force_rebuild|default(false)|bool or image_info.images|length == 0) and image_config.build_files is defined
+- name: Report the {{ image_name }} build a real run would make
+  debug:
+    msg: "{{ image_config.image_name }}:{{ image_config.image_tag }} would be built"
+  changed_when: true
+  when: ansible_check_mode and (force_rebuild | default(false) | bool or image_info.images | length == 0)
 
-- name: Build {{ image_name }} docker image
+- name: Build {{ image_name }}
+  when: not ansible_check_mode and (force_rebuild | default(false) | bool or image_info.images | length == 0)
+  block:
+    - name: Create build directory for {{ image_name }}
+      file:
+        path: "/tmp/docker-image-builds/{{ image_name }}"
+        state: directory
+        mode: '0755'
+      when: image_config.repo is not defined
+
+    - name: Clone {{ image_name }} repository
+      git:
+        repo: "{{ image_config.repo }}"
+        dest: "/tmp/docker-image-builds/{{ image_name }}"
+        version: "{{ image_config.version }}"
+        force: yes
+        key_file: "{{ image_config.ssh_key is defined | ternary('/tmp/docker-image-builds/' + image_name + '-deploy-key', omit) }}"
+        ssh_opts: -o ConnectTimeout=15
+        accept_hostkey: yes
+      register: _clone
+      until: _clone is succeeded
+      retries: 2
+      delay: 10
+      when: image_config.repo is defined
+
+    - name: Copy patches for {{ image_name }} to remote
+      copy:
+        src: "{{ item }}"
+        dest: "/tmp/docker-image-builds/{{ image_name }}-{{ item | basename }}"
+      loop: "{{ image_config.patches | default([]) }}"
+
+    - name: Apply patches for {{ image_name }}
+      patch:
+        src: "/tmp/docker-image-builds/{{ image_name }}-{{ item | basename }}"
+        basedir: "/tmp/docker-image-builds/{{ image_name }}"
+        strip: 1
+        remote_src: true
+      loop: "{{ image_config.patches | default([]) }}"
+
+    - name: Copy custom Dockerfile for {{ image_name }}
+      copy:
+        src: "{{ image_config.dockerfile }}"
+        dest: "/tmp/docker-image-builds/{{ image_name }}/Dockerfile"
+      when: image_config.dockerfile is defined
+
+    - name: Copy build files for {{ image_name }}
+      copy:
+        src: "{{ item }}"
+        dest: "/tmp/docker-image-builds/{{ image_name }}/{{ item | basename }}"
+      loop: "{{ image_config.build_files | default([]) }}"
+
+    # no_log doesn't hide a failure's message, which here is the whole build
+    # log, so a hidden build fails in the next task instead.
+    - name: Build {{ image_name }} docker image
+      community.docker.docker_image:
+        name: "{{ image_config.image_name }}"
+        tag: "{{ image_config.image_tag }}"
+        build:
+          path: "/tmp/docker-image-builds/{{ image_name }}"
+          labels: "{{ image_config.labels | default({}) | combine({'homelab.local-build': 'true'}) }}"
+          nocache: "{{ force_rebuild | default(false) | bool }}"
+        source: build
+        force_source: yes
+      register: _build
+      no_log: "{{ _hide_log }}"
+      failed_when: _build is failed and not _hide_log
+      vars:
+        _hide_log: "{{ image_config.hide_build_log | default(false) }}"
+
+    - name: Report the {{ image_name }} build failure without its log
+      fail:
+        msg: >-
+          The {{ image_name }} build failed. To see why, run
+          `DOCKER_BUILDKIT=0 docker build /tmp/docker-image-builds/{{ image_name }}` on the host.
+      when: _build.failed_when_suppressed_exception is defined
+  rescue:
+    - name: Keep the current {{ image_name }} build
+      set_fact:
+        docker_build_images_failed: "{{ docker_build_images_failed | default([]) + [image_name ~ ' (build)'] }}"
+
+- name: Find the {{ image_name }} build and its latest tag
+  community.docker.docker_image_info:
+    name:
+      - "{{ image_config.image_name }}:{{ image_config.image_tag }}"
+      - "{{ image_config.image_name }}:latest"
+  register: _latest_images
+
+- name: Read the {{ image_name }} image IDs
+  set_fact:
+    _build_id: "{{ _tag_ids[image_config.image_name ~ ':' ~ image_config.image_tag] | default('') }}"
+    _latest_id: "{{ _tag_ids[image_config.image_name ~ ':latest'] | default('') }}"
+  vars:
+    _tag_pairs: "{{ _latest_images.images | subelements('RepoTags', skip_missing=True) }}"
+    _tag_ids: "{{ dict(_tag_pairs | map(attribute='1') | zip(_tag_pairs | map(attribute='0.Id'))) }}"
+
+# Check mode never builds, so a pending build has no image to tag yet.
+- name: Point {{ image_name }}:latest at the current build
   community.docker.docker_image:
-    name: "{{ image_config.image_name }}"
-    tag: "{{ image_config.image_tag }}"
-    build:
-      path: "/tmp/docker-image-builds/{{ image_name }}"
-      labels: "{{ image_config.labels | default(omit) }}"
-    source: build
-    force_source: yes
-  when: force_rebuild|default(false)|bool or image_info.images|length == 0
+    name: "{{ image_config.image_name }}:{{ image_config.image_tag }}"
+    repository: "{{ image_config.image_name }}:latest"
+    source: local
+    force_tag: yes
+  when: _build_id not in ['', _latest_id]
+
+# Decided by what runs, not by this run's retag, so a restart that a run missed,
+# or that had no swarm manager to go through, is made by the next one.
+- name: Roll the swarm services still on an older {{ image_name }} build
+  when:
+    - _build_id != ''
+    - image_config.rollout | default(true)
+    - groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | length > 0
+  block:
+    - name: List the swarm services
+      community.docker.docker_swarm_info:
+        services: yes
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
+      register: _swarm_services
+
+    - name: List the swarm tasks on this node
+      community.docker.docker_host_info:
+        containers: yes
+        containers_filters:
+          label: com.docker.swarm.service.name
+        verbose_output: yes
+      register: _swarm_tasks
+
+    - name: Restart them on the new build
+      command: "docker service update --force --detach {{ item | quote }}"
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
+      loop: >-
+        {{ _swarm_tasks.containers | rejectattr('ImageID', 'eq', _build_id)
+           | map(attribute='Labels') | map('dict2items') | flatten(levels=1)
+           | selectattr('key', 'eq', 'com.docker.swarm.service.name') | map(attribute='value')
+           | select('in', _on_latest) | unique | list }}
+      vars:
+        _on_latest: >-
+          {{ _swarm_services.services | selectattr('Image', 'eq', image_config.image_name ~ ':latest')
+             | map(attribute='Name') | list }}
 
 - name: Remove deploy key for {{ image_name }} from remote
   file:
     path: "/tmp/docker-image-builds/{{ image_name }}-deploy-key"
     state: absent
+  check_mode: no
+  changed_when: false
   when: image_config.ssh_key is defined

@@ -59,7 +59,7 @@ Without `docker_migrate_labels=yes` the move is only reported and the label reco
 
 - **Host bind mounts** — `/var/docker/...` paths come from `project-files`, which is keyed by hostname, so the file tree and the `project_files` declaration move too.
 - **CIFS shares** — the target needs whatever the services mount beyond `Backups`.
-- **Locally built images** — `docker_images_to_build` moves with the workload, or the target has no image to run.
+- **Locally built images** — `docker_images_to_build` moves with the workload, or the target has no image to run. The old host keeps its `<name>:latest` until you `docker rmi` it.
 - **Host-network services** — not on the overlay, so Traefik routes them from `external-rules.yaml` by address rather than by discovery. That address is not a label and does not follow the move; repoint it or the service works locally and 502s through Traefik.
 - **Endpoints other hosts write to** — `influxdb3_url` follows the `metrics` label out of the inventory, but each Telegraf agent only picks up the new address when its config is rewritten. Run `make run tags=telegraf` across every host after moving `metrics`, or the agents keep writing to the old address: nothing errors, the graphs just stop filling.
 
@@ -387,6 +387,6 @@ Each drill loads the dump from the volume into a scratch Postgres (production's 
 
 **A bad or expired token** shows in the task log as `no registration token for finitelabs/control4-zigbee3` followed by GitHub's message, such as `Bad credentials`. The task waits a minute before exiting, which keeps the API calls down while still letting swarm's restarts trip **Container Crash Loop (Swarm)**. Every job is a new task, so that alert can also fire on a run of jobs under about three minutes each; the catalogue job takes far longer.
 
-**Updating the runner.** Bump the `FROM` tag in the Dockerfile and `image_tag` together, since a node builds only a tag it does not have. An image that falls behind a runner release keeps working: each new task's runner updates itself first, at the cost of that download per job until the image catches up. The image is excluded from the docker-prune sweep, because between jobs no container may reference it, so after a bump remove the old tag by hand with `docker rmi gha-runner:<old>` on each runner node.
+**Updating the runner.** Nothing to bump. The image builds from `actions-runner:latest` and is tagged by a hash of its inputs, the base image's digest included, so each deploy builds a new runner release by itself and moves `gha-runner:latest`, which the stack runs. The service isn't restarted, so no job is cancelled; each task takes the new build when it starts. Older builds are pruned once no task uses them.
 
-**If `edge` moves**, the runner goes the other way: it starts on the old edge node and leaves the new one. Move `gha-runner` in `docker_images_to_build` to match, and check the node it lands on can spare 4 CPUs and 8G.
+**If `edge` moves**, the runner goes the other way: it starts on the old edge node and leaves the new one. Move `gha-runner` in `docker_images_to_build` to match, `docker rmi gha-runner:latest` on the node it left, and check the node it lands on can spare 4 CPUs and 8G.
