@@ -30,6 +30,15 @@ gh workflow run Deploy -R derek-miller/homelab-ansible
 
 A local `make run` ignores the variable.
 
+**Skipping a host that is down.** An unreachable host fails every deploy. List it, or several separated by commas, in another repository variable, and deploys leave it out until you delete it:
+
+```bash
+gh variable set DEPLOY_SKIP_HOSTS --body raspi1 -R derek-miller/homelab-ansible
+gh variable delete DEPLOY_SKIP_HOSTS -R derek-miller/homelab-ansible
+```
+
+Don't skip the first swarm manager (rackvm1): the swarm plays require it in the run. The next deploy after deleting the variable brings a skipped host up to date. A local `make run` ignores this variable too.
+
 ## Moving a swarm workload to another host
 
 Swarm does not move local volumes, so a move happens in two halves: copy the data while the services are stopped, and only then let the label follow. `generic/docker/migrate-labels` does both, driven by the inventory.
