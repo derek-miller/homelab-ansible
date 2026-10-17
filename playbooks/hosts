@@ -27,15 +27,16 @@ create_cloudflare_ipv4_dns_record=yes
 [nas-subnet-router]
 rackvm[1:5]
 
-[cifs-shares]
-gianos-raspi1  cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
-mertins-raspi1 cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
-quinn-raspi1   cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
-rackvm1        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Container"]'
-rackvm2        cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
-rackvm3        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Public"]'
-rackvm[4:5]    cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
-raspi1         cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
+[smb-shares]
+gianos-raspi1  smb_share_config=unas_over_ts smb_share_names='["Backups"]'
+mertins-raspi1 smb_share_config=unas_over_ts smb_share_names='["Backups"]'
+quinn-raspi1   smb_share_config=unas_over_ts smb_share_names='["Backups"]'
+rackvm1        smb_share_config=unas         smb_share_names='["Backups", "Container"]'
+rackvm2        smb_share_config=unas         smb_share_names='["Backups"]'
+rackvm3        smb_share_config=unas         smb_share_names='["Backups", "Public"]'
+rackvm[4:5]    smb_share_config=unas         smb_share_names='["Backups"]'
+rackmini1      smb_share_config=unas         smb_share_names='["Container", "Backups", "Public"]'
+raspi1         smb_share_config=unas_over_ts smb_share_names='["Backups"]'
 
 [docker]
 gianos-raspi1
@@ -102,9 +103,6 @@ rackvm4
 rackvm4
 
 [macos]
-rackmini1
-
-[smb-shares]
 rackmini1
 
 [homebridge]

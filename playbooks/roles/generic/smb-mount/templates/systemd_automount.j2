@@ -1,0 +1,8 @@
+[Unit]
+Description=automount {{ smb_share_name }}
+
+[Automount]
+Where={{ smb_mount_path }}
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,125 @@
+---
+# ---- root-level mount directory ----------------------------------------
+# macOS's sealed system volume is read-only at /, so a root-level path like
+# /mnt has to be declared in /etc/synthetic.conf. We use the SYMLINK form
+# ("name\tpath") because autofs and diskutil resolve mountpoints via
+# realpath: a bare-token synthetic dir at /mnt vs the underlying
+# /System/Volumes/Data/mnt are different inodes — autofs ends up mounting
+# at the latter while users / roles reference the former. With a symlink,
+# /mnt resolves to the same inode autofs mounted on.
+- name: expose the mount directory at the root
+  vars:
+    _link: "{{ (smb_mount_dir | regex_replace('^/+', '')).split('/') | first }}"
+    _target: "/System/Volumes/Data/{{ _link }}"
+  block:
+    - name: ensure the synthetic link target exists
+      file:
+        path: "{{ _target }}"
+        state: directory
+        owner: root
+        group: "{{ root_group }}"
+        mode: '0755'
+
+    - name: declare the synthetic link
+      lineinfile:
+        path: /etc/synthetic.conf
+        regexp: '^{{ _link }}\t'
+        line: "{{ _link }}\t{{ _target }}"
+        create: yes
+        owner: root
+        group: "{{ root_group }}"
+        mode: '0644'
+
+    - name: probe whether the synthetic link is in place
+      stat:
+        path: "/{{ _link }}"
+      register: _synthetic_probe
+
+    # apfs.util -t stitches new synthetic entries but does not convert an
+    # already-stitched empty dir into a symlink. The actual transition
+    # only happens at boot.
+    - name: pause for reboot to materialize the synthetic link
+      pause:
+        seconds: 600
+        prompt: |
+
+          ====================================================================
+          MANUAL STEP REQUIRED — reboot to apply /etc/synthetic.conf
+          ====================================================================
+
+          /{{ _link }} must be a symlink to {{ _target }}; it is
+          {% if not _synthetic_probe.stat.exists %}missing{% elif not _synthetic_probe.stat.islnk %}not a symlink{% else %}a symlink to {{ _synthetic_probe.stat.lnk_target }}{% endif %}.
+          synthetic.conf changes only apply at boot.  On the Mac, run:
+
+            sudo /sbin/shutdown -r now
+
+          then log in at the Mac (FileVault keeps SSH down until someone
+          does) and press Ctrl+C, then C, here. The play otherwise resumes
+          on its own after 10 minutes.
+      when: not (_synthetic_probe.stat.islnk | default(false)) or _synthetic_probe.stat.lnk_target != _target
+
+# ---- ensure mount_point parents exist ----------------------------------
+# autofs creates the leaf trigger at each mount point itself, but NOT any
+# intermediate path components below the synthetic link.
+- name: ensure the mount directory exists
+  file:
+    path: "{{ smb_mount_dir | regex_replace('/+$', '') }}"
+    state: directory
+    owner: root
+    group: "{{ root_group }}"
+    mode: '0755'
+
+# ---- autofs map --------------------------------------------------------
+# This part IS writable over SSH — only /etc/auto_master itself is not.
+- name: install autofs SMB direct map
+  template:
+    src: auto_smb.j2
+    dest: "{{ smb_mount_map_path }}"
+    owner: root
+    group: "{{ root_group }}"
+    mode: '0600'
+  notify: reload autofs
+
+# ---- register the direct map in /etc/auto_master (manual step) ---------
+# See defaults/main.yml: no automatable mechanism can write
+# /etc/auto_master on this host. Detect whether the line is there and
+# pause with the exact command when it's missing, rather than pretending
+# an automated fix is possible.
+- name: probe /etc/auto_master for map entry
+  command: "grep -qE '^/-[[:space:]]+{{ smb_mount_map_path | basename }}$' /etc/auto_master"
+  register: _automaster_probe
+  changed_when: false
+  failed_when: false
+
+- name: prompt user to add map line to /etc/auto_master via GUI Terminal
+  pause:
+    seconds: 600
+    prompt: |
+
+      =====================================================================
+      MANUAL STEP REQUIRED — add autofs map line to /etc/auto_master
+      =====================================================================
+
+      Writing /etc/auto_master fails over SSH on this host (and even from
+      a boot-time LaunchDaemon) — only an interactive local Terminal.app
+      session can do it. In a Terminal.app window on the Mac (NOT over
+      SSH), paste:
+
+        printf '/-\t{{ smb_mount_map_path | basename }}\n' | sudo tee -a /etc/auto_master && sudo /usr/sbin/automount -vc
+
+      Then press Ctrl+C, then C, here. The play otherwise resumes on its
+      own after 10 minutes.
+  when: _automaster_probe.rc != 0
+
+- name: reload autofs
+  command: /usr/sbin/automount -vc
+  changed_when: true
+  when: _automaster_probe.rc != 0
+
+- name: verify /etc/auto_master has map entry
+  command: "/usr/bin/grep -qE '^/-[[:space:]]+{{ smb_mount_map_path | basename }}$' /etc/auto_master"
+  register: _automaster_verify
+  retries: 5
+  delay: 1
+  until: _automaster_verify.rc == 0
+  changed_when: false
