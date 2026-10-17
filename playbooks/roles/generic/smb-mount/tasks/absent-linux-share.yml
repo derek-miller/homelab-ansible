@@ -49,7 +49,12 @@
   systemd:
     daemon_reload: yes
 
-- name: delete {{ smb_mount_path }}
-  file:
-    path: "{{ smb_mount_path }}"
-    state: absent
+# rmdir, never a recursive delete: a share still mounted here, by hand or by
+# a unit already gone, would have its NAS contents removed.
+- name: remove the emptied {{ smb_mount_path }}
+  command: "rmdir {{ smb_mount_path }}"
+  args:
+    removes: "{{ smb_mount_path }}"
+  register: _smb_rmdir
+  failed_when: false
+  changed_when: _smb_rmdir is changed and _smb_rmdir.rc == 0
