@@ -1,6 +1,13 @@
 ---
 smb_mount_state: present
 
+# The play passes one entry of cifs_shares_host_configs (see default.yml):
+#   smb_share_host, smb_share_username, smb_share_password, smb_share_names,
+#   smb_mount_dir, and on Linux smb_mount_cifs_options + smb_credentials_path.
+# Each share mounts at <smb_mount_dir>/<name>.
+smb_share_names: []
+
+# ---- macOS ----------------------------------------------------------------
 # Name of the autofs map file installed under /etc. Override per-host if
 # you need to manage multiple disjoint SMB share sets via separate maps.
 smb_mount_map_name: smb
@@ -17,14 +24,15 @@ smb_mount_map_path: "/etc/auto_{{ smb_mount_map_name }}"
 # live local authentication rather than process identity or connection
 # path — nothing scriptable. The role detects whether the line is
 # present and pauses with the exact command to run locally when it's
-# missing (see present.yml/absent.yml).
+# missing (see present-darwin.yml/absent-darwin.yml).
 #
 # macOS OS updates periodically reset /etc/auto_master to the stock
 # system default and strip this line, so this manual step recurs after
 # updates — re-run this role (`make run hosts=<host> tags=smb-mount`)
 # after an update and follow the prompt if it appears.
 
-# mount_smbfs options passed via autofs.
+# mount_smbfs options passed via autofs. The host config's mount_options are
+# mount.cifs syntax, so macOS keeps its own.
 #   noowners — ignore the uid/gid the SMB server reports; files appear
 #              owned by the accessing process. Without this, if unas
 #              exports a share root as root:wheel 700, the Mac user can't
@@ -33,27 +41,4 @@ smb_mount_map_path: "/etc/auto_{{ smb_mount_map_name }}"
 #              unreachable. Prevents a dead unas from wedging processes.
 #   rw       — read/write
 #   nosuid   — defense-in-depth on a network share
-smb_mount_options: "noowners,soft,rw,nosuid"
-
-# Timeout (seconds) for autofs idle-unmount of a share. After this much
-# inactivity automountd unmounts; the next access re-triggers a fresh
-# mount, which is how recovery from a wedged SMB session happens.
-smb_mount_idle_timeout: 600
-
-# Caller must set:
-#   smb_mounts:
-#     - server: "<ip>"
-#       username: "..."
-#       password: "..."
-#       shares:
-#         - name: MyShare
-#           mount_point: /mnt/MyShare
-#         - name: MyOtherShare
-#           mount_point: /some/other/path
-# in host_vars/<host>/vault.yml. Each share has its own mount_point —
-# /Volumes is owned by macOS DiskArbitration and refuses autofs triggers,
-# so most callers will use /mnt/<share> (which also requires /mnt to be
-# declared in mac_synthetic_links; see the common role).
-#
-# Mounts trigger on first access to mount_point; idle-unmount after
-# smb_mount_idle_timeout seconds.
+smb_mount_smbfs_options: "noowners,soft,rw,nosuid"

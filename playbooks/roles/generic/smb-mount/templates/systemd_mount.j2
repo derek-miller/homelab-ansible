@@ -1,0 +1,12 @@
+[Unit]
+Description=mount {{ smb_share_name }}
+
+[Mount]
+What=//{{ smb_share_host | mandatory | regex_replace('^\\/+|\\/+$', '') }}/{{ smb_share_name }}
+Where={{ smb_mount_path }}
+
+Type=cifs
+Options=credentials={{ smb_credentials_path }}{{ ',' + smb_mount_cifs_options if smb_mount_cifs_options else '' }}
+
+[Install]
+WantedBy=multi-user.target

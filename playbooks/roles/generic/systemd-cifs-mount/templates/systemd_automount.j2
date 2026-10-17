@@ -1,8 +1,0 @@
-[Unit]
-Description=automount {{ cifs_share_name }}
-
-[Automount]
-Where={{ cifs_mount_path }}
-
-[Install]
-WantedBy=multi-user.target

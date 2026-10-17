@@ -35,6 +35,7 @@ rackvm1        cifs_shares_host_config=unas         cifs_share_names='["Backups"
 rackvm2        cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
 rackvm3        cifs_shares_host_config=unas         cifs_share_names='["Backups", "Public"]'
 rackvm[4:5]    cifs_shares_host_config=unas         cifs_share_names='["Backups"]'
+rackmini1      cifs_shares_host_config=unas         cifs_share_names='["Container", "Backups", "Public"]'
 raspi1         cifs_shares_host_config=unas_over_ts cifs_share_names='["Backups"]'
 
 [docker]
@@ -102,9 +103,6 @@ rackvm4
 rackvm4
 
 [macos]
-rackmini1
-
-[smb-shares]
 rackmini1
 
 [homebridge]

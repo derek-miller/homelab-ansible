@@ -34,3 +34,11 @@
 
 - name: flush handlers
   meta: flush_handlers
+
+- name: remove the synthetic link declaration
+  vars:
+    _link: "{{ (smb_mount_dir | regex_replace('^/+', '')).split('/') | first }}"
+  lineinfile:
+    path: /etc/synthetic.conf
+    regexp: '^{{ _link }}\t'
+    state: absent

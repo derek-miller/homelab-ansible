@@ -1,0 +1,20 @@
+---
+- name: install cifs dependencies
+  apt:
+    name: cifs-utils
+    state: latest
+
+- name: create cifs credentials file
+  copy:
+    content: |
+      username={{ smb_share_username | mandatory }}
+      password={{ smb_share_password | mandatory }}
+    dest: "{{ smb_credentials_path | mandatory }}"
+    owner: root
+    group: root
+    mode: 0600
+
+- include_tasks: present-linux-share.yml
+  with_items: "{{ smb_share_names | mandatory }}"
+  loop_control:
+    loop_var: smb_share_name

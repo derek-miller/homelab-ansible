@@ -10,8 +10,6 @@
 # Plaintext credentials below — file is mode 0600 root:wheel. Anyone with
 # root on this host can read these credentials; for a homelab NAS share
 # that's the accepted tradeoff.
-{% for mount in smb_mounts %}
-{% for share in mount.shares %}
-{{ share.mount_point }} -fstype=smbfs,{{ smb_mount_options }} ://{{ mount.username }}:{{ mount.password | urlencode }}@{{ mount.server }}/{{ share.name }}
-{% endfor %}
+{% for share in smb_share_names %}
+{{ smb_mount_dir | regex_replace('/+$', '') }}/{{ share }} -fstype=smbfs,{{ smb_mount_smbfs_options }} ://{{ smb_share_username }}:{{ smb_share_password | urlencode }}@{{ smb_share_host }}/{{ share }}
 {% endfor %}
