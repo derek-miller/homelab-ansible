@@ -27,9 +27,14 @@
            | regex_findall('(?m)^FROM\s+(?:--\S+\s+)*(\S+)') | reject('eq', 'scratch') | list
            if image_config.dockerfile is defined else [] }}
       register: _base_images
+      until: _base_images is succeeded
+      retries: 2
+      delay: 10
       changed_when: false
       check_mode: no
 
+    # Without a connect timeout, an unreachable GitHub address hangs each try
+    # for over two minutes.
     - name: Find the {{ image_name }} source commit
       git:
         repo: "{{ image_config.repo }}"
@@ -38,8 +43,12 @@
         clone: no
         update: no
         key_file: "{{ image_config.ssh_key is defined | ternary('/tmp/docker-image-builds/' + image_name + '-deploy-key', omit) }}"
+        ssh_opts: -o ConnectTimeout=15
         accept_hostkey: yes
       register: _source_commit
+      until: _source_commit is succeeded
+      retries: 2
+      delay: 10
       changed_when: false
       when: image_config.repo is defined
 
@@ -95,7 +104,12 @@
         version: "{{ image_config.version }}"
         force: yes
         key_file: "{{ image_config.ssh_key is defined | ternary('/tmp/docker-image-builds/' + image_name + '-deploy-key', omit) }}"
+        ssh_opts: -o ConnectTimeout=15
         accept_hostkey: yes
+      register: _clone
+      until: _clone is succeeded
+      retries: 2
+      delay: 10
       when: image_config.repo is defined
 
     - name: Copy patches for {{ image_name }} to remote
