@@ -5,7 +5,4 @@ tailscale_state: present
 # assembled in group_vars/tailscale from tailscale_common_args + tailscale_host_args.
 tailscale_args: ""
 
-# Caller must set `tailscale_authkey` (per host or group) for fresh Darwin
-# installs. This is the same var the artis3n.tailscale.machine Linux role
-# uses, so a single authkey in group_vars/tailscale/vars.yml covers both.
-# Unused if tailscale is already running on the host.
+tailscale_launchd_label: homebrew.mxcl.tailscale

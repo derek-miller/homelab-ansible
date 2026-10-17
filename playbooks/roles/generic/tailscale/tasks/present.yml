@@ -1,6 +1,0 @@
----
-- include_tasks: setup-linux.yml
-  when: ansible_os_family != 'Darwin'
-
-- include_tasks: setup-darwin.yml
-  when: ansible_os_family == 'Darwin'

@@ -1,0 +1,37 @@
+---
+- name: install tailscale via homebrew
+  community.general.homebrew:
+    name: tailscale
+    state: latest
+  become_user: "{{ mac_user }}"
+  notify: restart tailscaled
+
+# A root-owned system job; tailscaled keeps its own rotating logs in
+# /Library/Tailscale, so launchd doesn't capture its output.
+- name: install tailscaled LaunchDaemon
+  template:
+    src: tailscaled.launchd.plist.jinja2
+    dest: "/Library/LaunchDaemons/{{ tailscale_launchd_label }}.plist"
+    owner: root
+    group: "{{ root_group }}"
+    mode: 0644
+  notify: restart tailscaled
+
+# The same role as Linux, with the binaries left to Homebrew and its service
+# calls sent to launchd. See present-linux.yml for why a dry run skips it.
+- name: configure tailscale (artis3n)
+  include_role:
+    name: artis3n.tailscale.machine
+    apply:
+      module_defaults:
+        ansible.builtin.service:
+          use: community.general.launchd
+  vars:
+    tailscale_manage_binaries_skip: true
+    tailscale_service: "{{ tailscale_launchd_label }}"
+  when: not ansible_check_mode
+
+- name: note that dry runs don't preview tailscale
+  debug:
+    msg: A dry run doesn't preview tailscale; artis3n needs a live status.
+  when: ansible_check_mode
