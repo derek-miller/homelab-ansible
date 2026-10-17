@@ -2,7 +2,7 @@
 # Tailscale absent — fully reverse what the setup-* files did:
 #   - tailscale logout + down (disconnect from tailnet)
 #   - bootout + remove LaunchDaemon plist (Darwin)
-#   - brew uninstall + remove /usr/local/bin symlink (Darwin)
+#   - brew uninstall (Darwin)
 #   - on Linux, delegate to artis3n with state=absent
 
 - name: locate tailscale CLI
@@ -43,11 +43,6 @@
     - name: remove /Library/LaunchDaemons/homebrew.mxcl.tailscale.plist
       file:
         path: /Library/LaunchDaemons/homebrew.mxcl.tailscale.plist
-        state: absent
-
-    - name: remove /usr/local/bin/tailscale symlink
-      file:
-        path: /usr/local/bin/tailscale
         state: absent
 
     - name: brew uninstall tailscale

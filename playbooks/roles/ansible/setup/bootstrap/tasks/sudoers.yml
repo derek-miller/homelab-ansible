@@ -1,0 +1,17 @@
+---
+- name: ensure sudoers.d directory exists
+  file:
+    path: /etc/sudoers.d
+    owner: root
+    group: "{{ root_group }}"
+    mode: 0755
+    state: directory
+
+- name: grant ansible surrogate user passwordless sudoer
+  template:
+    src: sudoers.d/ansible-surrogate.jinja2
+    dest: /etc/sudoers.d/ansible-surrogate
+    owner: root
+    group: "{{ root_group }}"
+    mode: 0440
+    validate: "{{ 'visudo -cf %s' }}"

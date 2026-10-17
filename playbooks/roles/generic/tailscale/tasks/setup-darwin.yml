@@ -98,7 +98,7 @@
       changed_when: true
 
     - name: wait for tailscaled to be ready
-      command: "{{ homebrew_prefix }}/bin/tailscale status --json"
+      command: "tailscale status --json"
       register: _tailscale_wait
       retries: 15
       delay: 2
@@ -139,14 +139,14 @@
       no_log: true
 
     - name: check tailscale auth state
-      command: "{{ homebrew_prefix }}/bin/tailscale status --json"
+      command: "tailscale status --json"
       register: _tailscale_status_check
       changed_when: false
       failed_when: false
 
     - name: authenticate tailscale with authkey
       command: >-
-        {{ homebrew_prefix }}/bin/tailscale up
+        tailscale up
         --authkey={{ _tailscale_authkey_string | trim }}
         {{ _tailscale_tags_arg | trim }}
         {{ tailscale_args }}
@@ -161,20 +161,9 @@
       # `tailscale up` returns before the interface is fully up; poll the CLI
       # until an IPv4 address is assigned so downstream `tailscale ip` calls
       # succeed deterministically.
-      command: "{{ homebrew_prefix }}/bin/tailscale ip -4"
+      command: "tailscale ip -4"
       register: _tailscale_ip_wait
       retries: 15
       delay: 2
       until: _tailscale_ip_wait.rc == 0 and _tailscale_ip_wait.stdout | length > 0
       changed_when: false
-
-# Symlink the brew-installed CLI into /usr/local/bin so downstream tasks
-# (default.yml's `command: tailscale ip`) resolve it on PATH — matches how
-# Linux distros put /usr/bin/tailscale on disk via apt.
-- name: symlink tailscale CLI to /usr/local/bin
-  file:
-    src: "{{ homebrew_prefix }}/bin/tailscale"
-    dest: /usr/local/bin/tailscale
-    state: link
-    force: yes
-  when: tailscale_state == 'present'
