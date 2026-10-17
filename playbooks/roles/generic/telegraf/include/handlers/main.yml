@@ -5,11 +5,14 @@
     state: restarted
   when: ansible_service_mgr != 'launchd'
 
-# restarted unloads and reloads the job, so a changed plist takes effect. A
-# dry run may not have the plist to find.
+# restarted unloads and reloads the job, so a changed plist takes effect. The
+# module reports success even when the job exits at once, so check that it
+# stayed up, as the Linux unit does. A dry run may not have the plist to find.
 - name: restart telegraf (launchd)
   community.general.launchd:
     name: "{{ telegraf_launchd_label }}"
     state: restarted
+  register: _telegraf_launchd
+  failed_when: _telegraf_launchd is failed or _telegraf_launchd.status.current_state != 'started'
   when: ansible_service_mgr == 'launchd' and not ansible_check_mode
   listen: restart telegraf

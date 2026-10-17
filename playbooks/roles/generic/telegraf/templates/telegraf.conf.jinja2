@@ -3214,7 +3214,7 @@
 {% endif %}
 
 
-{% if ansible_system == 'Linux' %}
+{% if telegraf_inputs_ntpq | bool %}
 # Get standard NTP query metrics, requires ntpq executable.
 [[inputs.ntpq]]
   ## Servers to query with ntpq.

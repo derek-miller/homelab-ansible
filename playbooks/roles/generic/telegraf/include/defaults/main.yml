@@ -8,8 +8,11 @@ telegraf_conf: /etc/telegraf/telegraf.conf
 telegraf_conf_dir: /etc/telegraf/telegraf.d
 telegraf_apt_dependencies:
   - lm-sensors
+# Set false on hosts without ntpq, such as chrony hosts.
+telegraf_inputs_ntpq: "{{ ansible_system == 'Linux' }}"
 
 telegraf_launchd_label: com.influxdata.telegraf
+telegraf_log_dir: /var/log/telegraf
 # Empty logs to stderr, which the journal keeps on Linux. launchd keeps
 # nothing, so macOS logs to a file Telegraf rotates itself.
-telegraf_logfile: "{{ '/var/log/telegraf/telegraf.log' if ansible_os_family == 'Darwin' else '' }}"
+telegraf_logfile: "{{ telegraf_log_dir ~ '/telegraf.log' if ansible_os_family == 'Darwin' else '' }}"

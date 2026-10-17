@@ -1,6 +1,6 @@
 ---
 - assert:
-    that: telegraf_syslog_state in ('present',)
+    that: telegraf_syslog_state in ('present', 'absent')
     quiet: yes
 
 - include_role:
@@ -10,4 +10,4 @@
     telegraf_plugin_conf: syslog.conf
     telegraf_plugin_state: "{{ telegraf_syslog_state }}"
 
-- include_tasks: "present-{{ ansible_os_family | lower }}.yml"
+- include_tasks: "{{ telegraf_syslog_state }}-{{ ansible_os_family | lower }}.yml"

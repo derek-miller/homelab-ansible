@@ -8,9 +8,9 @@
 
 - include_tasks: cleanup-backups.yml
 
-- include_tasks: "absent-{{ ansible_os_family | lower }}.yml"
-
 - name: remove rendered telegraf config
   file:
     path: "{{ telegraf_conf }}"
     state: absent
+
+- include_tasks: "absent-{{ ansible_os_family | lower }}.yml"

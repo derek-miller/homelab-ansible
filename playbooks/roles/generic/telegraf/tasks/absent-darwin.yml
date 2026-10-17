@@ -15,18 +15,51 @@
     path: "/Library/LaunchDaemons/{{ telegraf_launchd_label }}.plist"
     state: absent
 
+- name: find telegraf logs
+  find:
+    paths: "{{ telegraf_log_dir }}"
+    patterns:
+      - "{{ telegraf_logfile | basename | splitext | first }}*"
+      - stderr.log
+  register: _telegraf_logs
+
 - name: remove telegraf logs
   file:
-    path: "{{ telegraf_logfile | dirname }}"
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ _telegraf_logs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: remove telegraf conf directory
+  file:
+    path: "{{ telegraf_conf_dir }}"
     state: absent
 
-- name: remove telegraf config
-  file:
-    path: "{{ telegraf_conf | dirname }}"
-    state: absent
+# rmdir leaves a directory something else still uses.
+- name: remove the emptied telegraf directories
+  command: "rmdir {{ item }}"
+  args:
+    removes: "{{ item }}"
+  loop:
+    - "{{ telegraf_log_dir }}"
+    - "{{ telegraf_conf | dirname }}"
+  register: _telegraf_rmdir
+  failed_when: false
+  changed_when: _telegraf_rmdir.rc == 0
 
 - name: brew uninstall telegraf
   community.general.homebrew:
     name: telegraf
     state: absent
   become_user: "{{ mac_user }}"
+
+# brew uninstall leaves the sample config `brew install` put in etc.
+- name: remove Homebrew's telegraf config
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ homebrew_prefix }}/etc/telegraf.conf"
+    - "{{ homebrew_prefix }}/etc/telegraf.conf.default"
+    - "{{ homebrew_prefix }}/etc/telegraf.d"

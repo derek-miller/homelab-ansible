@@ -2,6 +2,6 @@
 - name: install telegraf via homebrew
   community.general.homebrew:
     name: telegraf
-    state: present
+    state: latest
   become_user: "{{ mac_user }}"
   notify: restart telegraf

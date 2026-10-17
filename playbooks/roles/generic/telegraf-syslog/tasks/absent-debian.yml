@@ -1,0 +1,6 @@
+---
+- name: remove rsyslog remote configuration
+  file:
+    path: /etc/rsyslog.d/50-telegraf.conf
+    state: absent
+  notify: restart rsyslog

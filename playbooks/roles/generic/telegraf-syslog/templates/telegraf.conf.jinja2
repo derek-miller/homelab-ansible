@@ -50,6 +50,8 @@
   ## Must be one of "RFC5424", or "RFC3164".
 {% if ansible_os_family == 'Darwin' %}
   syslog_standard = "RFC3164"
+{# macOS syslogd sends multi-line messages with embedded newlines, which strict parsing drops; best effort keeps their first line. #}
+  best_effort = true
 {% else %}
   # syslog_standard = "RFC5424"
 {% endif %}

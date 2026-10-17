@@ -1,0 +1,7 @@
+---
+- name: stop forwarding syslog to telegraf
+  lineinfile:
+    path: /etc/syslog.conf
+    regexp: '^\*\.\*\s+@127\.0\.0\.1:\d+$'
+    state: absent
+  notify: reload syslogd

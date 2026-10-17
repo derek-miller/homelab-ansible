@@ -1,7 +1,7 @@
 ---
 - name: ensure telegraf log directory exists
   file:
-    path: "{{ telegraf_logfile | dirname }}"
+    path: "{{ telegraf_log_dir }}"
     state: directory
     owner: root
     group: "{{ root_group }}"
@@ -22,4 +22,8 @@
   community.general.launchd:
     name: "{{ telegraf_launchd_label }}"
     state: started
+  register: _telegraf_launchd
+  failed_when: >-
+    _telegraf_launchd is failed
+    or (not ansible_check_mode and _telegraf_launchd.status.current_state != 'started')
   when: not (ansible_check_mode and _telegraf_launchd_plist is changed)
