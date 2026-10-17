@@ -68,7 +68,7 @@ galaxy-install: playbooks/roles/requirements.yml playbooks/collections/requireme
 	ansible-galaxy role install --force -r playbooks/roles/requirements.yml --roles-path playbooks/roles/
 	ansible-galaxy collection install --force -r playbooks/collections/requirements.yml --collections-path playbooks/collections/
 
-upgrade = $(or UPGRADE,0)
+upgrade = $(or $(UPGRADE),0)
 ifneq ($(upgrade),0)
 pip_compile_flags += --upgrade --rebuild
 endif
