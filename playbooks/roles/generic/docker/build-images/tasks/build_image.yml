@@ -3,77 +3,6 @@
   set_fact:
     image_config: "{{ available_docker_images[image_name] }}"
 
-- name: Hash the {{ image_name }} build files
-  set_fact:
-    _files_hash: >-
-      {{ query('ansible.builtin.file', image_config.dockerfile, *image_config.build_files)
-         | join('\n') | hash('sha256') }}
-  when: image_config.base_image is defined
-
-- name: Find the {{ image_name }} base release
-  when: image_config.base_image is defined
-  block:
-    - name: Get a token for the {{ image_name }} base image
-      uri:
-        url: "https://ghcr.io/token?scope=repository:{{ image_config.base_image }}:pull"
-      register: _base_token
-      until: _base_token is succeeded
-      retries: 3
-      delay: 10
-      check_mode: no
-      when: image_config.base_version.endswith('.x')
-
-    # The list runs oldest first, so a second page would hide the newest.
-    - name: List the {{ image_name }} base image's tags
-      uri:
-        url: "https://ghcr.io/v2/{{ image_config.base_image }}/tags/list?n=1000"
-        headers:
-          Authorization: "Bearer {{ _base_token.json.token }}"
-      register: _base_tags
-      until: _base_tags is succeeded
-      failed_when: _base_tags.status != 200 or _base_tags.link is defined
-      retries: 3
-      delay: 10
-      check_mode: no
-      when: image_config.base_version.endswith('.x')
-
-    - name: Pick the {{ image_name }} base release
-      set_fact:
-        _base_release: >-
-          {{ image_config.base_version if not image_config.base_version.endswith('.x')
-             else _base_tags.json.tags
-               | select('match', '^' ~ (image_config.base_version[:-2] | regex_escape)
-                        ~ '\.\d+' * (3 - image_config.base_version[:-2].split('.') | length) ~ '$')
-               | community.general.version_sort | last }}
-  rescue:
-    - name: Find the build the {{ image_name }} moving tag points at
-      community.docker.docker_image_info:
-        name: "{{ image_config.image_name }}:{{ image_config.moving_tag }}"
-      register: _moving_current
-
-    - name: Keep the current {{ image_name }} build while its base release is unknown
-      set_fact:
-        _base_release: ""
-        _kept_tags: >-
-          {{ _moving_current.images | map(attribute='RepoTags') | flatten
-             | reject('eq', image_config.image_name ~ ':' ~ image_config.moving_tag) | list }}
-
-    - name: Fail without a current {{ image_name }} build to keep
-      fail:
-        msg: "The {{ image_name }} base release could not be found and this node has no build to keep."
-      when: _kept_tags | length == 0
-
-    - name: Use the current {{ image_name }} build
-      set_fact:
-        image_config: "{{ image_config | combine({'image_tag': _kept_tags | first | regex_replace('^[^:]*:', '')}) }}"
-
-- name: Tag the {{ image_name }} build by its base release and files
-  set_fact:
-    image_config: >-
-      {{ image_config | combine({'image_tag': _base_release ~ '-' ~ _files_hash[:8],
-                                 'build_args': {'BASE_RELEASE': _base_release}}) }}
-  when: image_config.base_image is defined and _base_release | length > 0
-
 - name: Check if {{ image_name }} image already exists
   community.docker.docker_image_info:
     name: "{{ image_config.image_name }}:{{ image_config.image_tag }}"
@@ -138,37 +67,10 @@
     tag: "{{ image_config.image_tag }}"
     build:
       path: "/tmp/docker-image-builds/{{ image_name }}"
-      args: "{{ image_config.build_args | default(omit) }}"
       labels: "{{ image_config.labels | default(omit) }}"
     source: build
     force_source: yes
   when: force_rebuild|default(false)|bool or image_info.images|length == 0
-
-- name: Find the {{ image_name }} build and its moving tag
-  community.docker.docker_image_info:
-    name:
-      - "{{ image_config.image_name }}:{{ image_config.image_tag }}"
-      - "{{ image_config.image_name }}:{{ image_config.moving_tag }}"
-  register: _moving_tag_images
-  when: image_config.moving_tag is defined
-
-# Check mode never builds, so a pending build has no image to tag yet.
-- name: Point the {{ image_name }} moving tag at the current build
-  community.docker.docker_image:
-    name: "{{ image_config.image_name }}:{{ image_config.image_tag }}"
-    repository: "{{ image_config.image_name }}:{{ image_config.moving_tag }}"
-    source: local
-    force_tag: yes
-  when:
-    - image_config.moving_tag is defined
-    - _build_ref in _moving_tag_tags
-    - _moving_tag_tags[_build_ref] != _moving_tag_tags[_moving_ref] | default('')
-  vars:
-    _build_ref: "{{ image_config.image_name }}:{{ image_config.image_tag }}"
-    _moving_ref: "{{ image_config.image_name }}:{{ image_config.moving_tag }}"
-    _moving_tag_pairs: "{{ _moving_tag_images.images | subelements('RepoTags', skip_missing=True) }}"
-    _moving_tag_tags: >-
-      {{ dict(_moving_tag_pairs | map(attribute='1') | zip(_moving_tag_pairs | map(attribute='0.Id'))) }}
 
 - name: Remove deploy key for {{ image_name }} from remote
   file:

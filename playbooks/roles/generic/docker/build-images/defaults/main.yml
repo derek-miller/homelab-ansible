@@ -42,12 +42,9 @@ available_docker_images:
     build_files:
       - gha-runner/start.sh
     image_name: gha-runner
-    # The build takes the newest release of this GHCR image matching the
-    # version, is tagged by that release and its files, and moves the stack's
-    # tag onto itself. An exact version holds it back.
-    base_image: actions/actions-runner
-    base_version: 2.x
-    moving_tag: "2"
+    # Bump with the FROM tag or any change to these files: a node builds only a
+    # tag it does not have yet.
+    image_tag: "2.338.0"
     # Each job ends its container, so between tasks nothing may reference the
     # image; keep the docker-prune play from sweeping it.
     labels:

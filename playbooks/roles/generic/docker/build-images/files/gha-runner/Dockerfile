@@ -1,5 +1,4 @@
-ARG BASE_RELEASE
-FROM ghcr.io/actions/actions-runner:${BASE_RELEASE}
+FROM ghcr.io/actions/actions-runner:2.338.0
 
 # git, curl and jq come with the base image; LuaJIT and node-gyp builds need a C toolchain and python3.
 USER root
