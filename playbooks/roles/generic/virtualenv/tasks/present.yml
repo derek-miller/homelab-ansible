@@ -1,38 +1,25 @@
 ---
-# The pip module only builds a venv when one is absent — it won't rebuild an
-# existing venv whose base interpreter or site-packages setting changed. Compare
-# pyvenv.cfg with both, and remove the venv on a mismatch so it's recreated below.
-- name: check existing venv base interpreter
-  slurp:
-    src: "{{ virtualenv_path }}/pyvenv.cfg"
-  register: virtualenv_pyvenv_cfg
-  failed_when: false
-
 # A dry run ahead of a minor bump probes an interpreter not installed yet.
 - name: check the interpreter's Python version
-  command: "{{ virtualenv_python }} --version"
-  register: virtualenv_python_version
+  command: "{{ virtualenv_python }} -B -c 'import sysconfig; print(sysconfig.get_python_version())'"
+  register: virtualenv_python_minor
   changed_when: false
-  failed_when: virtualenv_python_version.rc != 0 and not ansible_check_mode
+  failed_when: virtualenv_python_minor.rc != 0 and not ansible_check_mode
   check_mode: no
-  when: virtualenv_pyvenv_cfg.content is defined
 
-- name: remove a venv built with a different Python minor or site-packages setting
+- name: check the venv has that Python minor
+  stat:
+    path: "{{ virtualenv_path }}/lib/python{{ virtualenv_python_minor.stdout }}"
+  register: virtualenv_python_lib
+
+# The pip module only builds a venv when one is absent — it won't rebuild an
+# existing venv whose base interpreter changed, so it's removed here and
+# recreated below.
+- name: remove a venv built with a different Python minor
   file:
     path: "{{ virtualenv_path }}"
     state: absent
-  vars:
-    _venv_minor: >-
-      {{ virtualenv_pyvenv_cfg.content | b64decode
-         | regex_search('(?m)^version(_info)? *= *[0-9]+[.][0-9]+') | default('', true)
-         | regex_replace('^.*= *', '') }}
-    _python_minor: "{{ virtualenv_python_version.stdout | regex_search('[0-9]+[.][0-9]+') | default('', true) }}"
-    _venv_site_packages: >-
-      {{ virtualenv_pyvenv_cfg.content | b64decode
-         | regex_search('(?m)^include-system-site-packages *= *true') is not none }}
-  when:
-    - virtualenv_pyvenv_cfg.content is defined
-    - _venv_minor != _python_minor or _venv_site_packages | bool != virtualenv_site_packages | bool
+  when: not virtualenv_python_lib.stat.exists
 
 - name: create virtualenv dir
   file:

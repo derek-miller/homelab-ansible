@@ -23,8 +23,7 @@
         source: pull
         force_source: yes
       loop: >-
-        {{ lookup('ansible.builtin.file', image_config.dockerfile)
-           | regex_findall('(?m)^FROM\s+(?:--\S+\s+)*(\S+)') | reject('eq', 'scratch') | list
+        {{ lookup('ansible.builtin.file', image_config.dockerfile) | regex_findall('(?m)^FROM\s+(\S+)')
            if image_config.dockerfile is defined else [] }}
       register: _base_images
       until: _base_images is succeeded
@@ -58,14 +57,11 @@
       set_fact:
         image_config: "{{ image_config | combine({'image_tag': (_inputs | to_json(sort_keys=True) | hash('sha256'))[:12]}) }}"
       vars:
+        _input_files: "{{ ([image_config.dockerfile] if image_config.dockerfile is defined else []) + image_config.build_files | default([]) + image_config.patches | default([]) }}"
         _inputs:
-          config: >-
-            {{ image_config | dict2items | rejectattr('key', 'in', ['rollout', 'hide_build_log', 'ssh_key'])
-               | items2dict }}
-          files: >-
-            {{ query('ansible.builtin.file', *([image_config.dockerfile] if image_config.dockerfile is defined else [])
-                     + image_config.build_files | default([]) + image_config.patches | default([])) }}
-          bases: "{{ _base_images.results | default([]) | map(attribute='image.Id', default='') | list }}"
+          config: "{{ image_config }}"
+          files: "{{ query('ansible.builtin.file', *_input_files) }}"
+          bases: "{{ _base_images.results | map(attribute='image.Id') | list }}"
           commit: "{{ _source_commit.after | default('') }}"
   # The current build stays and the deploy carries on; the last play in
   # default.yml then fails it, so neither an outage nor a broken input goes
@@ -146,7 +142,8 @@
         tag: "{{ image_config.image_tag }}"
         build:
           path: "/tmp/docker-image-builds/{{ image_name }}"
-          labels: "{{ image_config.labels | default({}) | combine({'homelab.local-build': 'true'}) }}"
+          labels:
+            homelab.local-build: "true"
           nocache: "{{ force_rebuild | default(false) | bool }}"
         source: build
         force_source: yes
@@ -169,18 +166,16 @@
 
 - name: Find the {{ image_name }} build and its latest tag
   community.docker.docker_image_info:
-    name:
-      - "{{ image_config.image_name }}:{{ image_config.image_tag }}"
-      - "{{ image_config.image_name }}:latest"
+    name: "{{ item }}"
+  loop:
+    - "{{ image_config.image_name }}:{{ image_config.image_tag }}"
+    - "{{ image_config.image_name }}:latest"
   register: _latest_images
 
 - name: Read the {{ image_name }} image IDs
   set_fact:
-    _build_id: "{{ _tag_ids[image_config.image_name ~ ':' ~ image_config.image_tag] | default('') }}"
-    _latest_id: "{{ _tag_ids[image_config.image_name ~ ':latest'] | default('') }}"
-  vars:
-    _tag_pairs: "{{ _latest_images.images | subelements('RepoTags', skip_missing=True) }}"
-    _tag_ids: "{{ dict(_tag_pairs | map(attribute='1') | zip(_tag_pairs | map(attribute='0.Id'))) }}"
+    _build_id: "{{ _latest_images.results[0].images[0].Id | default('') }}"
+    _latest_id: "{{ _latest_images.results[1].images[0].Id | default('') }}"
 
 # Check mode never builds, so a pending build has no image to tag yet.
 - name: Point {{ image_name }}:latest at the current build
@@ -209,22 +204,18 @@
       community.docker.docker_host_info:
         containers: yes
         containers_filters:
-          label: com.docker.swarm.service.name
+          label: "com.docker.swarm.service.name={{ item }}"
         verbose_output: yes
-      register: _swarm_tasks
+      loop: "{{ _swarm_services.services | selectattr('Image', 'eq', image_config.image_name ~ ':latest') | map(attribute='Name') }}"
+      register: _service_tasks
 
     - name: Restart them on the new build
-      command: "docker service update --force --detach {{ item | quote }}"
+      command: "docker service update --force --detach {{ item.item | quote }}"
       delegate_to: "{{ docker_swarm_delegate_manager }}"
-      loop: >-
-        {{ _swarm_tasks.containers | rejectattr('ImageID', 'eq', _build_id)
-           | map(attribute='Labels') | map('dict2items') | flatten(levels=1)
-           | selectattr('key', 'eq', 'com.docker.swarm.service.name') | map(attribute='value')
-           | select('in', _on_latest) | unique | list }}
-      vars:
-        _on_latest: >-
-          {{ _swarm_services.services | selectattr('Image', 'eq', image_config.image_name ~ ':latest')
-             | map(attribute='Name') | list }}
+      loop: "{{ _service_tasks.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.containers | rejectattr('ImageID', 'eq', _build_id) | list | length > 0
 
 - name: Remove deploy key for {{ image_name }} from remote
   file:
