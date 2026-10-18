@@ -116,6 +116,9 @@
   when:
     - docker_migrate_plan | length > 0
     - docker_migrate_labels | bool
+  # A move that fails on the primary must not let the other nodes reconcile
+  # the label onto a node its data never reached.
+  any_errors_fatal: true
   block:
     - name: the primary manager runs the migration
       assert:
