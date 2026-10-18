@@ -5,16 +5,6 @@
 
 - when: tplink_plug_stats_state == 'present'
   block:
-    - name: install python dependencies
-      pip:
-        virtualenv: "{{ tplink_plug_stats_virtualenv_path }}"
-        name:
-          - click
-          - python-kasa
-          - tzdata
-        extra_args: --pre --upgrade-strategy only-if-needed
-        state: latest
-
     - name: create tplink-plug-stats script dir
       file:
         path: "{{ tplink_plug_stats_script_path|dirname }}"
