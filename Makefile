@@ -50,13 +50,9 @@ install-git-hooks: .git/hooks/pre-commit
 .git/hooks/pre-commit:
 	ln -sf ../../hooks/pre-commit $@
 
-# pip 26.2 dropped pip._internal.utils.compat.stdlib_pkgs, which pip-tools
-# imports, so pip-sync and pip-compile both fail to start against it. Drop the
-# upper bound once pip-tools ships a release supporting pip 26.2.
-# See https://github.com/jazzband/pip-tools/issues/2438
 .PHONY: init
 init:
-	pip install -i $(PIP_INDEX_URL) -U setuptools 'pip<26.2' wheel pip-tools
+	pip install -i $(PIP_INDEX_URL) -U setuptools pip wheel pip-tools
 
 .PHONY: install
 install: requirements.txt playbooks/roles/ansible/remote/files/requirements.txt
@@ -68,7 +64,7 @@ galaxy-install: playbooks/roles/requirements.yml playbooks/collections/requireme
 	ansible-galaxy role install --force -r playbooks/roles/requirements.yml --roles-path playbooks/roles/
 	ansible-galaxy collection install --force -r playbooks/collections/requirements.yml --collections-path playbooks/collections/
 
-upgrade = $(or UPGRADE,0)
+upgrade = $(or $(UPGRADE),0)
 ifneq ($(upgrade),0)
 pip_compile_flags += --upgrade --rebuild
 endif
@@ -78,7 +74,7 @@ requirements.txt: requirements.in
 	$(pip_compile) $< -o $@
 
 playbooks/roles/ansible/remote/files/requirements.txt: playbooks/roles/ansible/remote/files/requirements.in
-	$(pip_compile) --pip-args='--no-build-isolation' $< -o $@
+	$(pip_compile) $< -o $@
 
 .PHONY: fmt
 fmt:

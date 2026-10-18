@@ -20,23 +20,6 @@
   tags:
     - base
 
-- name: ensure Xcode Command Line Tools are installed (Darwin)
-  command: xcode-select -p
-  register: xcode_select
-  changed_when: false
-  failed_when: xcode_select.rc not in [0, 2]
-  when: ansible_os_family == 'Darwin'
-  tags:
-    - base
-
-- name: install Xcode Command Line Tools (Darwin)
-  command: xcode-select --install
-  when:
-    - ansible_os_family == 'Darwin'
-    - xcode_select.rc == 2
-  tags:
-    - base
-
 - name: create ansible remote dir
   file:
     path: "{{ ansible_python_dir }}"
@@ -54,12 +37,18 @@
   tags:
     - base
 
-- name: install ansible remote dependencies
+- name: install pip-tools for pip-sync
   pip:
     virtualenv: "{{ ansible_python_virtualenv }}"
-    requirements: "{{ ansible_python_dir }}/requirements.txt"
-    extra_args: --no-build-isolation
-    state: present
+    name: pip-tools
+    state: latest
+  tags:
+    - base
+
+- name: install ansible remote dependencies
+  command: "{{ ansible_python_virtualenv }}/bin/pip-sync {{ ansible_python_dir }}/requirements.txt"
+  register: _remote_pip_sync
+  changed_when: "'Everything up-to-date' not in _remote_pip_sync.stdout"
   tags:
     - base
 
