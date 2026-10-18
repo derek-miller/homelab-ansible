@@ -10,7 +10,7 @@
 
 - name: configure options in {{ raspberry_pi_boot_config_path }}
   lineinfile:
-    dest: "{{ raspberry_pi_boot_config_path|default('/boot/config.txt') }}"
+    dest: "{{ raspberry_pi_boot_config_path }}"
     regexp: "^{{ item.option }}="
     line: "{{ item.option }}={{ item.value }}"
     insertafter: EOF
@@ -46,7 +46,7 @@
 
 - name: configure poe hat fan speeds
   lineinfile:
-    dest: "{{ raspberry_pi_boot_config_path|default('/boot/config.txt') }}"
+    dest: "{{ raspberry_pi_boot_config_path }}"
     regexp: "^{{ item.option }}="
     line: "{{ item.option }}={{ item.value }}"
     insertafter: EOF
