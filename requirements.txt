@@ -63,7 +63,7 @@ packaging==26.3
     # via
     #   ansible-core
     #   black
-paramiko==5.0.1
+paramiko==5.1.0
     # via -r requirements.in
 passlib==1.7.4
     # via -r requirements.in

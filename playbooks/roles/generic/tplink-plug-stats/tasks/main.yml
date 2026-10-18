@@ -5,15 +5,24 @@
 
 - when: tplink_plug_stats_state == 'present'
   block:
-    - name: install python dependencies
+    - name: copy python requirements
+      copy:
+        src: requirements.txt
+        dest: "{{ tplink_plug_stats_dir }}/requirements.txt"
+        owner: root
+        group: "{{ root_group }}"
+        mode: 0644
+
+    - name: install pip-tools for pip-sync
       pip:
         virtualenv: "{{ tplink_plug_stats_virtualenv_path }}"
-        name:
-          - click
-          - python-kasa
-          - tzdata
-        extra_args: --pre --upgrade-strategy only-if-needed
+        name: pip-tools
         state: latest
+
+    - name: install python dependencies
+      command: "{{ tplink_plug_stats_virtualenv_path }}/bin/pip-sync {{ tplink_plug_stats_dir }}/requirements.txt"
+      register: _tplink_plug_stats_pip_sync
+      changed_when: "'Everything up-to-date' not in _tplink_plug_stats_pip_sync.stdout"
 
     - name: create tplink-plug-stats script dir
       file:
