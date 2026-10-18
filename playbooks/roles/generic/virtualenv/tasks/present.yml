@@ -21,7 +21,6 @@
   file:
     path: "{{ virtualenv_path }}"
     state: absent
-  register: virtualenv_rebuild
   vars:
     _venv_minor: >-
       {{ virtualenv_pyvenv_cfg.content | b64decode

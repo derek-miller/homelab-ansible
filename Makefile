@@ -73,9 +73,8 @@ pip_compile = pip-compile -i $(PIP_INDEX_URL) --no-strip-extras $(pip_compile_fl
 requirements.txt: requirements.in
 	$(pip_compile) $< -o $@
 
-# Locks pip too, so the hosts' pip only changes with the pip-tools pip-sync runs on.
 playbooks/roles/ansible/remote/files/requirements.txt: playbooks/roles/ansible/remote/files/requirements.in
-	$(pip_compile) --allow-unsafe $< -o $@
+	$(pip_compile) $< -o $@
 
 .PHONY: fmt
 fmt:

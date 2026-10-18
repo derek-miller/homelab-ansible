@@ -1,7 +1,5 @@
 ---
 ansible_python_dir: /opt/ansible
 ansible_python_virtualenv: "{{ ansible_python_dir }}/virtualenv"
-# Not role_path: generic/virtualenv templates the pip pins, and there role_path is its own.
-ansible_python_lock: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/roles/ansible/remote/files/requirements.txt') }}"
 # python3-apt, imported by the apt modules, exists only in the system site-packages.
 ansible_python_virtualenv_site_packages: "{{ ansible_os_family == 'Debian' }}"

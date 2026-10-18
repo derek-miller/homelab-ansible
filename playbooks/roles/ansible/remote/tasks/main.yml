@@ -6,9 +6,15 @@
     name: ansible/setup/bootstrap
     tasks_from: surrogate.yml
 
-- name: install the apt modules' Python bindings (Debian)
+- name: install build dependencies (Debian)
   apt:
-    name: python3-apt
+    name:
+      - build-essential
+      - libssl-dev
+      - libffi-dev
+      - python3-cffi
+      - python3-dev
+      - python3-apt
     state: latest
   when: ansible_os_family == 'Debian'
   tags:
@@ -31,43 +37,18 @@
   tags:
     - base
 
-- name: check for pip-sync in the ansible remote venv
-  stat:
-    path: "{{ ansible_python_virtualenv }}/bin/pip-sync"
-  register: _remote_pip_sync_bin
-  tags:
-    - base
-
-# Every run, through pip itself, so a re-lock reaches a host whose pip-sync no
-# longer starts.
-- name: install the locked pip-tools for pip-sync
+- name: install ansible remote dependencies
   pip:
     virtualenv: "{{ ansible_python_virtualenv }}"
-    name: "{{ ansible_python_lock | regex_search('(?m)^pip-tools==.+') }}"
+    requirements: "{{ ansible_python_dir }}/requirements.txt"
+    state: present
   tags:
     - base
 
-# pip-sync counts only the venv's own packages, so --force-reinstall puts a
-# locked package in the venv even when the system site-packages already has it.
-# Check mode hasn't copied the new lock, so the dry run reads the controller's,
-# and skips a venv due a rebuild, whose old pip-sync may not start.
-- name: sync the ansible remote venv to its lock
-  command:
-    argv: >-
-      {{ [ansible_python_virtualenv ~ '/bin/pip-sync', '--pip-args', '--force-reinstall --no-deps']
-         + (['--dry-run', '/dev/stdin'] if ansible_check_mode else [ansible_python_dir ~ '/requirements.txt']) }}
-    stdin: "{{ ansible_python_lock if ansible_check_mode else omit }}"
+- name: remove packages the lock no longer pins
+  command: "{{ ansible_python_virtualenv }}/bin/pip-sync {{ ansible_python_dir }}/requirements.txt"
   register: _remote_pip_sync
   changed_when: "'Everything up-to-date' not in _remote_pip_sync.stdout"
-  # A dry run exits 1 with a plan when changes are pending; a crash also exits 1.
-  failed_when: >-
-    _remote_pip_sync.rc != 0
-    and not (ansible_check_mode and _remote_pip_sync.rc == 1
-             and _remote_pip_sync.stdout is search('^Would (un)?install:', multiline=True))
-  check_mode: no
-  when: >-
-    not ansible_check_mode
-    or (_remote_pip_sync_bin.stat.exists and virtualenv_rebuild is not changed)
   tags:
     - base
 

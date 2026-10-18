@@ -5,7 +5,5 @@ dependencies:
   - role: generic/virtualenv
     virtualenv_path: "{{ ansible_python_virtualenv }}"
     virtualenv_site_packages: "{{ ansible_python_virtualenv_site_packages }}"
-    pip_version_spec: "{{ ansible_python_lock | regex_search('(?m)^pip==.+') | replace('pip', '', 1) }}"
-    setuptools_version_spec: "{{ ansible_python_lock | regex_search('(?m)^setuptools==.+') | replace('setuptools', '', 1) }}"
     tags:
       - base
