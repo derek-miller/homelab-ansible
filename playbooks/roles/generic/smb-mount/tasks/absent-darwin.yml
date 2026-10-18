@@ -37,22 +37,26 @@
   meta: flush_handlers
 
 - name: remove the synthetic link declaration
-  vars:
-    _link: "{{ (smb_mount_dir | regex_replace('^/+', '')).split('/') | first }}"
   lineinfile:
     path: /etc/synthetic.conf
-    regexp: '^{{ _link }}\t'
+    regexp: '^{{ smb_mount_dir | basename }}\t'
     state: absent
 
 # rmdir, never a recursive delete: a share still mounted under the target
 # would have its NAS contents removed. Anything left behind stays.
 - name: remove the emptied mount directories
-  vars:
-    _target: "/System/Volumes/Data/{{ (smb_mount_dir | regex_replace('^/+', '')).split('/') | first }}"
-  command: "rmdir {{ item }}"
+  command: "rmdir {{ smb_mount_darwin_target }}/{{ item }}"
   args:
-    removes: "{{ item }}"
-  loop: "{{ smb_share_names | map('regex_replace', '^', _target ~ '/') | list + [_target] }}"
+    removes: "{{ smb_mount_darwin_target }}/{{ item }}"
+  loop: "{{ smb_share_names }}"
+  register: _smb_rmdir
+  failed_when: false
+  changed_when: _smb_rmdir is changed and _smb_rmdir.rc == 0
+
+- name: remove the emptied synthetic link target
+  command: "rmdir {{ smb_mount_darwin_target }}"
+  args:
+    removes: "{{ smb_mount_darwin_target }}"
   register: _smb_rmdir
   failed_when: false
   changed_when: _smb_rmdir is changed and _smb_rmdir.rc == 0

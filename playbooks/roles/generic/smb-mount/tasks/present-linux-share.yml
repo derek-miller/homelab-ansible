@@ -1,9 +1,4 @@
 ---
-- set_fact:
-    smb_mount_service_name: "{{ smb_mount_dir | mandatory | regex_replace('^\\/+|\\/+$', '')  | replace('/', '-') }}-{{ smb_share_name | mandatory }}"
-- set_fact:
-    smb_mount_path: "{{ smb_mount_dir | regex_replace('\\/+$', '') }}/{{ smb_share_name }}"
-
 - name: configure {{ smb_mount_service_name }}.mount service
   template:
     src: systemd_mount.j2

@@ -139,11 +139,6 @@
 - hosts: smb-shares
   roles:
     - role: generic/smb-mount
-      smb_share_host: "{{ smb_share_configs[smb_share_config].host }}"
-      smb_share_username: "{{ smb_share_configs[smb_share_config].username }}"
-      smb_share_password: "{{ smb_share_configs[smb_share_config].password }}"
-      smb_mount_options: "{{ smb_share_configs[smb_share_config].mount_options }}"
-      smb_mount_dir: /mnt
   tags:
     - smb-mount
     - smb-shares
