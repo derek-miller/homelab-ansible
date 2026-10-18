@@ -469,18 +469,12 @@
     - docker-swarm
     - docker-migrate-labels
 
-# galaxy/docker-swarm reconciles node labels against docker_swarm_labels and
-# strips anything missing from it, so it has to be told what we manage or it
-# removes every label on each run.
 - hosts: docker_swarm_manager:docker_swarm_worker
   vars:
     # Undefined (migrate-labels skipped by a hosts= limit) must hold, not reconcile.
     docker_labels_reconcile_allowed: >-
       {{ hostvars[groups['docker_swarm_manager'][0]].docker_labels_pending_migration is defined
          and not hostvars[groups['docker_swarm_manager'][0]].docker_labels_pending_migration }}
-    docker_swarm_labels: >-
-      {{ swarm_node_labels if (docker_labels_reconcile_allowed | bool)
-         else docker_swarm_current_labels }}
   pre_tasks:
     # galaxy/docker-swarm dereferences the primary's docker_swarm_addr on every
     # host with no guard, and it is Galaxy-managed so we cannot fix it there.
@@ -489,8 +483,13 @@
         name: generic/docker/require-swarm-manager
       vars:
         require_swarm_manager_scope: primary
-  roles:
-    - role: galaxy/docker-swarm
+  tasks:
+    # Only its cluster tasks: the post_tasks own the labels, and its label tasks
+    # can't run in check mode.
+    - name: join the swarm
+      import_role:
+        name: galaxy/docker-swarm
+        tasks_from: cluster.yml
   post_tasks:
     - name: reconcile swarm node role with group membership
       community.docker.docker_node:
