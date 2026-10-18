@@ -214,15 +214,29 @@ Nor does it catch a *partial* archive. `offen` builds the archive under `/tmp` i
 
 YouTrack writes its own scheduled backups into the `youtrack-backups` volume (Database Backup settings: location `/opt/youtrack/backups`, TAR.GZ, keep 2), and `backup_youtrack` archives that volume with the rest. Telegraf cannot read inside node-local volumes, so `youtrack-backup-check` watches it instead: it exits after 60 s whenever no `*.tar.gz` there is newer than 26 h, and a stopped schedule therefore shows as **Container Crash Loop (Swarm)** for that service.
 
+## Bringing up a new host
+
+1. Add the host to `playbooks/hosts` under its groups (a swarm node also under `[docker_labels]`) and give it `host_vars/<host>/`.
+2. **First contact goes over the LAN.** Tailscale hosts are reached at `<host>.ts.<domain>`, which exists only once the host's first Tailscale run has published it. Set the new host's `ansible_host` to its LAN address in its host_vars, run `make bootstrap hosts=<host> user=<user>` and then `make run`, and switch `ansible_host` to the tailnet name afterwards. Don't pass `-e ansible_host=<address>` instead: an extra var applies to every host, so `influxdb3_url`, built from the metrics host's `ansible_host`, would point the new host's Telegraf at itself.
+3. **A swarm node needs a manager in the run.** The swarm play joins it, then gives it its `[docker_labels]`; a label already on another node is held until it moves with its volumes (see [Moving a swarm workload](#moving-a-swarm-workload-to-another-host)). Use a full `make run`, or include `docker_swarm_manager[0]` in `hosts=`.
+
+When a host is rebuilt under the same name:
+
+- **Swarm node:** its old entry stays in `docker node ls` as Down, and the label reconcile needs node names to be unique. Before the rebuilt host's first run, on a manager: `docker node demote <old-id>` if it was a manager, then `docker node rm --force <old-id>`.
+- **Tailscale:** remove the old, offline machine in the admin console, and approve any routes the host advertises again.
+- **SSH:** if it comes back at an address used before, run `ssh-keygen -R <address>` before `make bootstrap`. With a changed key SSH refuses the password login the bootstrap uses.
+
 ## macOS hosts: manual steps at bootstrap
 
 Some macOS state cannot be set from an Ansible run, and the reason differs per case. The playbook does not handle these uniformly, so read the bullet rather than assuming a failed run told you about the problem: `generic/smb-mount` halts on an interactive `pause:` with a 10-minute timeout, `generic/plex` only prints a `debug:` note and continues green, and FileVault has no detection at all.
 
 - **autofs SMB map** — autofs only reads `/etc/auto_smb` when `/etc/auto_master` carries a `/-  auto_smb` direct-map line. Only an interactive local Terminal.app session can write that file: direct SSH write, a boot-time LaunchDaemon, and SSH with Full Disk Access granted to sshd all fail identically with EPERM. The role writes the map itself over SSH, then detects a missing `auto_master` line and pauses for 10 minutes with the exact command to paste. **macOS updates reset `/etc/auto_master` and strip the line, so after every OS update re-run `make run hosts=<host> tags=smb-mount,telegraf` and be at the Mac to answer the prompt** — for `auto_master` the re-run only detects the problem, it cannot fix it. Leave the prompt unanswered and the pause times out, then the verify task fails the play for that host. The `telegraf` tag puts back the syslog forward the same update drops from `/etc/syslog.conf`.
 - **`/mnt` synthetic link** — macOS's sealed system volume can't hold a root-level `/mnt`, so the mount role declares it in `/etc/synthetic.conf`, which only takes effect at boot. On a Mac's first run the role pauses for 10 minutes and asks for `sudo /sbin/shutdown -r now`. Reboot, log in at the Mac (FileVault keeps SSH down until someone does), then press Ctrl+C and C to resume sooner. If the pause runs out first, re-run with `tags=smb-mount`.
+- **sudo password** — a Mac admin's `sudo` asks for a password, so bootstrap a Mac with `make bootstrap hosts=<host> user=<admin> become_pass=1`.
 - **Homebrew** — before `make bootstrap`, install Homebrew into `/opt/homebrew` as the host's `mac_user`. Every `brew` command runs as `mac_user`, so Homebrew must belong to that account.
 - **Remote Login access list** — set System Settings > General > Sharing > Remote Login to "Only these users" before `make bootstrap`. The bootstrap adds the `ansible` account to that list, and while Remote Login admits all users the list's group doesn't exist, so the bootstrap stops at `Group com.apple.access_ssh does not exist`.
 - **Plex "Open at Login"** — the menu-bar app registers its own LaunchAgent via LSSharedFileList, which needs Automation TCC and so cannot be set programmatically. After `generic/plex` installs the cask, launch Plex once via VNC or console and tick the box. The role prints instructions until the LaunchAgent appears.
+- **Homebridge config** — `config.json` (plugins, HomeKit pairings, its TLS paths, `bridge.bind`) is application state, not repo state, so a replacement Mac needs its Homebridge backup restored.
 - **FileVault login on reboot** — after a power cycle the Mac sits at the login screen until a human logs in, because user LaunchAgents only run post-login. No workaround; design-accepted.
 
 ## Restoring volumes from a backup archive
