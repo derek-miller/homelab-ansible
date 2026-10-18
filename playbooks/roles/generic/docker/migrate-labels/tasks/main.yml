@@ -7,9 +7,16 @@
       volume is staged there on its way between them.
     quiet: yes
 
+- name: list the nodes in the swarm
+  command: "docker node ls --format {% raw %}'{{ .Hostname }}'{% endraw %}"
+  register: _swarm_nodes
+  changed_when: false
+  check_mode: false
+
+# A host not in the swarm yet joins later in the run.
 - name: read the labels currently on each swarm node
   command: "docker node inspect {{ item }} --format {% raw %}'{{ json .Spec.Labels }}'{% endraw %}"
-  loop: "{{ groups['docker_swarm_manager'] | union(groups['docker_swarm_worker']) | sort }}"
+  loop: "{{ groups['docker_swarm_manager'] | union(groups['docker_swarm_worker']) | intersect(_swarm_nodes.stdout_lines) | sort }}"
   register: _live_labels
   changed_when: false
   check_mode: false
@@ -53,6 +60,16 @@
 - name: block the label reconcile while a move is pending
   set_fact:
     docker_labels_pending_migration: "{{ docker_migrate_plan | length > 0 and not (docker_migrate_labels | bool) }}"
+
+- name: a label can only move to a node in the swarm
+  assert:
+    that: docker_migrate_plan | map(attribute='to') | difference(_swarm_nodes.stdout_lines) | length == 0
+    fail_msg: >-
+      {{ docker_migrate_plan | map(attribute='to') | difference(_swarm_nodes.stdout_lines) | join(', ') }}
+      has not joined the swarm yet. Run once without docker_migrate_labels so it
+      joins, then migrate.
+    quiet: yes
+  when: docker_migrate_labels | bool
 
 - name: migrate each label
   include_tasks: migrate_label.yml
