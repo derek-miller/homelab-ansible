@@ -2,5 +2,3 @@
 roles:
   - src: geerlingguy.docker
     name: galaxy/docker
-  - src: thomasjpfan.docker-swarm
-    name: galaxy/docker-swarm

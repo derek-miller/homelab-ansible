@@ -1,0 +1,163 @@
+---
+- name: the edge label must sit on a manager
+  assert:
+    that: "'edge' not in swarm_node_labels or 'docker_swarm_manager' in group_names"
+    fail_msg: >-
+      {{ inventory_hostname }} carries the edge label but is not a swarm
+      manager; traefik reads the swarm API through a manager's socket.
+    quiet: yes
+
+# docker_swarm_info fails on any node that is not a manager, but still reports
+# docker_swarm_active and docker_swarm_manager.
+- name: read each host's swarm state
+  community.docker.docker_swarm_info:
+  register: _swarm_state
+  failed_when: false
+
+# Starting a swarm with a manager left out of the run would split it in two.
+- name: a manager already in the swarm must be in this run
+  assert:
+    that: >-
+      _swarm_active_managers | length > 0
+      or groups['docker_swarm_manager'] | difference(ansible_play_hosts) | length == 0
+    fail_msg: >-
+      No manager in this run is in the swarm. Add one to hosts=, or run every
+      manager to start a new swarm.
+    quiet: yes
+  run_once: true
+
+- name: start the swarm
+  community.docker.docker_swarm:
+    state: present
+    advertise_addr: "{{ ansible_default_ipv4.address }}"
+  when:
+    - _swarm_active_managers | length == 0
+    - inventory_hostname == _swarm_manager
+
+# A dry run starts no swarm, so there is none to join or read labels from.
+- name: stop a dry run here when there is no swarm yet
+  meta: end_role
+  when: ansible_check_mode and _swarm_active_managers | length == 0
+
+- name: read the join tokens
+  community.docker.docker_swarm_info:
+  delegate_to: "{{ _swarm_manager }}"
+  run_once: true
+  register: _swarm_manager_state
+  no_log: true
+
+- name: join the swarm
+  community.docker.docker_swarm:
+    state: join
+    join_token: "{{ _swarm_manager_state.swarm_facts.JoinTokens['Manager' if 'docker_swarm_manager' in group_names else 'Worker'] }}"
+    remote_addrs:
+      - "{{ hostvars[_swarm_manager].ansible_default_ipv4.address }}:{{ docker_swarm_port }}"
+    advertise_addr: "{{ ansible_default_ipv4.address }}"
+  when:
+    - not _swarm_state.docker_swarm_active
+    - inventory_hostname != _swarm_manager
+  no_log: true
+
+- name: match each node's role to its group
+  community.docker.docker_node:
+    hostname: "{{ inventory_hostname }}"
+    role: "{{ 'manager' if 'docker_swarm_manager' in group_names else 'worker' }}"
+  delegate_to: "{{ _swarm_manager }}"
+  # A dry run never joins a new node, so the swarm doesn't know it yet.
+  when: _swarm_state.docker_swarm_active or not ansible_check_mode
+
+# Read after the joins, so a node joining in this run counts as in the swarm.
+- name: read the labels on every node
+  community.docker.docker_node_info:
+  delegate_to: "{{ _swarm_manager }}"
+  run_once: true
+  register: _swarm_nodes
+
+- name: work out which labels are on the wrong node
+  set_fact:
+    docker_migrate_plan: >-
+      {%- set live = {} -%}
+      {%- for node in _swarm_nodes.nodes -%}
+      {%- for lbl in (node.Spec.Labels | default({}, true)) -%}
+      {%- set _ = live.update({lbl: node.Description.Hostname}) -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {%- set out = [] -%}
+      {%- for host in groups['docker_labels'] | default([]) -%}
+      {%- for lbl in (hostvars[host].docker_labels | default('')).split(',') | map('trim') | select | list -%}
+      {%- if live.get(lbl) and live[lbl] != host -%}
+      {%- set _ = out.append({'label': lbl, 'from': live[lbl], 'to': host}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ out }}
+  run_once: true
+
+- name: report the pending label moves
+  debug:
+    msg: >-
+      {{ docker_migrate_plan | length }} label move(s) pending:
+      {{ docker_migrate_plan | map('to_json') | join(', ') }}
+  when: docker_migrate_plan | length > 0
+  run_once: true
+
+- name: hold the labels until the volumes move with them
+  debug:
+    msg: >-
+      Leaving the labels where they are: moving them without their volumes
+      would start the services on a node with no data. Re-run with
+      docker_migrate_labels=yes to migrate.
+  when:
+    - docker_migrate_plan | length > 0
+    - not (docker_migrate_labels | bool)
+  run_once: true
+
+- name: migrate the labels
+  when:
+    - docker_migrate_plan | length > 0
+    - docker_migrate_labels | bool
+  block:
+    - name: the primary manager runs the migration
+      assert:
+        that: groups['docker_swarm_manager'][0] in ansible_play_hosts
+        fail_msg: >-
+          Migrating labels reads the stack from {{ groups['docker_swarm_manager'][0] }};
+          add it to hosts=.
+        quiet: yes
+      run_once: true
+
+    - name: require a transit directory both nodes can reach
+      assert:
+        that: docker_migrate_transit_dir | default('', true) | length > 0
+        fail_msg: >-
+          Set docker_migrate_transit_dir to a path mounted on every swarm node; the
+          volume is staged there on its way between them.
+        quiet: yes
+      run_once: true
+
+    - name: a label can only move to a node in the swarm
+      assert:
+        that: docker_migrate_plan | map(attribute='to') | difference(_swarm_nodes.nodes | map(attribute='Description.Hostname')) | length == 0
+        fail_msg: >-
+          {{ docker_migrate_plan | map(attribute='to') | difference(_swarm_nodes.nodes | map(attribute='Description.Hostname')) | join(', ') }}
+          is not in the swarm yet. Add it to the run so it joins, then migrate.
+        quiet: yes
+      run_once: true
+
+    - name: migrate each label
+      include_tasks: migrate_label.yml
+      loop: "{{ docker_migrate_plan }}"
+      loop_control:
+        loop_var: move
+        label: "{{ move.label }}: {{ move.from }} -> {{ move.to }}"
+      when: inventory_hostname == groups['docker_swarm_manager'][0]
+
+- name: put each node's docker_labels on it
+  community.docker.docker_node:
+    hostname: "{{ inventory_hostname }}"
+    labels: "{{ swarm_node_labels }}"
+    labels_state: replace
+  delegate_to: "{{ _swarm_manager }}"
+  when:
+    - docker_migrate_plan | length == 0 or docker_migrate_labels | bool
+    - _swarm_state.docker_swarm_active or not ansible_check_mode

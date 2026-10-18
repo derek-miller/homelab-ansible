@@ -1,0 +1,9 @@
+---
+# Managers in this run that are already in the swarm.
+_swarm_active_managers: >-
+  {{ groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | map('extract', hostvars)
+     | selectattr('_swarm_state.docker_swarm_manager') | map(attribute='inventory_hostname') | list }}
+
+# The manager every join and node change goes through: one already in the
+# swarm, else the first manager, which starts it.
+_swarm_manager: "{{ (_swarm_active_managers + groups['docker_swarm_manager']) | first }}"
