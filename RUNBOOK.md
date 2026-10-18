@@ -37,11 +37,11 @@ gh variable set DEPLOY_SKIP_HOSTS --body raspi1 -R derek-miller/homelab-ansible
 gh variable delete DEPLOY_SKIP_HOSTS -R derek-miller/homelab-ansible
 ```
 
-Don't skip the first swarm manager (rackvm1): the swarm plays require it in the run. The next deploy after deleting the variable brings a skipped host up to date. A local `make run` ignores this variable too.
+Skipping the first swarm manager (rackvm1) skips the stack deploy too, which runs from it. The next deploy after deleting the variable brings a skipped host up to date. A local `make run` ignores this variable too.
 
 ## Moving a swarm workload to another host
 
-Swarm does not move local volumes, so a move happens in two halves: copy the data while the services are stopped, and only then let the label follow. `generic/docker/migrate-labels` does both, driven by the inventory.
+Swarm does not move local volumes, so a move happens in two halves: copy the data while the services are stopped, and only then let the label follow. `generic/docker/swarm` does both, driven by the inventory.
 
 Move the label to the new host in `[docker_labels]`, then:
 
@@ -49,11 +49,11 @@ Move the label to the new host in `[docker_labels]`, then:
 make run tags=docker-swarm ANSIBLE_FLAGS="-e docker_migrate_labels=yes"
 ```
 
-**Do not narrow this with `hosts=`.** The role runs on the primary manager and reaches both nodes by delegation, so a limit has to name the source, the target *and* the manager; omit the manager and it never runs at all.
+**Do not narrow this with `hosts=`.** The migration runs on the primary manager and reaches both nodes by delegation, so a limit has to name the source, the target *and* the primary manager, and it stops if the primary is missing.
 
 For each label whose inventory host no longer matches the node carrying it, the role scales that label's services to 0, tars each of their volumes through `docker_migrate_transit_dir` onto the target, removes the source copy, and moves the label. The stack deploy then starts the services on top of their data. Services and volumes are read from the stack definition, so nothing needs listing by hand.
 
-Without `docker_migrate_labels=yes` the move is only reported and the label reconcile is held back, because moving a label while its data sits on the old host would start the service on an empty volume. A routine `make run` is therefore safe with a pending move outstanding. The hold-back is keyed on a fact set on the primary manager, and undefined holds rather than reconciles — so a `hosts=` limit can stop a move being detected, but cannot lift the interlock.
+Without `docker_migrate_labels=yes` the move is only reported and the label reconcile is held back, because moving a label while its data sits on the old host would start the service on an empty volume. A routine `make run` is therefore safe with a pending move outstanding. The move is worked out from every node in the swarm after any new node has joined, so a `hosts=` limit cannot hide one.
 
 **Volumes are all the role moves.** Check the rest by hand first; a service that lands on a host missing any of it either fails to start or starts unreachable:
 
@@ -218,13 +218,13 @@ YouTrack writes its own scheduled backups into the `youtrack-backups` volume (Da
 
 1. Add the host to `playbooks/hosts` under its groups (a swarm node also under `[docker_labels]`) and give it `playbooks/host_vars/<host>/`.
 2. **First contact goes over the LAN.** Tailscale hosts are reached at `<host>.ts.<domain>`, which exists only once the host's first Tailscale run has published it. Set the new host's `ansible_host` to its LAN address in its host_vars, run `make bootstrap hosts=<host> user=<user>` and then `make run`, and switch `ansible_host` to the tailnet name afterwards. Don't pass `-e ansible_host=<address>` instead: an extra var applies to every host, so `influxdb3_url`, built from the metrics host's `ansible_host`, would point the new host's Telegraf at itself.
-3. **A swarm node needs a manager in the run.** The swarm play joins it, then gives it its `[docker_labels]`; a label already on another node is held until it moves with its volumes (see [Moving a swarm workload](#moving-a-swarm-workload-to-another-host)). Use a full `make run`, or include `docker_swarm_manager[0]` in `hosts=`.
+3. **A swarm node needs a manager in the run.** The swarm play joins it, then gives it its `[docker_labels]`; a label already on another node is held until it moves with its volumes (see [Moving a swarm workload](#moving-a-swarm-workload-to-another-host)). Use a full `make run`, or include another manager in `hosts=`.
 
 When a host is rebuilt under the same name:
 
 - **Swarm node:** its old entry stays in `docker node ls` as Down, and the label reconcile needs node names to be unique, so remove it first. Its labels go with it, and a label landing on the rebuilt node starts that label's services on empty volumes, which a later restore then skips as already holding data. So bring the data back before the labels:
   1. On a manager: `docker node demote <old-id>` if it was a manager, then `docker node rm --force <old-id>`.
-  2. Clear the host's `docker_labels` in `[docker_labels]` and run, with the primary manager in `hosts=`. The node joins with no labels. If it carries `metrics`, add `ANSIBLE_FLAGS="-e influxdb3_metrics_host=<host>"`: with no host holding that label, Telegraf's output has nowhere to point and the play fails.
+  2. Clear the host's `docker_labels` in `[docker_labels]` and run, with another manager in `hosts=`. The node joins with no labels. If it carries `metrics`, add `ANSIBLE_FLAGS="-e influxdb3_metrics_host=<host>"`: with no host holding that label, Telegraf's output has nowhere to point and the play fails.
   3. Restore each label's volumes onto it, as in [Restoring volumes from a backup archive](#restoring-volumes-from-a-backup-archive), with `-e docker_restore_volumes_label=<label>`.
   4. Put the labels back and run again; the services start on the restored volumes.
 - **Tailscale:** remove the old, offline machine in the admin console, and approve any routes the host advertises again.
