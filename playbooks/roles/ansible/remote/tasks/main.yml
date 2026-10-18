@@ -41,6 +41,7 @@
   pip:
     virtualenv: "{{ ansible_python_virtualenv }}"
     name: pip-tools
+    state: latest
   tags:
     - base
 
