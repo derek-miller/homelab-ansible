@@ -173,12 +173,12 @@
   register: _raspberry_pi_swap_changed
 
 # With a 0 MB size dphys-swapfile keeps an empty /var/swap and fails every boot.
-- name: turn off dphys-swapfile when swap is off
+- name: run dphys-swapfile only when swap is on
   service:
     name: dphys-swapfile
-    state: stopped
-    enabled: no
-  when: raspberry_pi_swap_size_mb is defined and raspberry_pi_swap_size_mb | int == 0 and _dphys_swapfile.stat.exists
+    state: "{{ 'started' if raspberry_pi_swap_size_mb | int > 0 else 'stopped' }}"
+    enabled: "{{ raspberry_pi_swap_size_mb | int > 0 }}"
+  when: raspberry_pi_swap_size_mb is defined and _dphys_swapfile.stat.exists
 
 - name: remove the dphys-swapfile swap file when swap is off
   file:
