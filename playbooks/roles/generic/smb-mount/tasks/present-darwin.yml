@@ -7,67 +7,50 @@
 # /System/Volumes/Data/mnt are different inodes — autofs ends up mounting
 # at the latter while users / roles reference the former. With a symlink,
 # /mnt resolves to the same inode autofs mounted on.
-- name: expose the mount directory at the root
-  vars:
-    _link: "{{ (smb_mount_dir | regex_replace('^/+', '')).split('/') | first }}"
-    _target: "/System/Volumes/Data/{{ _link }}"
-  block:
-    - name: ensure the synthetic link target exists
-      file:
-        path: "{{ _target }}"
-        state: directory
-        owner: root
-        group: "{{ root_group }}"
-        mode: '0755'
-
-    - name: declare the synthetic link
-      lineinfile:
-        path: /etc/synthetic.conf
-        regexp: '^{{ _link }}\t'
-        line: "{{ _link }}\t{{ _target }}"
-        create: yes
-        owner: root
-        group: "{{ root_group }}"
-        mode: '0644'
-
-    - name: probe whether the synthetic link is in place
-      stat:
-        path: "/{{ _link }}"
-      register: _synthetic_probe
-
-    # apfs.util -t stitches new synthetic entries but does not convert an
-    # already-stitched empty dir into a symlink. The actual transition
-    # only happens at boot.
-    - name: pause for reboot to materialize the synthetic link
-      pause:
-        seconds: 600
-        prompt: |
-
-          ====================================================================
-          MANUAL STEP REQUIRED — reboot to apply /etc/synthetic.conf
-          ====================================================================
-
-          /{{ _link }} must be a symlink to {{ _target }}; it is
-          {% if not _synthetic_probe.stat.exists %}missing{% elif not _synthetic_probe.stat.islnk %}not a symlink{% else %}a symlink to {{ _synthetic_probe.stat.lnk_target }}{% endif %}.
-          synthetic.conf changes only apply at boot.  On the Mac, run:
-
-            sudo /sbin/shutdown -r now
-
-          then log in at the Mac (FileVault keeps SSH down until someone
-          does) and press Ctrl+C, then C, here. The play otherwise resumes
-          on its own after 10 minutes.
-      when: not (_synthetic_probe.stat.islnk | default(false)) or _synthetic_probe.stat.lnk_target != _target
-
-# ---- ensure mount_point parents exist ----------------------------------
-# autofs creates the leaf trigger at each mount point itself, but NOT any
-# intermediate path components below the synthetic link.
-- name: ensure the mount directory exists
+- name: ensure the synthetic link target exists
   file:
-    path: "{{ smb_mount_dir | regex_replace('/+$', '') }}"
+    path: "{{ smb_mount_darwin_target }}"
     state: directory
     owner: root
     group: "{{ root_group }}"
     mode: '0755'
+
+- name: declare the synthetic link
+  lineinfile:
+    path: /etc/synthetic.conf
+    regexp: '^{{ smb_mount_dir | basename }}\t'
+    line: "{{ smb_mount_dir | basename }}\t{{ smb_mount_darwin_target }}"
+    create: yes
+    owner: root
+    group: "{{ root_group }}"
+    mode: '0644'
+
+- name: probe whether the synthetic link is in place
+  stat:
+    path: "{{ smb_mount_dir }}"
+  register: _synthetic_probe
+
+# apfs.util -t stitches new synthetic entries but does not convert an
+# already-stitched empty dir into a symlink. The actual transition
+# only happens at boot.
+- name: pause for reboot to materialize the synthetic link
+  pause:
+    seconds: 600
+    prompt: |
+
+      ====================================================================
+      MANUAL STEP REQUIRED — reboot to apply /etc/synthetic.conf
+      ====================================================================
+
+      {{ smb_mount_dir }} must be a symlink to {{ smb_mount_darwin_target }}, and
+      synthetic.conf changes only apply at boot.  On the Mac, run:
+
+        sudo /sbin/shutdown -r now
+
+      then log in at the Mac (FileVault keeps SSH down until someone
+      does) and press Ctrl+C, then C, here. The play otherwise resumes
+      on its own after 10 minutes.
+  when: _synthetic_probe.stat.lnk_target | default('') != smb_mount_darwin_target
 
 # ---- autofs map --------------------------------------------------------
 # This part IS writable over SSH — only /etc/auto_master itself is not.

@@ -3,3 +3,8 @@
 # this role; renaming it rewrites every unit that reads it and remounts the
 # share.
 smb_mount_credentials_path: "/etc/.{{ smb_share_config }}_cifs_creds"
+
+smb_mount_path: "{{ smb_mount_dir }}/{{ smb_share_name }}"
+smb_mount_service_name: "{{ smb_mount_path[1:] | replace('/', '-') }}"
+
+smb_mount_darwin_target: "/System/Volumes/Data{{ smb_mount_dir }}"

@@ -4,7 +4,8 @@ smb_mount_state: present
 # smb_share_config and smb_share_names come from the inventory; the play passes
 # the rest from smb_share_configs[smb_share_config] (see default.yml):
 # smb_share_host, smb_share_username, smb_share_password, smb_mount_options
-# (Linux) and smb_mount_dir. Each share mounts at <smb_mount_dir>/<name>.
+# (Linux) and smb_mount_dir. Each share mounts at <smb_mount_dir>/<name>; on
+# macOS smb_mount_dir must be top-level.
 smb_share_names: []
 
 # ---- macOS ----------------------------------------------------------------
