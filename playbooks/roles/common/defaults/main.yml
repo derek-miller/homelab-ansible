@@ -5,7 +5,7 @@ common_pkgs:
     - build-essential
     - cmake
     - curl
-    - git-core
+    - git
     - htop
     - ifstat
     - iftop
