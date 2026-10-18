@@ -90,26 +90,21 @@ docker_compose_definition:
       networks:
         - apps
       healthcheck:
-        test: ["CMD-SHELL", "find \"$$BACKUP_ARCHIVE\" -name 'backup-*' -mmin -1560 | grep -q ."]
+        test: ["CMD-SHELL", "find /archive -name 'backup-*' -mmin -1560 | grep -q ."]
         interval: 1h
         timeout: 30s
         retries: 2
         start_period: 27h
-        start_interval: 5m
+        start_interval: 5s
       environment:
         BACKUP_CRON_EXPRESSION: "0 0 * * *"
-        BACKUP_ARCHIVE: "{{ docker_volume_backup_root }}/{{ inventory_hostname }}"
         BACKUP_FILENAME: backup-%Y-%m-%dT%H-%M-%S.tar.gz
         BACKUP_PRUNING_PREFIX: backup-
         BACKUP_RETENTION_DAYS: 7
         AGE_PUBLIC_KEYS: "{{ docker_volume_backup_age_public_key }}"
         NOTIFICATION_URLS: "{{ docker_volume_backup_notification_urls }}"
       volumes:
-        - type: bind
-          source: /mnt
-          target: /mnt
-          bind:
-            propagation: rslave
+        - /mnt/Backups/Volumes/quinn-raspi1:/archive
         # volumes to backup:
         - homebridge:/backup/homebridge:ro
         - portainer-agent-data:/backup/portainer-agent-data:ro

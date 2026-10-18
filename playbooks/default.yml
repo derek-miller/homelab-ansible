@@ -538,13 +538,45 @@
 
 - hosts: docker
   tasks:
-    - name: create the volume backup folder on the share
-      file:
-        path: "{{ docker_compose_definition.services['docker-volume-backup'].environment.BACKUP_ARCHIVE }}"
-        state: directory
-      when:
-        - docker_compose_definition is defined
-        - "'docker-volume-backup' in docker_compose_definition.services"
+    - name: retry compose containers whose last start failed
+      when: docker_compose_definition is defined
+      block:
+        - name: install docker-compose-retry.service
+          copy:
+            dest: /etc/systemd/system/docker-compose-retry.service
+            content: |
+              [Unit]
+              Description=Start compose containers whose last start failed
+              After=docker.service
+
+              [Service]
+              Type=oneshot
+              ExecStart=/bin/sh -c 'for c in $$(docker ps -aq --filter label=com.docker.compose.project --filter status=exited --filter status=created); do [ -n "$$(docker inspect --format "{% raw %}{{.State.Error}}{% endraw %}" $$c)" ] && docker start $$c; done; true'
+            mode: '0644'
+
+        - name: install docker-compose-retry.timer
+          copy:
+            dest: /etc/systemd/system/docker-compose-retry.timer
+            content: |
+              [Unit]
+              Description=Start compose containers whose last start failed
+
+              [Timer]
+              OnBootSec=5min
+              OnUnitActiveSec=15min
+
+              [Install]
+              WantedBy=timers.target
+            mode: '0644'
+          register: _compose_retry_timer
+
+        - name: enable docker-compose-retry.timer
+          systemd:
+            name: docker-compose-retry.timer
+            state: started
+            enabled: yes
+            daemon_reload: yes
+          when: not (ansible_check_mode and _compose_retry_timer is changed)
 
     - name: create docker containers
       when: docker_compose_definition is defined
