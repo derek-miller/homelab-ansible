@@ -224,7 +224,7 @@ When a host is rebuilt under the same name:
 
 - **Swarm node:** its old entry stays in `docker node ls` as Down, and the label reconcile needs node names to be unique, so remove it first. Its labels go with it, and a label landing on the rebuilt node starts that label's services on empty volumes, which a later restore then skips as already holding data. So bring the data back before the labels:
   1. On a manager: `docker node demote <old-id>` if it was a manager, then `docker node rm --force <old-id>`.
-  2. Clear the host's `docker_labels` in `[docker_labels]` and run, with the primary manager in `hosts=`. The node joins with no labels.
+  2. Clear the host's `docker_labels` in `[docker_labels]` and run, with the primary manager in `hosts=`. The node joins with no labels. If it carries `metrics`, add `ANSIBLE_FLAGS=--skip-tags=telegraf`: with no host holding that label, Telegraf's output has nowhere to point and the play fails.
   3. Restore each label's volumes onto it, as in [Restoring volumes from a backup archive](#restoring-volumes-from-a-backup-archive), with `-e docker_restore_volumes_label=<label>`.
   4. Put the labels back and run again; the services start on the restored volumes.
 - **Tailscale:** remove the old, offline machine in the admin console, and approve any routes the host advertises again.
