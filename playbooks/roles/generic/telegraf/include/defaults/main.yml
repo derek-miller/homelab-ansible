@@ -9,7 +9,7 @@ telegraf_conf_dir: /etc/telegraf/telegraf.d
 telegraf_apt_dependencies:
   - lm-sensors
 # Set false on hosts without ntpq, such as chrony hosts.
-telegraf_inputs_ntpq: "{{ ansible_system == 'Linux' }}"
+telegraf_inputs_ntpq: true
 
 telegraf_launchd_label: com.influxdata.telegraf
 telegraf_log_dir: /var/log/telegraf

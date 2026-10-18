@@ -71,10 +71,8 @@
   quiet = false
   ## Specify the log file name. The empty string means to log to stderr.
   logfile = "{{ telegraf_logfile }}"
-{% if telegraf_logfile %}
   logfile_rotation_max_size = "10MB"
   logfile_rotation_max_archives = 3
-{% endif %}
 
   ## Override default hostname, if empty use os.Hostname()
   hostname = "{{ ansible_hostname }}"

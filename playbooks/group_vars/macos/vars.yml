@@ -21,3 +21,6 @@ root_group: wheel
 # `Etc/UTC`. GMT is functionally identical to UTC (no DST), so map the
 # Linux-side `Etc/UTC` default to `GMT` here for parity.
 timezone: GMT
+
+# timed, not ntpd: there is no ntpq.
+telegraf_inputs_ntpq: false
