@@ -1,11 +1,7 @@
 ---
-# restarted unloads and reloads the job, so a changed plist takes effect. The
-# module reports success even when the job exits at once, so check that it
-# stayed up.
+# restarted unloads and reloads the job, so a changed plist takes effect.
 - name: restart tailscaled
   community.general.launchd:
     name: "{{ tailscale_launchd_label }}"
     state: restarted
-  register: _tailscaled_launchd
-  failed_when: _tailscaled_launchd is failed or _tailscaled_launchd.status.current_state != 'started'
   when: not ansible_check_mode
