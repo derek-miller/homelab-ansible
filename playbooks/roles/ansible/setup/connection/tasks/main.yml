@@ -33,6 +33,21 @@
   set_fact:
     ansible_become: yes
 
+# Before facts: until the Command Line Tools exist, /usr/bin/python3 is a stub.
+- name: install the Command Line Tools (macOS)
+  raw: |
+    set -e
+    xcode-select -p >/dev/null 2>&1 && exit 0
+    trigger=/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+    touch "$trigger"
+    trap 'rm -f "$trigger"' EXIT
+    label=$(softwareupdate -l | sed -n 's/^\* Label: //p' | grep 'Command Line Tools' | sort -V | tail -n1)
+    softwareupdate -i "$label"
+    echo installed
+  register: _clt_install
+  changed_when: "'installed' in _clt_install.stdout"
+  when: "'macos' in group_names"
+
 - name: set ansible hostname
   set_fact:
     ansible_hostname: "{{ inventory_hostname }}"

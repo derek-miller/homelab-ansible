@@ -37,15 +37,14 @@
   tags:
     - base
 
-- name: install ansible remote dependencies
+- name: install pip-tools for pip-sync
   pip:
     virtualenv: "{{ ansible_python_virtualenv }}"
-    requirements: "{{ ansible_python_dir }}/requirements.txt"
-    state: present
+    name: pip-tools
   tags:
     - base
 
-- name: remove packages the lock no longer pins
+- name: install ansible remote dependencies
   command: "{{ ansible_python_virtualenv }}/bin/pip-sync {{ ansible_python_dir }}/requirements.txt"
   register: _remote_pip_sync
   changed_when: "'Everything up-to-date' not in _remote_pip_sync.stdout"
