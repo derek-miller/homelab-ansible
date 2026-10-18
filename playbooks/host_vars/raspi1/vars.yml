@@ -86,21 +86,28 @@ docker_compose_definition:
       networks:
         - apps
       healthcheck:
-        test: ["CMD-SHELL", "find /archive -name 'backup-*' -mmin -1560 | grep -q ."]
+        test: ["CMD-SHELL", "find /mnt/Backups/Volumes/raspi1 -name 'backup-*' -mmin -1560 | grep -q ."]
         interval: 1h
         timeout: 30s
         retries: 2
         start_period: 27h
-        start_interval: 5s
+        start_interval: 5m
       environment:
         BACKUP_CRON_EXPRESSION: "0 0 * * *"
+        BACKUP_ARCHIVE: /mnt/Backups/Volumes/raspi1
         BACKUP_FILENAME: backup-%Y-%m-%dT%H-%M-%S.tar.gz
         BACKUP_PRUNING_PREFIX: backup-
         BACKUP_RETENTION_DAYS: 7
         AGE_PUBLIC_KEYS: "{{ docker_volume_backup_age_public_key }}"
         NOTIFICATION_URLS: "{{ docker_volume_backup_notification_urls }}"
       volumes:
-        - /mnt/Backups/Volumes/raspi1:/archive
+        # /mnt rather than the share, so the container starts while the NAS is
+        # unreachable; each run then triggers the automount through rslave.
+        - type: bind
+          source: /mnt
+          target: /mnt
+          bind:
+            propagation: rslave
         # volumes to backup:
         - homebridge:/backup/homebridge:ro
         - portainer-agent-data:/backup/portainer-agent-data:ro

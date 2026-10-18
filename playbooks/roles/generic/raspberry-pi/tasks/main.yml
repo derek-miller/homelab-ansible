@@ -7,6 +7,9 @@
   apt:
     name:
       - raspi-config
+      # A Pi has no clock that survives power off. Without this, trixie boots at
+      # the last timesyncd stamp, which ntpsec stopped updating.
+      - fake-hwclock
 
 - name: configure options in {{ raspberry_pi_boot_config_path }}
   lineinfile:

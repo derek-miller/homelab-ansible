@@ -538,6 +538,16 @@
 
 - hosts: docker
   tasks:
+    # The backup container binds /mnt, not its folder, so nothing else creates
+    # the folder, and without it offen stores nothing and reports no error.
+    - name: create the volume backup folder on the share
+      file:
+        path: "{{ docker_compose_definition.services['docker-volume-backup'].environment.BACKUP_ARCHIVE }}"
+        state: directory
+      when:
+        - docker_compose_definition is defined
+        - "'docker-volume-backup' in docker_compose_definition.services"
+
     - name: create docker containers
       when: docker_compose_definition is defined
       block:

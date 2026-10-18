@@ -1,5 +1,8 @@
 [Unit]
 Description=mount {{ smb_share_name }}
+# Every access to the automount starts this unit. Under a start limit, a few
+# quick misses while the NAS is unreachable leave the automount failed for good.
+StartLimitIntervalSec=0
 
 [Mount]
 What=//{{ smb_share_host }}/{{ smb_share_name }}
@@ -7,6 +10,7 @@ Where={{ smb_mount_path }}
 
 Type=cifs
 Options=credentials={{ smb_mount_credentials_path }},{{ smb_mount_options }}
+TimeoutSec=30s
 
 [Install]
 WantedBy=multi-user.target
