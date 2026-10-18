@@ -1,7 +1,6 @@
 [Unit]
 Description=mount {{ smb_share_name }}
-# Every access to the automount starts this unit. Under a start limit, a few
-# quick misses while the NAS is unreachable leave the automount failed for good.
+# Each automount access starts this unit; a start limit would latch it failed.
 StartLimitIntervalSec=0
 
 [Mount]
