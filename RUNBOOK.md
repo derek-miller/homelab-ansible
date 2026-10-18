@@ -216,13 +216,17 @@ YouTrack writes its own scheduled backups into the `youtrack-backups` volume (Da
 
 ## Bringing up a new host
 
-1. Add the host to `playbooks/hosts` under its groups (a swarm node also under `[docker_labels]`) and give it `host_vars/<host>/`.
+1. Add the host to `playbooks/hosts` under its groups (a swarm node also under `[docker_labels]`) and give it `playbooks/host_vars/<host>/`.
 2. **First contact goes over the LAN.** Tailscale hosts are reached at `<host>.ts.<domain>`, which exists only once the host's first Tailscale run has published it. Set the new host's `ansible_host` to its LAN address in its host_vars, run `make bootstrap hosts=<host> user=<user>` and then `make run`, and switch `ansible_host` to the tailnet name afterwards. Don't pass `-e ansible_host=<address>` instead: an extra var applies to every host, so `influxdb3_url`, built from the metrics host's `ansible_host`, would point the new host's Telegraf at itself.
 3. **A swarm node needs a manager in the run.** The swarm play joins it, then gives it its `[docker_labels]`; a label already on another node is held until it moves with its volumes (see [Moving a swarm workload](#moving-a-swarm-workload-to-another-host)). Use a full `make run`, or include `docker_swarm_manager[0]` in `hosts=`.
 
 When a host is rebuilt under the same name:
 
-- **Swarm node:** its old entry stays in `docker node ls` as Down, and the label reconcile needs node names to be unique. Before the rebuilt host's first run, on a manager: `docker node demote <old-id>` if it was a manager, then `docker node rm --force <old-id>`.
+- **Swarm node:** its old entry stays in `docker node ls` as Down, and the label reconcile needs node names to be unique, so remove it first. Its labels go with it, and a label landing on the rebuilt node starts that label's services on empty volumes, which a later restore then skips as already holding data. So bring the data back before the labels:
+  1. On a manager: `docker node demote <old-id>` if it was a manager, then `docker node rm --force <old-id>`.
+  2. Clear the host's `docker_labels` in `[docker_labels]` and run, with the primary manager in `hosts=`. The node joins with no labels.
+  3. Restore each label's volumes onto it, as in [Restoring volumes from a backup archive](#restoring-volumes-from-a-backup-archive), with `-e docker_restore_volumes_label=<label>`.
+  4. Put the labels back and run again; the services start on the restored volumes.
 - **Tailscale:** remove the old, offline machine in the admin console, and approve any routes the host advertises again.
 - **SSH:** if it comes back at an address used before, run `ssh-keygen -R <address>` before `make bootstrap`. With a changed key SSH refuses the password login the bootstrap uses.
 
