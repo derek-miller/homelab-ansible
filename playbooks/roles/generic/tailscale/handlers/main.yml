@@ -1,5 +1,6 @@
 ---
-# restarted unloads and reloads the job, so a changed plist takes effect.
+# restarted unloads and reloads the job, so a changed plist takes effect. The
+# module reports success even when the job exits at once.
 - name: restart tailscaled
   community.general.launchd:
     name: "{{ tailscale_launchd_label }}"
