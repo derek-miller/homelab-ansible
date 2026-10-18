@@ -172,6 +172,20 @@
   when: raspberry_pi_swap_size_mb is defined and _dphys_swapfile.stat.exists
   register: _raspberry_pi_swap_changed
 
+# With a 0 MB size dphys-swapfile keeps an empty /var/swap and fails every boot.
+- name: turn off dphys-swapfile when swap is off
+  service:
+    name: dphys-swapfile
+    state: stopped
+    enabled: no
+  when: raspberry_pi_swap_size_mb is defined and raspberry_pi_swap_size_mb | int == 0 and _dphys_swapfile.stat.exists
+
+- name: remove the dphys-swapfile swap file when swap is off
+  file:
+    path: /var/swap
+    state: absent
+  when: raspberry_pi_swap_size_mb is defined and raspberry_pi_swap_size_mb | int == 0 and _dphys_swapfile.stat.exists
+
 - name: ensure rpi-swap drop-in directory exists
   file:
     path: /etc/rpi/swap.conf.d
