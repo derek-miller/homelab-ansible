@@ -31,41 +31,43 @@
   tags:
     - base
 
-# Installing a lock never removes what an earlier lock pinned.
-- name: list the packages in the ansible remote venv
-  command: "{{ ansible_python_virtualenv }}/bin/python3 -m pip list --local --format=json --disable-pip-version-check"
-  register: _remote_pip_list
-  changed_when: false
-  failed_when: _remote_pip_list.rc != 0 and not ansible_check_mode
+- name: check for pip-sync in the ansible remote venv
+  stat:
+    path: "{{ ansible_python_virtualenv }}/bin/pip-sync"
+  register: _remote_pip_sync_bin
+  tags:
+    - base
+
+# Every run, through pip itself, so a re-lock reaches a host whose pip-sync no
+# longer starts.
+- name: install the locked pip-tools for pip-sync
+  pip:
+    virtualenv: "{{ ansible_python_virtualenv }}"
+    name: "{{ ansible_python_lock | regex_search('(?m)^pip-tools==.+') }}"
+  tags:
+    - base
+
+# pip-sync counts only the venv's own packages, so --force-reinstall puts a
+# locked package in the venv even when the system site-packages already has it.
+# Check mode hasn't copied the new lock, so the dry run reads the controller's,
+# and skips a venv due a rebuild, whose old pip-sync may not start.
+- name: sync the ansible remote venv to its lock
+  command:
+    argv: >-
+      {{ [ansible_python_virtualenv ~ '/bin/pip-sync', '--pip-args', '--force-reinstall --no-deps']
+         + (['--dry-run', '/dev/stdin'] if ansible_check_mode else [ansible_python_dir ~ '/requirements.txt']) }}
+    stdin: "{{ ansible_python_lock if ansible_check_mode else omit }}"
+  register: _remote_pip_sync
+  changed_when: "'Everything up-to-date' not in _remote_pip_sync.stdout"
+  # A dry run exits 1 with a plan when changes are pending; a crash also exits 1.
+  failed_when: >-
+    _remote_pip_sync.rc != 0
+    and not (ansible_check_mode and _remote_pip_sync.rc == 1
+             and _remote_pip_sync.stdout is search('^Would (un)?install:', multiline=True))
   check_mode: no
-  tags:
-    - base
-
-- name: remove packages the lock no longer pins
-  pip:
-    virtualenv: "{{ ansible_python_virtualenv }}"
-    name: "{{ _unpinned }}"
-    state: absent
-  vars:
-    _pinned: >-
-      {{ lookup('ansible.builtin.file', role_path ~ '/files/requirements.txt')
-         | regex_findall('(?m)^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^]]*\])?==')
-         | map('lower') | map('regex_replace', '[-_.]+', '-') | list }}
-    _unpinned: >-
-      {{ _remote_pip_list.stdout | from_json | map(attribute='name')
-         | map('lower') | map('regex_replace', '[-_.]+', '-')
-         | reject('in', _pinned + ['pip', 'setuptools']) | list }}
-  when:
-    - _remote_pip_list.rc == 0
-    - _unpinned | length > 0
-  tags:
-    - base
-
-- name: install ansible remote dependencies
-  pip:
-    virtualenv: "{{ ansible_python_virtualenv }}"
-    requirements: "{{ ansible_python_dir }}/requirements.txt"
-    state: present
+  when: >-
+    not ansible_check_mode
+    or (_remote_pip_sync_bin.stat.exists and virtualenv_rebuild is not changed)
   tags:
     - base
 

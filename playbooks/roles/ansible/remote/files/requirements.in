@@ -4,3 +4,4 @@ docker[tls]
 pyyaml
 jsondiff
 packaging
+pip-tools
