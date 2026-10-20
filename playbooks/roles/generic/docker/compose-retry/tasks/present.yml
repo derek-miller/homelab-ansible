@@ -1,0 +1,26 @@
+---
+- name: create docker-compose-retry service
+  copy:
+    src: docker-compose-retry.service
+    dest: /etc/systemd/system/docker-compose-retry.service
+    owner: root
+    group: root
+    mode: 0644
+  register: _compose_retry_service
+
+- name: create docker-compose-retry timer
+  copy:
+    src: docker-compose-retry.timer
+    dest: /etc/systemd/system/docker-compose-retry.timer
+    owner: root
+    group: root
+    mode: 0644
+  register: _compose_retry_timer
+
+- name: enable and start docker-compose-retry timer
+  systemd:
+    name: docker-compose-retry.timer
+    enabled: yes
+    state: "{{ (_compose_retry_timer.changed or _compose_retry_service.changed) | ternary('restarted', 'started') }}"
+    daemon_reload: "{{ _compose_retry_timer.changed or _compose_retry_service.changed }}"
+  when: not (ansible_check_mode and _compose_retry_timer is changed)

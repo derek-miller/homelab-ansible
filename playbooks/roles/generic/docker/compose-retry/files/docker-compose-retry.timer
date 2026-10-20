@@ -1,0 +1,9 @@
+[Unit]
+Description=Start compose containers whose last start failed
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+
+[Install]
+WantedBy=timers.target
