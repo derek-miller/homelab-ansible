@@ -1,0 +1,7 @@
+[Unit]
+Description=Start compose containers whose last start failed
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'for c in $$(docker ps -aq --filter label=com.docker.compose.project --filter status=exited --filter status=created); do [ -n "$$(docker inspect --format "{{.State.Error}}" $$c)" ] && docker start $$c; done; true'

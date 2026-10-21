@@ -537,6 +537,9 @@
     - docker-swarm
 
 - hosts: docker
+  roles:
+    - role: generic/docker/compose-retry
+      docker_compose_retry_state: "{{ 'present' if docker_compose_definition is defined else 'absent' }}"
   tasks:
     - name: create docker containers
       when: docker_compose_definition is defined

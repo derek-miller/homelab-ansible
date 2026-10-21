@@ -1,5 +1,7 @@
 [Unit]
 Description=mount {{ smb_share_name }}
+# Each automount access starts this unit; a start limit would latch it failed.
+StartLimitIntervalSec=0
 
 [Mount]
 What=//{{ smb_share_host }}/{{ smb_share_name }}
@@ -7,6 +9,7 @@ Where={{ smb_mount_path }}
 
 Type=cifs
 Options=credentials={{ smb_mount_credentials_path }},{{ smb_mount_options }}
+TimeoutSec=30s
 
 [Install]
 WantedBy=multi-user.target

@@ -1,0 +1,21 @@
+---
+- name: stop and disable docker-compose-retry timer
+  systemd:
+    name: docker-compose-retry.timer
+    state: stopped
+    enabled: no
+  failed_when: false
+
+- name: delete docker-compose-retry units
+  file:
+    path: /etc/systemd/system/docker-compose-retry.{{ item }}
+    state: absent
+  loop:
+    - service
+    - timer
+  register: _compose_retry_units
+
+- name: reload systemd daemon
+  systemd:
+    daemon_reload: yes
+  when: _compose_retry_units is changed
