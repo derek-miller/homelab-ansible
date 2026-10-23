@@ -4,6 +4,7 @@ common_pkgs:
   apt:
     - build-essential
     - cmake
+    - cron
     - curl
     - git
     - htop
