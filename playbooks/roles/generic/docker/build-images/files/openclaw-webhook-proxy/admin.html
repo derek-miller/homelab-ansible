@@ -40,6 +40,7 @@
     }
   }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body {
     margin: 0;
     background: var(--bg);
@@ -102,15 +103,23 @@
   tbody tr.empty:hover { background: none; }
   .num { text-align: right; }
   .key { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8125rem; }
+  .sources { white-space: normal; }
+  .sources span { white-space: nowrap; }
   .clip {
     display: inline-block;
-    max-width: 22rem;
+    max-width: 10rem;
     overflow: hidden;
     text-overflow: ellipsis;
     vertical-align: bottom;
   }
-  #events .clip { max-width: 12rem; }
-  .actions { display: flex; gap: 6px; cursor: default; }
+  .key .clip { max-width: 44ch; }
+  .error .clip { max-width: 7rem; }
+  th button.link { text-transform: inherit; letter-spacing: inherit; }
+  th button.link:hover { color: var(--text); }
+  th[aria-sort="ascending"] button::after { content: " ▲"; }
+  th[aria-sort="descending"] button::after { content: " ▼"; }
+  .actions { display: flex; gap: 6px; align-items: center; cursor: default; }
+  a { color: var(--accent); }
   button, select, input[type="text"] {
     font: inherit;
     color: var(--text);
@@ -191,7 +200,6 @@
   .markdown blockquote { padding-left: 10px; border-left: 3px solid var(--border); color: var(--muted); }
   .markdown pre { background: var(--panel); max-height: none; }
   .markdown :not(pre) > code { padding: 0 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; }
-  .markdown a { color: var(--accent); }
   .markdown img { max-width: 100%; }
   .markdown :is(th, td) { border: 1px solid var(--border); white-space: normal; overflow-wrap: break-word; }
   .markdown th { color: inherit; font-size: inherit; text-transform: none; letter-spacing: normal; }
@@ -201,7 +209,7 @@
     dl { grid-template-columns: 1fr; }
     dt { margin-top: 6px; }
     .stat { flex: 1 1 40%; min-width: 0; }
-    .clip { max-width: 12rem; }
+    #sessions .key { min-width: 12rem; white-space: normal; overflow-wrap: anywhere; }
   }
 </style>
 </head>
@@ -220,18 +228,31 @@
 <main>
   <section>
     <h2>Sessions</h2>
+    <div class="toolbar">
+      <label>Search
+        <input id="sessions-search" type="text" autocomplete="off">
+      </label>
+      <label>Show
+        <select id="sessions-show">
+          <option value="">All</option>
+          <option value="pending">Has queued</option>
+          <option value="sent">In flight</option>
+          <option value="dead">Has dead</option>
+        </select>
+      </label>
+    </div>
     <div class="table-wrap">
       <table id="sessions">
         <thead>
           <tr>
-            <th>Session</th>
-            <th class="num">Pending</th>
-            <th>In flight</th>
-            <th class="num">Dead</th>
-            <th class="num">Total</th>
-            <th>Sources</th>
-            <th>Next due</th>
-            <th>Last received</th>
+            <th data-sort="session_key"><button type="button" class="link">Session</button></th>
+            <th class="num" data-sort="pending"><button type="button" class="link">Pending</button></th>
+            <th data-sort="sent"><button type="button" class="link">In flight</button></th>
+            <th class="num" data-sort="dead"><button type="button" class="link">Dead</button></th>
+            <th class="num" data-sort="total"><button type="button" class="link">Total</button></th>
+            <th data-sort="sources"><button type="button" class="link">Sources</button></th>
+            <th data-sort="next_due"><button type="button" class="link">Next due</button></th>
+            <th data-sort="last_received"><button type="button" class="link">Last received</button></th>
             <th></th>
           </tr>
         </thead>
@@ -260,6 +281,9 @@
         <input id="filter-session" type="text" list="session-keys" autocomplete="off">
         <datalist id="session-keys"></datalist>
       </label>
+      <label>Search
+        <input id="filter-search" type="text" autocomplete="off">
+      </label>
     </div>
     <div class="toolbar">
       <span id="selected-count">0 selected</span>
@@ -272,15 +296,15 @@
         <thead>
           <tr>
             <th><input id="select-all" type="checkbox" title="Select all shown"></th>
-            <th class="num">ID</th>
-            <th>Received</th>
-            <th>Source</th>
-            <th>Session</th>
-            <th>Type</th>
-            <th>Detail</th>
-            <th>Status</th>
-            <th class="num">Attempts</th>
-            <th>Last error</th>
+            <th class="num" data-sort="id"><button type="button" class="link">ID</button></th>
+            <th data-sort="received_at"><button type="button" class="link">Received</button></th>
+            <th data-sort="source"><button type="button" class="link">Source</button></th>
+            <th data-sort="session_key"><button type="button" class="link">Session</button></th>
+            <th data-sort="event_type"><button type="button" class="link">Type</button></th>
+            <th data-sort="detail"><button type="button" class="link">Detail</button></th>
+            <th data-sort="status"><button type="button" class="link">Status</button></th>
+            <th class="num" data-sort="attempts"><button type="button" class="link">Attempts</button></th>
+            <th data-sort="last_error"><button type="button" class="link">Last error</button></th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -340,6 +364,8 @@
     generation: 0,
     selected: new Set(),
     detailId: null,
+    openclawUrl: null,
+    sort: { sessions: null, events: { key: "id", desc: true } },
   };
 
   const $ = (id) => document.getElementById(id);
@@ -408,8 +434,51 @@
     return el("span", { className: "clip", title: text }, text);
   }
 
+  /** The event's detail without the repo and PR or issue number its session key already shows */
+  function shortDetail(e) {
+    const [, repo, number = ""] = e.session_key.match(/^hook:github:([^#@]+)(#\d+)?/) ?? [];
+    if (!repo || !e.detail.startsWith(repo)) return e.detail;
+    return e.detail.slice(repo.length).replace(new RegExp(`^${number}\\b`), "").trim() || "–";
+  }
+
   function emptyRow(columns, text) {
     return el("tr", { className: "empty" }, el("td", { colSpan: columns }, text));
+  }
+
+  /** fn, deferred until typing has paused */
+  function debounced(fn) {
+    let timer;
+    return () => {
+      clearTimeout(timer);
+      timer = setTimeout(fn, 300);
+    };
+  }
+
+  const collator = new Intl.Collator(undefined, { numeric: true });
+
+  /** The rows in the table's sort order, empty values last; also marks the sorted column's header */
+  function applySort(table, rows) {
+    const sort = state.sort[table];
+    for (const th of $(table).tHead.querySelectorAll("th[data-sort]")) {
+      if (th.dataset.sort === sort?.key) th.setAttribute("aria-sort", sort.desc ? "descending" : "ascending");
+      else th.removeAttribute("aria-sort");
+    }
+    if (!sort) return rows;
+    return rows.toSorted((x, y) => {
+      const a = x[sort.key];
+      const b = y[sort.key];
+      if (a == null || b == null) return (a == null) - (b == null);
+      const order = typeof a === "string" ? collator.compare(a, b) : a - b;
+      return sort.desc ? -order : order;
+    });
+  }
+
+  /** A link to the session in the OpenClaw Control UI, or null without OPENCLAW_UI_URL */
+  function openclawLink(key, text) {
+    if (!state.openclawUrl) return null;
+    // The gateway keeps a hook session as agent:main: and the key lowercased.
+    const session = encodeURIComponent(`agent:main:${key.toLowerCase()}`);
+    return el("a", { href: `${state.openclawUrl}/chat?session=${session}`, target: "_blank", rel: "noopener noreferrer" }, text);
   }
 
   // ─── Stats and sessions ───
@@ -439,25 +508,29 @@
 
   function renderSessions() {
     const filter = $("filter-session").value.trim();
-    const rows = state.sessions.map((s) =>
+    const show = $("sessions-show").value;
+    const sessions = applySort("sessions", show ? state.sessions.filter((s) => s[show] > 0) : state.sessions);
+    const rows = sessions.map((s) =>
       el("tr", { className: s.session_key === filter ? "selected" : "", onclick: () => filterSession(s.session_key) },
-        el("td", { className: "key" }, el("button", { type: "button", className: "link clip", title: s.session_key }, s.session_key)),
+        el("td", { className: "key" }, el("button", { type: "button", className: "link" }, s.session_key)),
         el("td", { className: "num" }, s.pending),
         el("td", {}, s.sent > 0 ? "yes" : "no"),
         el("td", { className: "num" }, s.dead),
         el("td", { className: "num" }, s.total),
-        el("td", {}, s.sources.split(",").join(", ")),
+        el("td", { className: "sources" }, ...s.sources.split(",").flatMap((name, i) => [i ? ", " : null, el("span", {}, name)])),
         el("td", { title: absolute(s.next_due) }, dueText(s.next_due)),
         el("td", { title: absolute(s.last_received) }, relative(s.last_received)),
         el("td", { onclick: (event) => event.stopPropagation() },
           el("div", { className: "actions" },
+            openclawLink(s.session_key, "OpenClaw"),
             s.pending > 0
               ? el("button", { type: "button", className: "danger", onclick: () => changeSession(s.session_key, "pending", "discard") }, "Discard queued")
               : null,
             s.dead > 0
               ? el("button", { type: "button", onclick: () => changeSession(s.session_key, "dead", "replay") }, "Replay dead")
               : null))));
-    setChildren($("sessions").tBodies[0], rows.length ? rows : [emptyRow(9, "The inbox is empty")]);
+    const filtered = show || $("sessions-search").value.trim();
+    setChildren($("sessions").tBodies[0], rows.length ? rows : [emptyRow(9, filtered ? "No sessions match" : "The inbox is empty")]);
     setChildren($("session-keys"), state.sessions.map((s) => el("option", { value: s.session_key })));
   }
 
@@ -499,6 +572,7 @@
       status: $("filter-status").value,
       source: $("filter-source").value,
       session: $("filter-session").value.trim(),
+      q: $("filter-search").value.trim(),
     };
     for (const [key, value] of Object.entries(filters)) {
       if (value) params.set(key, value);
@@ -533,7 +607,7 @@
   }
 
   function renderEvents() {
-    const rows = state.events.map((e) => {
+    const rows = applySort("events", state.events).map((e) => {
       const selected = state.selected.has(e.id);
       return el("tr", { className: selected ? "selected" : "", onclick: () => showDetail(e.id) },
         el("td", { onclick: (event) => event.stopPropagation() },
@@ -548,7 +622,7 @@
         el("td", {}, e.source),
         el("td", { className: "key" }, clip(e.session_key)),
         el("td", {}, e.event_type ?? "–"),
-        el("td", {}, e.detail == null ? "–" : clip(e.detail)),
+        el("td", { title: e.detail ?? "" }, e.detail == null ? "–" : el("span", { className: "clip" }, shortDetail(e))),
         el("td", {}, el("span", { className: "badge", dataset: { status: e.status } }, e.status)),
         el("td", { className: "num" }, e.attempts),
         el("td", { className: "error" }, e.last_error ? clip(e.last_error.slice(0, 200)) : ""));
@@ -641,7 +715,10 @@
       $("detail-fields").replaceChildren(
         ...Object.entries(event)
           .filter(([key]) => key !== "message" && key !== "check_json")
-          .flatMap(([key, value]) => [el("dt", {}, key), el("dd", {}, fieldText(key, value))])
+          .flatMap(([key, value]) => [
+            el("dt", {}, key),
+            el("dd", {}, (key === "session_key" && openclawLink(value, value)) || fieldText(key, value)),
+          ])
       );
       $("detail-message").textContent = event.message;
       $("detail-rendered").innerHTML = renderMarkdown(event.message);
@@ -692,11 +769,20 @@
   async function refresh() {
     const updated = $("updated");
     try {
-      const [stats, sessions] = await Promise.all([api("/api/stats"), api("/api/sessions")]);
+      const q = $("sessions-search").value.trim();
+      const [stats, sessions] = await Promise.all([
+        api("/api/stats"),
+        api(q ? `/api/sessions?${new URLSearchParams({ q })}` : "/api/sessions"),
+      ]);
+      state.openclawUrl = stats.openclawUrl;
       renderStats(stats);
-      state.sessions = sessions;
-      renderSources();
-      renderSessions();
+      // A search typed while this loaded gets its own refresh.
+      if (q === $("sessions-search").value.trim()) {
+        state.sessions = sessions;
+        // A search narrows the sessions, not the sources to filter events by.
+        if (!q) renderSources();
+        renderSessions();
+      }
       if (state.paged) renderEvents();
       else await loadEvents();
       updated.textContent = `Updated ${new Date().toLocaleTimeString()}`;
@@ -717,13 +803,21 @@
     setTimeout(poll, REFRESH_MS);
   }
 
-  let sessionInputTimer;
-  $("filter-session").addEventListener("input", () => {
-    clearTimeout(sessionInputTimer);
-    sessionInputTimer = setTimeout(filtersChanged, 300);
-  });
+  $("sessions-search").addEventListener("input", debounced(refresh));
+  $("sessions-show").addEventListener("change", renderSessions);
+  $("filter-session").addEventListener("input", debounced(filtersChanged));
+  $("filter-search").addEventListener("input", debounced(filtersChanged));
   $("filter-status").addEventListener("change", filtersChanged);
   $("filter-source").addEventListener("change", filtersChanged);
+  for (const [table, render] of [["sessions", renderSessions], ["events", renderEvents]]) {
+    $(table).tHead.addEventListener("click", (event) => {
+      const key = event.target.closest("th[data-sort]")?.dataset.sort;
+      if (!key) return;
+      const current = state.sort[table];
+      state.sort[table] = { key, desc: current?.key === key && !current.desc };
+      render();
+    });
+  }
   $("select-all").addEventListener("change", (event) => select(state.events.map((e) => e.id), event.target.checked));
   $("replay-selected").addEventListener("click", () => changeSelected("replay"));
   $("discard-selected").addEventListener("click", () => changeSelected("discard"));
