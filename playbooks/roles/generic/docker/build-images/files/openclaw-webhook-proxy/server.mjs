@@ -5,7 +5,8 @@
  * and queues each accepted event in a SQLite inbox. A dispatcher sends a
  * session's queued events to the OpenClaw hooks API as one turn once that
  * session has no turn in flight, and follows the gateway log to learn when
- * the turn has ended.
+ * the turn has ended. It also serves an admin page at / with a JSON API under
+ * /api/ for watching the inbox and replaying or discarding events.
  *
  * Always required:
  *   OPENCLAW_HOOKS_TOKEN     — bearer token for the OpenClaw hooks API
@@ -349,6 +350,13 @@ function extractSuggestion(body) {
   return match ? match[1].trimEnd() : null;
 }
 
+/** Wrap code in a fence longer than any run of backticks inside it */
+function fence(code, lang = "") {
+  const longest = Math.max(0, ...(code.match(/`+/g) ?? []).map((run) => run.length));
+  const ticks = "`".repeat(Math.max(3, longest + 1));
+  return `${ticks}${lang}\n${code}\n${ticks}`;
+}
+
 /** Format GitHub event into a meaningful agent message */
 function formatGitHubMessage(event, payload) {
   const repo = payload.repository?.full_name || "unknown";
@@ -381,7 +389,7 @@ function formatGitHubMessage(event, payload) {
       const suggestion = extractSuggestion(comment.body);
       // diff_hunk gives the surrounding code context
       const diffHunk = comment.diff_hunk
-        ? `\nCode context (diff hunk):\n${comment.diff_hunk}`
+        ? `\nCode context (diff hunk):\n${fence(comment.diff_hunk, "diff")}`
         : "";
       const replyInfo = comment.in_reply_to_id
         ? `\nIn reply to comment #${comment.in_reply_to_id}`
@@ -392,7 +400,7 @@ function formatGitHubMessage(event, payload) {
         `File: ${comment.path}:${comment.line || comment.original_line || "?"}`,
         replyInfo || null,
         `Comment:\n${comment.body}`,
-        suggestion ? `\nSuggested change:\n${suggestion}` : null,
+        suggestion ? `\nSuggested change:\n${fence(suggestion)}` : null,
         diffHunk || null,
         `PR URL: ${pr.html_url}`,
         `Comment URL: ${comment.html_url}`,
@@ -899,7 +907,7 @@ db.exec(`
 // A send cut off by a restart has no run id for a completion line to match.
 db.exec(`UPDATE events SET status = 'pending' WHERE status = 'sent' AND run_id IS NULL`);
 
-// status: pending → sent → done; skipped, or dead once out of attempts.
+// status: pending → sent → done; skipped, dead once out of attempts, or discarded.
 const insertEvent = db.prepare(`
   INSERT INTO events (received_at, source, thread_key, session_key, delivery_id,
                       event_type, detail, message, check_json, status, due_at)
@@ -954,7 +962,40 @@ const failRows = db.prepare(`
   WHERE status = 'sent' AND id IN (SELECT value FROM json_each(?))
   RETURNING session_key, status`);
 const pruneRows = db.prepare(`
-  DELETE FROM events WHERE status IN ('done', 'skipped', 'dead') AND received_at < ?`);
+  DELETE FROM events WHERE status IN ('done', 'skipped', 'dead', 'discarded') AND received_at < ?`);
+const sessionSummary = db.prepare(`
+  SELECT session_key,
+         COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+         COUNT(*) FILTER (WHERE status = 'sent') AS sent,
+         COUNT(*) FILTER (WHERE status = 'dead') AS dead,
+         COUNT(*) AS total,
+         group_concat(DISTINCT source) AS sources,
+         MIN(due_at) FILTER (WHERE status = 'pending') AS next_due,
+         MAX(received_at) AS last_received
+  FROM events GROUP BY session_key
+  ORDER BY pending + sent + dead = 0, last_received DESC LIMIT 200`);
+const listEvents = db.prepare(`
+  SELECT id, received_at, source, thread_key, session_key, delivery_id, event_type, detail,
+         status, due_at, attempts, run_id, sent_at, last_error
+  FROM events
+  WHERE (:status IS NULL OR status = :status) AND (:source IS NULL OR source = :source)
+    AND (:session IS NULL OR session_key = :session) AND (:before IS NULL OR id < :before)
+  ORDER BY id DESC LIMIT :limit`);
+const eventById = db.prepare(`SELECT * FROM events WHERE id = ?`);
+// A replayed PR or issue event follows its thread's newest ticket key, as a new one would.
+const replayRows = db.prepare(`
+  UPDATE events SET status = 'pending', attempts = 0, due_at = ?, run_id = NULL, sent_at = NULL,
+    last_error = NULL,
+    session_key = COALESCE((SELECT t.session_key FROM events t
+                            WHERE t.thread_key = events.thread_key AND t.session_key LIKE 'ticket:%'
+                              AND events.thread_key LIKE 'github:%#%' AND events.thread_key NOT LIKE '%@%'
+                            ORDER BY t.id DESC LIMIT 1), session_key)
+  WHERE status IN ('done', 'skipped', 'dead', 'discarded') AND id IN (SELECT value FROM json_each(?))
+  RETURNING id`);
+const discardRows = db.prepare(`
+  UPDATE events SET status = 'discarded'
+  WHERE status IN ('pending', 'dead') AND id IN (SELECT value FROM json_each(?))
+  RETURNING id`);
 
 /** Queue one accepted event; throws if the inbox cannot take it */
 function enqueue(source, threadKey, sessionKey, deliveryId, eventEntry, dueNow) {
@@ -999,6 +1040,125 @@ function shouldProcessUser(actor, allowList, ignoreList) {
   return { process: true, reason: "no filter" };
 }
 
+// ─── Admin page ──────────────────────────────────────────────────────
+
+const ADMIN_PAGE = readFileSync(new URL("admin.html", import.meta.url));
+const MARKED_JS = readFileSync(new URL("marked.umd.js", import.meta.url));
+const PURIFY_JS = readFileSync(new URL("purify.min.js", import.meta.url));
+
+/** Answer 405 unless the request uses `method` */
+function allowMethod(req, res, method) {
+  if (req.method === method) return true;
+  res.writeHead(405);
+  res.end("Method not allowed");
+  return false;
+}
+
+function sendJson(res, status, value) {
+  const body = JSON.stringify(value);
+  res.writeHead(status, { "Content-Type": "application/json" });
+  res.end(body);
+}
+
+/** Read the event ids from a {"ids": [...]} body; answers the request itself and returns null when it can't */
+async function readIds(req, res) {
+  const contentType = (req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+  if (contentType !== "application/json") {
+    res.writeHead(415);
+    res.end("Content-Type must be application/json");
+    return null;
+  }
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  let ids;
+  try {
+    ids = JSON.parse(Buffer.concat(chunks).toString())?.ids;
+  } catch {
+    ids = null;
+  }
+  if (!Array.isArray(ids) || !ids.every(Number.isInteger)) {
+    res.writeHead(400);
+    res.end('Body must be {"ids": [<event id>, ...]}');
+    return null;
+  }
+  return ids;
+}
+
+/** Serve the admin page and its API; `path` is the raw request path */
+async function handleAdmin(req, res, path) {
+  const eventId = path.match(/^\/api\/events\/(\d+)$/)?.[1];
+  if (eventId) {
+    if (!allowMethod(req, res, "GET")) return;
+    const row = eventById.get(Number(eventId));
+    if (!row) {
+      res.writeHead(404);
+      res.end("No such event");
+      return;
+    }
+    sendJson(res, 200, row);
+    return;
+  }
+
+  switch (path) {
+    case "/":
+      if (!allowMethod(req, res, "GET")) return;
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(ADMIN_PAGE);
+      return;
+    case "/marked.js":
+      if (!allowMethod(req, res, "GET")) return;
+      res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" });
+      res.end(MARKED_JS);
+      return;
+    case "/purify.js":
+      if (!allowMethod(req, res, "GET")) return;
+      res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" });
+      res.end(PURIFY_JS);
+      return;
+    case "/api/stats":
+      if (!allowMethod(req, res, "GET")) return;
+      sendJson(res, 200, { ...inboxStats.get(), maxInFlight: OPENCLAW_MAX_IN_FLIGHT, logStream });
+      return;
+    case "/api/sessions":
+      if (!allowMethod(req, res, "GET")) return;
+      sendJson(res, 200, sessionSummary.all());
+      return;
+    case "/api/events": {
+      if (!allowMethod(req, res, "GET")) return;
+      const query = new URLSearchParams(req.url.slice(path.length + 1));
+      sendJson(res, 200, listEvents.all({
+        status: query.get("status") || null,
+        source: query.get("source") || null,
+        session: query.get("session") || null,
+        before: parseInt(query.get("before"), 10) || null,
+        limit: Math.min(Math.max(parseInt(query.get("limit"), 10) || 100, 1), 200),
+      }));
+      return;
+    }
+    case "/api/replay": {
+      if (!allowMethod(req, res, "POST")) return;
+      const ids = await readIds(req, res);
+      if (!ids) return;
+      const replayed = replayRows.all(Date.now(), JSON.stringify(ids)).length;
+      logInfo(`Replayed ${replayed} event(s) from the admin page`);
+      sendJson(res, 200, { replayed });
+      return;
+    }
+    case "/api/discard": {
+      if (!allowMethod(req, res, "POST")) return;
+      const ids = await readIds(req, res);
+      if (!ids) return;
+      const discarded = discardRows.all(JSON.stringify(ids)).length;
+      logInfo(`Discarded ${discarded} event(s) from the admin page`);
+      sendJson(res, 200, { discarded });
+      return;
+    }
+    default:
+      res.writeHead(404);
+      res.end("Not found");
+  }
+}
+
 // ─── Request handler ────────────────────────────────────────────────
 
 const server = createServer(async (req, res) => {
@@ -1014,6 +1174,18 @@ const server = createServer(async (req, res) => {
     }
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ status: "ok", logStream, ...stats }));
+    return;
+  }
+
+  const path = req.url.split("?")[0];
+  if (path === "/" || path === "/marked.js" || path === "/purify.js" || path.startsWith("/api/")) {
+    try {
+      await handleAdmin(req, res, path);
+    } catch (err) {
+      logWarn(`Admin request ${req.method} ${path} failed: ${err.message}`);
+      res.writeHead(500);
+      res.end("Admin request failed");
+    }
     return;
   }
 

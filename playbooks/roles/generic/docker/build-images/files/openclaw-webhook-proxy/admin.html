@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>OpenClaw inbox</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --text: #1c1d21;
+    --muted: #686b75;
+    --border: #dcdee4;
+    --accent: #2f63d8;
+    --hover: #eef1f6;
+    --selected: #e3ebfd;
+    --pending: #2f63d8;
+    --sent: #a35a00;
+    --done: #18794e;
+    --skipped: #6b6f7a;
+    --dead: #c4262e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121317;
+      --panel: #1b1d22;
+      --text: #e4e5e9;
+      --muted: #9a9daa;
+      --border: #30333b;
+      --accent: #7aa2ff;
+      --hover: #23262d;
+      --selected: #1f2a45;
+      --pending: #7aa2ff;
+      --sent: #f0a64b;
+      --done: #4cc38a;
+      --skipped: #9a9daa;
+      --dead: #ff6b6f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header, main { max-width: 1400px; margin: 0 auto; padding: 0 16px; }
+  header { padding-top: 16px; }
+  h1 { font-size: 1.25rem; margin: 0 0 12px; }
+  h2 { font-size: 1rem; margin: 0 0 10px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    min-width: 7.5rem;
+  }
+  .label {
+    display: block;
+    color: var(--muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .value { font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #stat-log[data-state="up"] { color: var(--done); }
+  #stat-log[data-state="down"] { color: var(--dead); }
+  #stat-log[data-state="disconnected"] { color: var(--sent); }
+  .status-line { margin: 10px 0 0; color: var(--muted); font-size: 0.8125rem; }
+  .notice { margin: 10px 0 0; }
+  .error { color: var(--dead); }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 16px 0;
+  }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  th {
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--hover); }
+  tbody tr.selected { background: var(--selected); }
+  tbody tr.empty { cursor: default; color: var(--muted); }
+  tbody tr.empty:hover { background: none; }
+  .num { text-align: right; }
+  .key { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8125rem; }
+  .clip {
+    display: inline-block;
+    max-width: 22rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+  }
+  #events .clip { max-width: 12rem; }
+  .actions { display: flex; gap: 6px; cursor: default; }
+  button, select, input[type="text"] {
+    font: inherit;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  button {
+    background: var(--panel);
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.danger { color: var(--dead); }
+  button.link {
+    border: 0;
+    padding: 0;
+    background: none;
+    color: inherit;
+    text-align: left;
+  }
+  select, input[type="text"] { background: var(--bg); padding: 4px 8px; }
+  input[type="text"] { width: 18rem; min-width: 0; }
+  input[type="checkbox"] { width: 16px; height: 16px; margin: 0; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 10px; }
+  .toolbar label, .message-head label { display: flex; gap: 6px; align-items: center; max-width: 100%; color: var(--muted); }
+  .more { display: flex; gap: 8px; margin-top: 10px; }
+  .badge {
+    display: inline-block;
+    padding: 0 8px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .badge[data-status="pending"] { color: var(--pending); }
+  .badge[data-status="sent"] { color: var(--sent); }
+  .badge[data-status="done"] { color: var(--done); }
+  .badge[data-status="skipped"] { color: var(--skipped); }
+  .badge[data-status="dead"] { color: var(--dead); }
+  .badge[data-status="discarded"] { color: var(--skipped); text-decoration: line-through; }
+  dialog {
+    width: min(56rem, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+    color: var(--text);
+  }
+  dialog::backdrop { background: rgb(0 0 0 / 0.45); }
+  .dialog-body { padding: 16px; }
+  .dialog-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .dialog-head h2 { margin: 0; }
+  h3 { font-size: 0.875rem; margin: 16px 0 6px; }
+  .message-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 16px 0 6px; }
+  .message-head h3 { margin: 0; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
+  dt { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8125rem; }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  pre, .markdown {
+    margin: 0;
+    padding: 8px 10px;
+    max-height: 50vh;
+    overflow: auto;
+    overflow-wrap: anywhere;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.8125rem;
+  }
+  pre { white-space: pre-wrap; }
+  .markdown :is(p, ul, ol, blockquote, pre, table) { margin: 0 0 8px; }
+  .markdown :is(h1, h2, h3, h4, h5, h6) { font-size: 0.875rem; margin: 12px 0 6px; }
+  .markdown > :first-child { margin-top: 0; }
+  .markdown > :last-child { margin-bottom: 0; }
+  .markdown :is(ul, ol) { padding-left: 20px; }
+  .markdown blockquote { padding-left: 10px; border-left: 3px solid var(--border); color: var(--muted); }
+  .markdown pre { background: var(--panel); max-height: none; }
+  .markdown :not(pre) > code { padding: 0 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; }
+  .markdown a { color: var(--accent); }
+  .markdown img { max-width: 100%; }
+  .markdown :is(th, td) { border: 1px solid var(--border); white-space: normal; overflow-wrap: break-word; }
+  .markdown th { color: inherit; font-size: inherit; text-transform: none; letter-spacing: normal; }
+  .markdown tbody tr { cursor: auto; background: none; }
+  .dialog-actions { display: flex; gap: 8px; margin-top: 16px; }
+  @media (max-width: 600px) {
+    dl { grid-template-columns: 1fr; }
+    dt { margin-top: 6px; }
+    .stat { flex: 1 1 40%; min-width: 0; }
+    .clip { max-width: 12rem; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>OpenClaw inbox</h1>
+  <div class="stats">
+    <div class="stat"><span class="label">Pending</span><span id="stat-pending" class="value">–</span></div>
+    <div class="stat"><span class="label">In flight</span><span id="stat-inflight" class="value">–</span></div>
+    <div class="stat"><span class="label">Dead</span><span id="stat-dead" class="value">–</span></div>
+    <div class="stat"><span class="label">Gateway log</span><span id="stat-log" class="value">–</span></div>
+  </div>
+  <p id="updated" class="status-line">Loading…</p>
+  <p class="notice" role="status" hidden></p>
+</header>
+<main>
+  <section>
+    <h2>Sessions</h2>
+    <div class="table-wrap">
+      <table id="sessions">
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th class="num">Pending</th>
+            <th>In flight</th>
+            <th class="num">Dead</th>
+            <th class="num">Total</th>
+            <th>Sources</th>
+            <th>Next due</th>
+            <th>Last received</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+  <section>
+    <h2>Events</h2>
+    <div class="toolbar">
+      <label>Status
+        <select id="filter-status">
+          <option value="">All</option>
+          <option value="pending">pending</option>
+          <option value="sent">sent</option>
+          <option value="done">done</option>
+          <option value="skipped">skipped</option>
+          <option value="dead">dead</option>
+          <option value="discarded">discarded</option>
+        </select>
+      </label>
+      <label>Source
+        <select id="filter-source"><option value="">All</option></select>
+      </label>
+      <label>Session
+        <input id="filter-session" type="text" list="session-keys" autocomplete="off">
+        <datalist id="session-keys"></datalist>
+      </label>
+    </div>
+    <div class="toolbar">
+      <span id="selected-count">0 selected</span>
+      <button id="replay-selected" type="button" disabled>Replay selected</button>
+      <button id="discard-selected" type="button" class="danger" disabled>Discard selected</button>
+      <button id="clear-selected" type="button" disabled>Clear selection</button>
+    </div>
+    <div class="table-wrap">
+      <table id="events">
+        <thead>
+          <tr>
+            <th><input id="select-all" type="checkbox" title="Select all shown"></th>
+            <th class="num">ID</th>
+            <th>Received</th>
+            <th>Source</th>
+            <th>Session</th>
+            <th>Type</th>
+            <th>Detail</th>
+            <th>Status</th>
+            <th class="num">Attempts</th>
+            <th>Last error</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="more">
+      <button id="load-older" type="button" hidden>Load older</button>
+      <button id="show-newest" type="button" hidden>Back to newest</button>
+    </div>
+  </section>
+</main>
+<dialog id="detail">
+  <div class="dialog-body">
+    <div class="dialog-head">
+      <h2 id="detail-title">Event</h2>
+      <button id="detail-close" type="button">Close</button>
+    </div>
+    <p class="notice" role="status" hidden></p>
+    <dl id="detail-fields"></dl>
+    <div class="message-head">
+      <h3>Message</h3>
+      <label><input id="detail-raw" type="checkbox"> Raw</label>
+    </div>
+    <pre id="detail-message"></pre>
+    <div id="detail-rendered" class="markdown"></div>
+    <div id="detail-check-section">
+      <h3>Check</h3>
+      <pre id="detail-check"></pre>
+    </div>
+    <div class="dialog-actions">
+      <button id="detail-replay" type="button">Replay</button>
+      <button id="detail-discard" type="button" class="danger">Discard</button>
+    </div>
+  </div>
+</dialog>
+<script src="/marked.js"></script>
+<script src="/purify.js"></script>
+<script>
+  "use strict";
+
+  const PAGE_SIZE = 100;
+  const MAX_PAGE_SIZE = 200;
+  const REFRESH_MS = 5000;
+  const NOTICE_MS = 10000;
+  const REPLAYABLE = ["done", "skipped", "dead", "discarded"];
+  const DISCARDABLE = ["pending", "dead"];
+  const ACTIONS = {
+    replay: { verb: "Replay", done: "Replayed", key: "replayed" },
+    discard: { verb: "Discard", done: "Discarded", key: "discarded" },
+  };
+
+  const state = {
+    sessions: [],
+    events: [],
+    paged: false,
+    exhausted: true,
+    generation: 0,
+    selected: new Set(),
+    detailId: null,
+  };
+
+  const $ = (id) => document.getElementById(id);
+
+  /** Build an element; children that are not nodes become text nodes */
+  function el(tag, props = {}, ...children) {
+    const node = document.createElement(tag);
+    for (const [key, value] of Object.entries(props)) {
+      if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+      else if (key === "dataset") Object.assign(node.dataset, value);
+      else node[key] = value;
+    }
+    for (const child of children) {
+      if (child != null) node.append(child instanceof Node ? child : String(child));
+    }
+    return node;
+  }
+
+  async function api(path, options) {
+    const response = await fetch(path, options);
+    if (!response.ok) throw new Error(`${response.status} ${(await response.text()).slice(0, 200)}`);
+    return response.json();
+  }
+
+  function relative(ms) {
+    if (ms == null) return "–";
+    const diff = ms - Date.now();
+    const seconds = Math.round(Math.abs(diff) / 1000);
+    if (seconds < 1) return "now";
+    const [size, unit] = [[86400, "d"], [3600, "h"], [60, "m"], [1, "s"]].find(([s]) => seconds >= s);
+    const text = `${Math.floor(seconds / size)}${unit}`;
+    return diff > 0 ? `in ${text}` : `${text} ago`;
+  }
+
+  function absolute(ms) {
+    return ms ? new Date(ms).toLocaleString() : "";
+  }
+
+  function dueText(ms) {
+    if (ms == null) return "–";
+    return ms <= Date.now() ? "due now" : relative(ms);
+  }
+
+  let noticeTimer;
+  function notify(text, isError = false) {
+    const notices = document.querySelectorAll(".notice");
+    for (const notice of notices) {
+      notice.textContent = text;
+      notice.classList.toggle("error", isError);
+      notice.hidden = false;
+    }
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => {
+      for (const notice of notices) notice.hidden = true;
+    }, NOTICE_MS);
+  }
+
+  /** Replace a node's children unless they render the same, so a refresh keeps focus and text selection */
+  function setChildren(parent, children) {
+    const next = parent.cloneNode(false);
+    next.append(...children);
+    if (!next.isEqualNode(parent)) parent.replaceChildren(...next.childNodes);
+  }
+
+  function clip(text) {
+    return el("span", { className: "clip", title: text }, text);
+  }
+
+  function emptyRow(columns, text) {
+    return el("tr", { className: "empty" }, el("td", { colSpan: columns }, text));
+  }
+
+  // ─── Stats and sessions ───
+
+  function renderStats(stats) {
+    $("stat-pending").textContent = stats.pending;
+    $("stat-inflight").textContent = `${stats.inFlight} / ${stats.maxInFlight}`;
+    $("stat-dead").textContent = stats.dead;
+    $("stat-log").textContent = stats.logStream;
+    $("stat-log").dataset.state = stats.logStream;
+  }
+
+  function renderSources() {
+    const select = $("filter-source");
+    const names = new Set(state.sessions.flatMap((s) => s.sources.split(",")));
+    if (select.value) names.add(select.value);
+    const sorted = [...names].sort();
+    const shown = [...select.options].slice(1).map((option) => option.value);
+    if (sorted.join("\n") === shown.join("\n")) return;
+    const value = select.value;
+    select.replaceChildren(
+      el("option", { value: "" }, "All"),
+      ...sorted.map((name) => el("option", { value: name }, name))
+    );
+    select.value = value;
+  }
+
+  function renderSessions() {
+    const filter = $("filter-session").value.trim();
+    const rows = state.sessions.map((s) =>
+      el("tr", { className: s.session_key === filter ? "selected" : "", onclick: () => filterSession(s.session_key) },
+        el("td", { className: "key" }, el("button", { type: "button", className: "link clip", title: s.session_key }, s.session_key)),
+        el("td", { className: "num" }, s.pending),
+        el("td", {}, s.sent > 0 ? "yes" : "no"),
+        el("td", { className: "num" }, s.dead),
+        el("td", { className: "num" }, s.total),
+        el("td", {}, s.sources.split(",").join(", ")),
+        el("td", { title: absolute(s.next_due) }, dueText(s.next_due)),
+        el("td", { title: absolute(s.last_received) }, relative(s.last_received)),
+        el("td", { onclick: (event) => event.stopPropagation() },
+          el("div", { className: "actions" },
+            s.pending > 0
+              ? el("button", { type: "button", className: "danger", onclick: () => changeSession(s.session_key, "pending", "discard") }, "Discard queued")
+              : null,
+            s.dead > 0
+              ? el("button", { type: "button", onclick: () => changeSession(s.session_key, "dead", "replay") }, "Replay dead")
+              : null))));
+    setChildren($("sessions").tBodies[0], rows.length ? rows : [emptyRow(9, "The inbox is empty")]);
+    setChildren($("session-keys"), state.sessions.map((s) => el("option", { value: s.session_key })));
+  }
+
+  function filterSession(key) {
+    const input = $("filter-session");
+    input.value = input.value.trim() === key ? "" : key;
+    filtersChanged();
+  }
+
+  /** Every event id in a session with the given status */
+  async function sessionEventIds(key, status) {
+    const ids = [];
+    let before = null;
+    for (;;) {
+      const params = new URLSearchParams({ session: key, status, limit: String(MAX_PAGE_SIZE) });
+      if (before != null) params.set("before", String(before));
+      const page = await api(`/api/events?${params}`);
+      ids.push(...page.map((e) => e.id));
+      if (page.length < MAX_PAGE_SIZE) return ids;
+      before = page.at(-1).id;
+    }
+  }
+
+  async function changeSession(key, status, action) {
+    try {
+      const ids = await sessionEventIds(key, status);
+      if (!(await mutate(action, ids, `${ids.length} ${status === "pending" ? "queued" : status} event(s) for ${key}`))) return;
+    } catch (err) {
+      notify(`${ACTIONS[action].verb} failed: ${err.message}`, true);
+    }
+    await showNewest();
+  }
+
+  // ─── Events ───
+
+  function eventsUrl(before) {
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
+    const filters = {
+      status: $("filter-status").value,
+      source: $("filter-source").value,
+      session: $("filter-session").value.trim(),
+    };
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) params.set(key, value);
+    }
+    if (before != null) params.set("before", String(before));
+    return `/api/events?${params}`;
+  }
+
+  async function loadEvents() {
+    const generation = ++state.generation;
+    const events = await api(eventsUrl());
+    if (generation !== state.generation) return;
+    state.events = events;
+    state.exhausted = events.length < PAGE_SIZE;
+    renderEvents();
+  }
+
+  async function loadOlder() {
+    const oldest = state.events.at(-1);
+    if (!oldest) return;
+    state.paged = true;
+    const generation = ++state.generation;
+    try {
+      const events = await api(eventsUrl(oldest.id));
+      if (generation !== state.generation) return;
+      state.events.push(...events);
+      state.exhausted = events.length < PAGE_SIZE;
+      renderEvents();
+    } catch (err) {
+      notify(`Loading older events failed: ${err.message}`, true);
+    }
+  }
+
+  function renderEvents() {
+    const rows = state.events.map((e) => {
+      const selected = state.selected.has(e.id);
+      return el("tr", { className: selected ? "selected" : "", onclick: () => showDetail(e.id) },
+        el("td", { onclick: (event) => event.stopPropagation() },
+          el("input", {
+            type: "checkbox",
+            checked: selected,
+            title: `Select event ${e.id}`,
+            onchange: (event) => select([e.id], event.target.checked),
+          })),
+        el("td", { className: "num" }, el("button", { type: "button", className: "link" }, e.id)),
+        el("td", { title: absolute(e.received_at) }, relative(e.received_at)),
+        el("td", {}, e.source),
+        el("td", { className: "key" }, clip(e.session_key)),
+        el("td", {}, e.event_type ?? "–"),
+        el("td", {}, e.detail == null ? "–" : clip(e.detail)),
+        el("td", {}, el("span", { className: "badge", dataset: { status: e.status } }, e.status)),
+        el("td", { className: "num" }, e.attempts),
+        el("td", { className: "error" }, e.last_error ? clip(e.last_error.slice(0, 200)) : ""));
+    });
+    setChildren($("events").tBodies[0], rows.length ? rows : [emptyRow(10, "No events match")]);
+    $("load-older").hidden = state.exhausted;
+    $("show-newest").hidden = !state.paged;
+    renderSelection();
+  }
+
+  function renderSelection() {
+    const count = state.selected.size;
+    $("selected-count").textContent = `${count} selected`;
+    for (const id of ["replay-selected", "discard-selected", "clear-selected"]) $(id).disabled = count === 0;
+    const shown = state.events.map((e) => e.id);
+    const checked = shown.filter((id) => state.selected.has(id)).length;
+    $("select-all").checked = shown.length > 0 && checked === shown.length;
+    $("select-all").indeterminate = checked > 0 && checked < shown.length;
+  }
+
+  function select(ids, on) {
+    for (const id of ids) {
+      if (on) state.selected.add(id);
+      else state.selected.delete(id);
+    }
+    renderEvents();
+  }
+
+  function filtersChanged() {
+    state.selected.clear();
+    state.paged = false;
+    renderSessions();
+    loadEvents().catch((err) => notify(`Loading events failed: ${err.message}`, true));
+  }
+
+  async function changeSelected(action) {
+    const ids = [...state.selected];
+    try {
+      if (!(await mutate(action, ids, `${ids.length} selected event(s)`))) return;
+      state.selected.clear();
+    } catch (err) {
+      notify(`${ACTIONS[action].verb} failed: ${err.message}`, true);
+    }
+    await showNewest();
+  }
+
+  // ─── Event detail ───
+
+  function fieldText(key, value) {
+    if (value == null) return "–";
+    if (key.endsWith("_at")) return value === 0 ? "immediately" : `${absolute(value)} (${relative(value)})`;
+    return String(value);
+  }
+
+  function prettyJson(text) {
+    try {
+      return JSON.stringify(JSON.parse(text), null, 2);
+    } catch {
+      return text;
+    }
+  }
+
+  DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+    if (node.matches("a, area")) {
+      node.setAttribute("target", "_blank");
+      node.setAttribute("rel", "noopener noreferrer");
+    }
+  });
+
+  function renderMarkdown(text) {
+    return DOMPurify.sanitize(marked.parse(text, { breaks: true }), {
+      USE_PROFILES: { html: true },
+      FORBID_TAGS: ["style", "form", "dialog"],
+      FORBID_ATTR: ["style", "id", "for"],
+    });
+  }
+
+  function applyRawToggle() {
+    const raw = $("detail-raw").checked;
+    $("detail-message").hidden = !raw;
+    $("detail-rendered").hidden = raw;
+  }
+
+  async function showDetail(id) {
+    state.detailId = id;
+    try {
+      const event = await api(`/api/events/${id}`);
+      if (state.detailId !== id) return;
+      $("detail-title").textContent = `Event ${event.id}`;
+      $("detail-fields").replaceChildren(
+        ...Object.entries(event)
+          .filter(([key]) => key !== "message" && key !== "check_json")
+          .flatMap(([key, value]) => [el("dt", {}, key), el("dd", {}, fieldText(key, value))])
+      );
+      $("detail-message").textContent = event.message;
+      $("detail-rendered").innerHTML = renderMarkdown(event.message);
+      applyRawToggle();
+      $("detail-check").textContent = event.check_json == null ? "" : prettyJson(event.check_json);
+      $("detail-check-section").hidden = event.check_json == null;
+      $("detail-replay").hidden = !REPLAYABLE.includes(event.status);
+      $("detail-discard").hidden = !DISCARDABLE.includes(event.status);
+      if (!$("detail").open) {
+        $("detail").querySelector(".notice").hidden = true;
+        $("detail").showModal();
+      }
+    } catch (err) {
+      notify(`Loading event ${id} failed: ${err.message}`, true);
+    }
+  }
+
+  async function changeDetail(action) {
+    const id = state.detailId;
+    try {
+      if (!(await mutate(action, [id], `event ${id}`))) return;
+      await showDetail(id);
+    } catch (err) {
+      notify(`${ACTIONS[action].verb} failed: ${err.message}`, true);
+    }
+    await showNewest();
+  }
+
+  // ─── Mutations and refresh ───
+
+  /** Confirm, then replay or discard the given events; false when nothing was sent */
+  async function mutate(action, ids, description) {
+    const { verb, done, key } = ACTIONS[action];
+    if (ids.length === 0) {
+      notify(`Nothing to ${verb.toLowerCase()}.`);
+      return false;
+    }
+    if (!confirm(`${verb} ${description}?`)) return false;
+    const result = await api(`/api/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    notify(`${done} ${result[key]} of ${ids.length} event(s).`);
+    return true;
+  }
+
+  async function refresh() {
+    const updated = $("updated");
+    try {
+      const [stats, sessions] = await Promise.all([api("/api/stats"), api("/api/sessions")]);
+      renderStats(stats);
+      state.sessions = sessions;
+      renderSources();
+      renderSessions();
+      if (state.paged) renderEvents();
+      else await loadEvents();
+      updated.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+      updated.classList.remove("error");
+    } catch (err) {
+      updated.textContent = `Refresh failed: ${err.message}`;
+      updated.classList.add("error");
+    }
+  }
+
+  async function showNewest() {
+    state.paged = false;
+    await refresh();
+  }
+
+  async function poll() {
+    await refresh();
+    setTimeout(poll, REFRESH_MS);
+  }
+
+  let sessionInputTimer;
+  $("filter-session").addEventListener("input", () => {
+    clearTimeout(sessionInputTimer);
+    sessionInputTimer = setTimeout(filtersChanged, 300);
+  });
+  $("filter-status").addEventListener("change", filtersChanged);
+  $("filter-source").addEventListener("change", filtersChanged);
+  $("select-all").addEventListener("change", (event) => select(state.events.map((e) => e.id), event.target.checked));
+  $("replay-selected").addEventListener("click", () => changeSelected("replay"));
+  $("discard-selected").addEventListener("click", () => changeSelected("discard"));
+  $("clear-selected").addEventListener("click", () => select([...state.selected], false));
+  $("load-older").addEventListener("click", loadOlder);
+  $("show-newest").addEventListener("click", showNewest);
+  $("detail-close").addEventListener("click", () => $("detail").close());
+  $("detail").addEventListener("click", (event) => {
+    if (event.target === $("detail")) $("detail").close();
+  });
+  $("detail").addEventListener("close", () => {
+    state.detailId = null;
+  });
+  $("detail-raw").addEventListener("change", applyRawToggle);
+  $("detail-replay").addEventListener("click", () => changeDetail("replay"));
+  $("detail-discard").addEventListener("click", () => changeDetail("discard"));
+
+  poll();
+</script>
+</body>
+</html>

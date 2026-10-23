@@ -19,6 +19,7 @@ available_docker_images:
     dockerfile: openclaw-webhook-proxy/Dockerfile
     build_files:
       - openclaw-webhook-proxy/server.mjs
+      - openclaw-webhook-proxy/admin.html
     image_name: openclaw-webhook-proxy
   unifi-collector:
     dockerfile: unifi-collector/Dockerfile
