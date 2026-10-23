@@ -1424,6 +1424,7 @@ function startLogStream() {
   const child = spawn(
     "ssh",
     [
+      "-T",
       "-i", "/app/ssh/id_ed25519",
       "-o", "UserKnownHostsFile=/app/ssh/known_hosts",
       "-o", "BatchMode=yes",
