@@ -2,6 +2,7 @@
 # Homebridge absent — reverse what present.yml installed:
 #   - hb-service uninstall (stops + removes LaunchDaemon)
 #   - npm uninstall homebridge packages
+#   - the UI certificate installer and the certificate it installed
 #   - Node.js (.pkg install) is left in place
 #
 # Data under homebridge_user_storage_path and the user's config.json are NOT
@@ -39,3 +40,11 @@
   loop: "{{ homebridge_packages }}"
   when: _hb_npm_stat.stat.exists
   failed_when: false
+
+- name: remove the UI certificate installer and certificate
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ homebridge_tls_install_bin }}"
+    - "{{ homebridge_tls_dir }}"

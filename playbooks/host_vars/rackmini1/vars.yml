@@ -21,6 +21,10 @@ authorized_keys:
     key_options: restrict,command="export PATH=/usr/local/bin:/opt/homebrew/bin:$PATH; exec openclaw logs --follow --json --limit 1000 --max-bytes 1000000"
     user: rackmini
     state: present
+  - key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJY3dr640chsVK/eaPRX38erwTxddH9vTMZT+Q6e+TuX traefik-certs-dumper
+    key_options: restrict,command="/usr/local/bin/homebridge-tls-install"
+    user: rackmini
+    state: present
 
 mac_user: rackmini
 

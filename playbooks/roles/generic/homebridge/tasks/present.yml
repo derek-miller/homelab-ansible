@@ -90,6 +90,20 @@
   changed_when: "'Installing Node.js' in (_hb_update_node.stdout | default(''))"
   notify: homebridge changed
 
+# ---- UI certificate ----------------------------------------------------
+- name: create the UI certificate directory
+  file:
+    path: "{{ homebridge_tls_dir }}"
+    state: directory
+    owner: "{{ homebridge_user }}"
+    mode: '0700'
+
+- name: install the UI certificate installer
+  template:
+    src: homebridge-tls-install.j2
+    dest: "{{ homebridge_tls_install_bin }}"
+    mode: '0755'
+
 # The Config UI installs and updates plugins as homebridge_user, so that
 # account must own the global npm tree. Tasks above write to it as root.
 - name: keep the global npm tree owned by the homebridge user

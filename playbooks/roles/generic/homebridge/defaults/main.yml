@@ -64,3 +64,10 @@ homebridge_user_storage_path: ""
 
 # System LaunchDaemon plist, derived from homebridge_service_name.
 homebridge_launchdaemon: "/Library/LaunchDaemons/com.{{ homebridge_service_name | lower }}.server.plist"
+
+# Where homebridge_tls_install_bin keeps the UI's certificate and key. Point
+# the Config UI's SSL settings at tls.crt and tls.key here, and give the
+# host that pushes them an authorized_keys entry forced to that command.
+# Kept outside the storage path, which the UI's backups copy whole.
+homebridge_tls_dir: "/Users/{{ homebridge_user }}/.config/homebridge-tls"
+homebridge_tls_install_bin: /usr/local/bin/homebridge-tls-install
