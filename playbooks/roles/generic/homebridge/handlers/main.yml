@@ -1,5 +1,5 @@
 ---
 # hb-service restart reloads the system LaunchDaemon. Requires sudo.
 - name: restart homebridge
-  command: "{{ homebridge_hbservice_bin }} restart"
+  command: "{{ homebridge_hbservice_bin }} restart -S {{ homebridge_service_name }}"
   listen: homebridge changed

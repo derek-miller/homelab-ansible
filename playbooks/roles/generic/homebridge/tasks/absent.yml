@@ -14,7 +14,7 @@
   register: _hb_svc_stat
 
 - name: hb-service uninstall (removes LaunchDaemon + stops service)
-  command: "{{ homebridge_hbservice_bin }} uninstall"
+  command: "{{ homebridge_hbservice_bin }} uninstall -S {{ homebridge_service_name }}"
   when: _hb_svc_stat.stat.exists
   failed_when: false
   changed_when: true
