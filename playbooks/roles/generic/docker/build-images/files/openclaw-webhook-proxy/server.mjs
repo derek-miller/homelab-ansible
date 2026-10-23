@@ -23,6 +23,7 @@
  *   BATCH_WINDOW_MS          — how long an event waits for related events (default: 10000)
  *   INBOX_PATH               — SQLite inbox file (default: /data/inbox.db)
  *   DISCORD_WEBHOOK_URL      — Discord webhook told when a session's events give up (optional)
+ *   OPENCLAW_UI_URL          — OpenClaw Control UI base URL the admin page links sessions to (optional)
  *
  * At least one hook source must be configured:
  *
@@ -92,6 +93,7 @@ const OPENCLAW_TIMEOUT_SECONDS = parseInt(process.env.OPENCLAW_TIMEOUT_SECONDS |
 const BATCH_WINDOW_MS = parseInt(process.env.BATCH_WINDOW_MS || "10000", 10);
 const INBOX_PATH = process.env.INBOX_PATH || "/data/inbox.db";
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "";
+const OPENCLAW_UI_URL = (process.env.OPENCLAW_UI_URL || "").replace(/\/+$/, "");
 const YOUTRACK_BASE_URL = process.env.YOUTRACK_BASE_URL || "";
 
 const MAX_BATCH_SIZE = 50;
@@ -969,10 +971,10 @@ const sessionSummary = db.prepare(`
          COUNT(*) FILTER (WHERE status = 'sent') AS sent,
          COUNT(*) FILTER (WHERE status = 'dead') AS dead,
          COUNT(*) AS total,
-         group_concat(DISTINCT source) AS sources,
+         group_concat(DISTINCT source ORDER BY source) AS sources,
          MIN(due_at) FILTER (WHERE status = 'pending') AS next_due,
          MAX(received_at) AS last_received
-  FROM events GROUP BY session_key
+  FROM events WHERE :q IS NULL OR instr(lower(session_key), lower(:q)) > 0 GROUP BY session_key
   ORDER BY pending + sent + dead = 0, last_received DESC LIMIT 200`);
 const listEvents = db.prepare(`
   SELECT id, received_at, source, thread_key, session_key, delivery_id, event_type, detail,
@@ -980,6 +982,8 @@ const listEvents = db.prepare(`
   FROM events
   WHERE (:status IS NULL OR status = :status) AND (:source IS NULL OR source = :source)
     AND (:session IS NULL OR session_key = :session) AND (:before IS NULL OR id < :before)
+    AND (:q IS NULL OR instr(lower(session_key), lower(:q)) > 0 OR instr(lower(event_type), lower(:q)) > 0
+         OR instr(lower(detail), lower(:q)) > 0)
   ORDER BY id DESC LIMIT :limit`);
 const eventById = db.prepare(`SELECT * FROM events WHERE id = ?`);
 // A replayed PR or issue event follows its thread's newest ticket key, as a new one would.
@@ -1099,6 +1103,7 @@ async function handleAdmin(req, res, path) {
     return;
   }
 
+  const query = new URLSearchParams(req.url.slice(path.length + 1));
   switch (path) {
     case "/":
       if (!allowMethod(req, res, "GET")) return;
@@ -1117,24 +1122,23 @@ async function handleAdmin(req, res, path) {
       return;
     case "/api/stats":
       if (!allowMethod(req, res, "GET")) return;
-      sendJson(res, 200, { ...inboxStats.get(), maxInFlight: OPENCLAW_MAX_IN_FLIGHT, logStream });
+      sendJson(res, 200, { ...inboxStats.get(), maxInFlight: OPENCLAW_MAX_IN_FLIGHT, logStream, openclawUrl: OPENCLAW_UI_URL || null });
       return;
     case "/api/sessions":
       if (!allowMethod(req, res, "GET")) return;
-      sendJson(res, 200, sessionSummary.all());
+      sendJson(res, 200, sessionSummary.all({ q: query.get("q") || null }));
       return;
-    case "/api/events": {
+    case "/api/events":
       if (!allowMethod(req, res, "GET")) return;
-      const query = new URLSearchParams(req.url.slice(path.length + 1));
       sendJson(res, 200, listEvents.all({
         status: query.get("status") || null,
         source: query.get("source") || null,
         session: query.get("session") || null,
+        q: query.get("q") || null,
         before: parseInt(query.get("before"), 10) || null,
         limit: Math.min(Math.max(parseInt(query.get("limit"), 10) || 100, 1), 200),
       }));
       return;
-    }
     case "/api/replay": {
       if (!allowMethod(req, res, "POST")) return;
       const ids = await readIds(req, res);
