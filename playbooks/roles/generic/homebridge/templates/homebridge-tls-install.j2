@@ -1,0 +1,30 @@
+#!/bin/sh
+# Reads a certificate chain and its private key as PEM on stdin, and installs
+# them for the Homebridge UI when they parse, match and differ from the
+# installed pair.
+set -eu
+umask 077
+
+dir={{ homebridge_tls_dir | quote }}
+tmp=$(mktemp -d "$dir.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+
+head -c 65536 | awk -v crt="$tmp/tls.crt" -v key="$tmp/tls.key" '
+  /^-----BEGIN CERTIFICATE-----/ { out = crt }
+  /^-----BEGIN .*PRIVATE KEY-----/ { out = key }
+  out { print > out }
+  /^-----END / { out = "" }
+'
+openssl crl2pkcs7 -nocrl -certfile "$tmp/tls.crt" > /dev/null
+cert_pub=$(openssl x509 -noout -pubkey -in "$tmp/tls.crt")
+key_pub=$(openssl pkey -pubout -in "$tmp/tls.key")
+[ "$cert_pub" = "$key_pub" ]
+
+if cmp -s "$tmp/tls.crt" "$dir/tls.crt" && cmp -s "$tmp/tls.key" "$dir/tls.key"; then
+  exit 0
+fi
+# On the first install Homebridge may still read its certs from elsewhere.
+[ -e "$dir/tls.crt" ] && restart=yes || restart=
+mv "$tmp/tls.key" "$dir/tls.key"
+mv "$tmp/tls.crt" "$dir/tls.crt"
+[ -z "$restart" ] || sudo -n {{ homebridge_node_bin | quote }} {{ homebridge_hbservice_bin | quote }} restart -S {{ homebridge_service_name | quote }}
