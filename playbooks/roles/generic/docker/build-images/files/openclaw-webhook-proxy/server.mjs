@@ -2,32 +2,38 @@
  * OpenClaw Webhook Proxy
  *
  * Receives webhook POSTs from GitHub and YouTrack, validates authentication,
- * and forwards valid payloads to the OpenClaw hooks API with bearer auth.
- *
- * Supports single-source or dual-source deployment: at least one of
- * GITHUB_HOOK_PATH or YOUTRACK_HOOK_PATH must be set. Each source's
- * env vars are only required when that source is enabled.
+ * and queues each accepted event in a SQLite inbox. A dispatcher sends a
+ * session's queued events to the OpenClaw hooks API as one turn once that
+ * session has no turn in flight, and follows the gateway log to learn when
+ * the turn has ended.
  *
  * Always required:
  *   OPENCLAW_HOOKS_TOKEN     — bearer token for the OpenClaw hooks API
  *   OPENCLAW_HOOKS_URL       — full URL to OpenClaw hooks endpoint
+ *   OPENCLAW_LOG_SSH         — user@host whose forced command prints `openclaw logs --follow --json`;
+ *                              the key and known_hosts are read from /app/ssh
  *
  * Optional (with defaults):
  *   PORT                     — listen port (default: 3000)
  *   LOG_LEVEL                — logging level: "info" (default) or "debug"
  *   OPENCLAW_WAKE_MODE       — wake mode for OpenClaw hooks (default: "now")
- *   OPENCLAW_DELIVER         — deliver flag for OpenClaw hooks (default: "false")
- *   BATCH_WINDOW_MS          — debounce window in ms to batch related events (default: 10000)
+ *   OPENCLAW_MAX_IN_FLIGHT   — sessions with a turn in flight at once (default: 12)
+ *   OPENCLAW_TIMEOUT_SECONDS — timeoutSeconds sent with each turn (default: 3600)
+ *   BATCH_WINDOW_MS          — how long an event waits for related events (default: 10000)
+ *   INBOX_PATH               — SQLite inbox file (default: /data/inbox.db)
+ *   DISCORD_WEBHOOK_URL      — Discord webhook told when a session's events give up (optional)
  *
  * At least one hook source must be configured:
  *
- * GitHub (enabled when GITHUB_HOOK_PATH is set):
- *   GITHUB_HOOK_PATH         — URL path prefix for GitHub webhooks
- *   GITHUB_WEBHOOK_SECRET    — the webhook secret shared with GitHub
- *   GITHUB_GUARDRAILS_FILE   — path to file containing GitHub guardrails text
- *   GITHUB_ALLOW_USERS       — comma-separated usernames to allow (allowlist mode; mutually exclusive with GITHUB_IGNORE_USERS)
- *   GITHUB_IGNORE_USERS      — comma-separated usernames to skip (ignorelist mode; mutually exclusive with GITHUB_ALLOW_USERS)
- *   GITHUB_SELF_USERS        — comma-separated commit-author names for this agent's own bots; all-green CI batches on their commits are dropped (optional)
+ * GitHub, once for each name in GITHUB_SOURCES (comma-separated, e.g.
+ * "derek-miller,finitelabs"). <NAME> is the name upper-cased with "-" as "_",
+ * e.g. GITHUB_DEREK_MILLER_HOOK_PATH:
+ *   GITHUB_<NAME>_HOOK_PATH       — URL path prefix for this source's webhooks
+ *   GITHUB_<NAME>_WEBHOOK_SECRET  — the webhook secret shared with GitHub
+ *   GITHUB_<NAME>_GUARDRAILS_FILE — path to file containing GitHub guardrails text
+ *   GITHUB_<NAME>_ALLOW_USERS     — comma-separated usernames to allow (allowlist mode; mutually exclusive with GITHUB_<NAME>_IGNORE_USERS)
+ *   GITHUB_<NAME>_IGNORE_USERS    — comma-separated usernames to skip (ignorelist mode; mutually exclusive with GITHUB_<NAME>_ALLOW_USERS)
+ *   GITHUB_<NAME>_SELF_USERS      — comma-separated commit-author names for this agent's own bots; all-green CI batches on their commits are dropped (optional)
  *
  * YouTrack (enabled when YOUTRACK_HOOK_PATH is set):
  *   YOUTRACK_HOOK_PATH       — URL path prefix for YouTrack webhooks
@@ -41,6 +47,9 @@
 import { createServer } from "node:http";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
+import { DatabaseSync } from "node:sqlite";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const LOG_LEVEL = (process.env.LOG_LEVEL || "info").toLowerCase();
@@ -50,113 +59,105 @@ function logDebug(...args) {
   if (DEBUG) console.log(`[${new Date().toISOString()}] [DEBUG]`, ...args);
 }
 
+function logInfo(...args) {
+  console.log(`[${new Date().toISOString()}]`, ...args);
+}
+
+function logWarn(...args) {
+  console.warn(`[${new Date().toISOString()}] [WARN]`, ...args);
+}
+
+function fatal(message) {
+  console.error(`FATAL: ${message}`);
+  process.exit(1);
+}
+
 // ─── Environment variable validation ────────────────────────────────
 
 // Always required
-const ALWAYS_REQUIRED = ["OPENCLAW_HOOKS_TOKEN", "OPENCLAW_HOOKS_URL"];
+const ALWAYS_REQUIRED = ["OPENCLAW_HOOKS_TOKEN", "OPENCLAW_HOOKS_URL", "OPENCLAW_LOG_SSH"];
 
 const missing = ALWAYS_REQUIRED.filter((key) => !process.env[key]);
 if (missing.length > 0) {
-  console.error(`FATAL: Missing required environment variables: ${missing.join(", ")}`);
-  process.exit(1);
-}
-
-// Determine which sources are enabled
-const GITHUB_ENABLED = !!process.env.GITHUB_HOOK_PATH;
-const YOUTRACK_ENABLED = !!process.env.YOUTRACK_HOOK_PATH;
-
-if (!GITHUB_ENABLED && !YOUTRACK_ENABLED) {
-  console.error(
-    "FATAL: At least one hook source must be configured. " +
-      "Set GITHUB_HOOK_PATH and/or YOUTRACK_HOOK_PATH."
-  );
-  process.exit(1);
-}
-
-// Conditionally required env vars per source
-const conditionalMissing = [];
-
-if (GITHUB_ENABLED) {
-  for (const key of ["GITHUB_WEBHOOK_SECRET", "GITHUB_GUARDRAILS_FILE"]) {
-    if (!process.env[key]) conditionalMissing.push(key);
-  }
-}
-
-if (YOUTRACK_ENABLED) {
-  for (const key of [
-    "YOUTRACK_WEBHOOK_SECRET",
-    "YOUTRACK_BASE_URL",
-    "YOUTRACK_GUARDRAILS_FILE",
-  ]) {
-    if (!process.env[key]) conditionalMissing.push(key);
-  }
-}
-
-if (conditionalMissing.length > 0) {
-  console.error(
-    `FATAL: Missing required environment variables for enabled sources: ${conditionalMissing.join(", ")}`
-  );
-  process.exit(1);
+  fatal(`Missing required environment variables: ${missing.join(", ")}`);
 }
 
 const OPENCLAW_HOOKS_TOKEN = process.env.OPENCLAW_HOOKS_TOKEN;
 const OPENCLAW_HOOKS_URL = process.env.OPENCLAW_HOOKS_URL;
-
-// GitHub config (only when enabled)
-const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
-const GITHUB_HOOK_PATH = process.env.GITHUB_HOOK_PATH || "";
-const GITHUB_ALLOW_USERS = (process.env.GITHUB_ALLOW_USERS || "")
-  .split(",")
-  .map((u) => u.trim().toLowerCase())
-  .filter(Boolean);
-// Commit authors that are this agent's own service accounts. Used only to drop
-// all-green CI batches on commits we authored ourselves; see
-// isSelfAuthoredGreenCheckBatch(). Empty (the default) disables the behaviour.
-const GITHUB_SELF_USERS = (process.env.GITHUB_SELF_USERS || "")
-  .split(",")
-  .map((u) => u.trim().toLowerCase())
-  .filter(Boolean);
-const GITHUB_IGNORE_USERS = (process.env.GITHUB_IGNORE_USERS || "")
-  .split(",")
-  .map((u) => u.trim().toLowerCase())
-  .filter(Boolean);
-
-// YouTrack config (only when enabled)
-const YOUTRACK_WEBHOOK_SECRET = process.env.YOUTRACK_WEBHOOK_SECRET || "";
-const YOUTRACK_BASE_URL = process.env.YOUTRACK_BASE_URL || "";
-const YOUTRACK_HOOK_PATH = process.env.YOUTRACK_HOOK_PATH || "";
-const YOUTRACK_ALLOW_USERS = (process.env.YOUTRACK_ALLOW_USERS || "")
-  .split(",")
-  .map((u) => u.trim().toLowerCase())
-  .filter(Boolean);
-const YOUTRACK_IGNORE_USERS = (process.env.YOUTRACK_IGNORE_USERS || "")
-  .split(",")
-  .map((u) => u.trim().toLowerCase())
-  .filter(Boolean);
-
-// Validate mutually exclusive allow/ignore lists
-if (GITHUB_ALLOW_USERS.length > 0 && GITHUB_IGNORE_USERS.length > 0) {
-  console.error(
-    "FATAL: GITHUB_ALLOW_USERS and GITHUB_IGNORE_USERS are mutually exclusive. Set only one."
-  );
-  process.exit(1);
-}
-if (YOUTRACK_ALLOW_USERS.length > 0 && YOUTRACK_IGNORE_USERS.length > 0) {
-  console.error(
-    "FATAL: YOUTRACK_ALLOW_USERS and YOUTRACK_IGNORE_USERS are mutually exclusive. Set only one."
-  );
-  process.exit(1);
-}
-
-// ─── Wake/deliver configuration (optional, with defaults) ──────────
-
+const OPENCLAW_LOG_SSH = process.env.OPENCLAW_LOG_SSH;
 const OPENCLAW_WAKE_MODE = process.env.OPENCLAW_WAKE_MODE || "now";
-const OPENCLAW_DELIVER = (process.env.OPENCLAW_DELIVER || "false").toLowerCase() === "true";
+const OPENCLAW_MAX_IN_FLIGHT = parseInt(process.env.OPENCLAW_MAX_IN_FLIGHT || "12", 10);
+const OPENCLAW_TIMEOUT_SECONDS = parseInt(process.env.OPENCLAW_TIMEOUT_SECONDS || "3600", 10);
 const BATCH_WINDOW_MS = parseInt(process.env.BATCH_WINDOW_MS || "10000", 10);
-const MAX_BATCH_SIZE = 50;
+const INBOX_PATH = process.env.INBOX_PATH || "/data/inbox.db";
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "";
+const YOUTRACK_BASE_URL = process.env.YOUTRACK_BASE_URL || "";
 
-/** Map of batchKey → { events: [{eventType, detail, formattedMessage}], timer, guardrails, source, sessionKey, deliveryIds } */
-const pendingBatches = new Map();
+const MAX_BATCH_SIZE = 50;
+// The gateway's /hooks body limit is 256 KiB.
+const MAX_MESSAGE_BYTES = 200_000;
+const MAX_ATTEMPTS = 3;
+const RETRY_BACKOFF_MS = 5 * 60_000;
+const BUSY_RETRY_MS = 60_000;
+const BACKSTOP_MS = OPENCLAW_TIMEOUT_SECONDS * 1000 + 5 * 60_000;
+const RETENTION_MS = 30 * 24 * 60 * 60_000;
+const CAPACITY_ERROR = "Too many Claude CLI live sessions";
+
+/** "up" while the gateway log is streaming; nothing is sent otherwise */
+let logStream = "down";
+
+// ─── Hook sources ───────────────────────────────────────────────────
+
+function envList(key) {
+  return (process.env[key] || "")
+    .split(",")
+    .map((u) => u.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** Read one source's settings from the environment variables starting with `prefix` */
+function loadSource(name, kind, prefix) {
+  const env = (key) => process.env[prefix + key] || "";
+  const required = ["HOOK_PATH", "WEBHOOK_SECRET", "GUARDRAILS_FILE"];
+  if (kind === "youtrack") required.push("BASE_URL");
+  const missingKeys = required.filter((key) => !env(key)).map((key) => prefix + key);
+  if (missingKeys.length > 0) {
+    fatal(`Missing required environment variables for enabled sources: ${missingKeys.join(", ")}`);
+  }
+
+  const allowUsers = envList(`${prefix}ALLOW_USERS`);
+  const ignoreUsers = envList(`${prefix}IGNORE_USERS`);
+  if (allowUsers.length > 0 && ignoreUsers.length > 0) {
+    fatal(`${prefix}ALLOW_USERS and ${prefix}IGNORE_USERS are mutually exclusive. Set only one.`);
+  }
+
+  return {
+    name,
+    kind,
+    label: kind === "github" ? "GitHub" : "YouTrack",
+    hookPath: env("HOOK_PATH"),
+    secret: env("WEBHOOK_SECRET"),
+    guardrails: loadGuardrails(env("GUARDRAILS_FILE"), name),
+    allowUsers,
+    ignoreUsers,
+    // Commit authors that are this agent's own service accounts. Used only to drop
+    // all-green CI batches on commits we authored ourselves; see
+    // isSelfAuthoredGreenCheckBatch(). Empty (the default) disables the behaviour.
+    selfUsers: envList(`${prefix}SELF_USERS`),
+  };
+}
+
+const SOURCES = envList("GITHUB_SOURCES").map((name) =>
+  loadSource(name, "github", `GITHUB_${name.toUpperCase().replace(/-/g, "_")}_`)
+);
+if (process.env.YOUTRACK_HOOK_PATH) {
+  SOURCES.push(loadSource("youtrack", "youtrack", "YOUTRACK_"));
+}
+if (SOURCES.length === 0) {
+  fatal("At least one hook source must be configured. Set GITHUB_SOURCES and/or YOUTRACK_HOOK_PATH.");
+}
+// Longest first, so one source's hook path may be a prefix of another's.
+SOURCES.sort((a, b) => b.hookPath.length - a.hookPath.length);
 
 // ─── Ticket ID extraction ───────────────────────────────────────────
 
@@ -260,10 +261,9 @@ function extractTicketIdFromGitHub(event, payload) {
  * Resolve the thread of work a GitHub event belongs to.
  *
  * Every event for one PR/issue must resolve to the same id regardless of which
- * webhook fired. When they don't, the events split across batches and OpenClaw
- * lanes, and two agent sessions review the same head independently (HL-17).
- * The returned id is used for BOTH the batch key and the session key so the two
- * cannot disagree.
+ * webhook fired. When they don't, the events split across OpenClaw lanes, and
+ * two agent sessions review the same head independently (HL-17). The returned
+ * id is the thread key, and the session key is derived from it.
  *
  * Precedence: a ticket is the full track of work, and keeps GitHub events on the
  * same lane as the YouTrack events for that ticket. Ticket extraction is only
@@ -272,11 +272,11 @@ function extractTicketIdFromGitHub(event, payload) {
  * PR/issue number, present on nearly every event, is the fallback, and the
  * branch is the last resort for numberless events (post-merge CI, pushes).
  *
- * @returns {{id: string, sessionKey: string|null}}
+ * @returns {{id: string, numbered: boolean, sessionKey: string}}
  */
 function resolveGitHubThread(event, payload) {
   const repo = payload.repository?.full_name;
-  if (!repo) return { id: "unknown", sessionKey: null };
+  if (!repo) return { id: "unknown", numbered: false, sessionKey: "hook:github:unknown" };
 
   const number =
     payload.pull_request?.number ??
@@ -294,7 +294,11 @@ function resolveGitHubThread(event, payload) {
     number != null ? `${repo}#${number}` : branch ? `${repo}@${branch}` : repo;
 
   const ticketId = extractTicketIdFromGitHub(event, payload);
-  return { id, sessionKey: ticketId ? `ticket:${ticketId}` : `hook:github:${id}` };
+  return {
+    id,
+    numbered: number != null,
+    sessionKey: ticketId ? `ticket:${ticketId}` : `hook:github:${id}`,
+  };
 }
 
 /**
@@ -310,41 +314,28 @@ function extractTicketIdFromYouTrack(payload) {
 function loadGuardrails(filePath, label) {
   try {
     const content = readFileSync(filePath, "utf-8").trim();
-    if (!content) {
-      console.error(`FATAL: Guardrails file is empty: ${filePath} (${label})`);
-      process.exit(1);
-    }
+    if (!content) fatal(`Guardrails file is empty: ${filePath} (${label})`);
     return content;
   } catch (err) {
-    console.error(`FATAL: Failed to read ${label} guardrails file (${filePath}): ${err.message}`);
-    process.exit(1);
+    fatal(`Failed to read ${label} guardrails file (${filePath}): ${err.message}`);
   }
 }
-
-const GITHUB_GUARDRAILS = GITHUB_ENABLED
-  ? loadGuardrails(process.env.GITHUB_GUARDRAILS_FILE, "GitHub")
-  : "";
-const YOUTRACK_GUARDRAILS = YOUTRACK_ENABLED
-  ? loadGuardrails(process.env.YOUTRACK_GUARDRAILS_FILE, "YouTrack")
-  : "";
 
 // ─── Source detection ───────────────────────────────────────────────
 
 /** Detect webhook source from request URL path (only for enabled sources) */
 function detectSource(url) {
-  if (YOUTRACK_ENABLED && url.startsWith(YOUTRACK_HOOK_PATH)) return "youtrack";
-  if (GITHUB_ENABLED && url.startsWith(GITHUB_HOOK_PATH)) return "github";
-  return null;
+  return SOURCES.find((source) => url.startsWith(source.hookPath)) ?? null;
 }
 
 // ─── GitHub helpers ─────────────────────────────────────────────────
 
 /** Validate GitHub HMAC-SHA256 signature */
-function validateGitHubSignature(payload, signatureHeader) {
-  if (!signatureHeader || !GITHUB_WEBHOOK_SECRET) return false;
+function validateGitHubSignature(payload, signatureHeader, secret) {
+  if (!signatureHeader || !secret) return false;
   const expected = Buffer.from(
     "sha256=" +
-      createHmac("sha256", GITHUB_WEBHOOK_SECRET).update(payload).digest("hex")
+      createHmac("sha256", secret).update(payload).digest("hex")
   );
   const actual = Buffer.from(signatureHeader);
   if (expected.length !== actual.length) return false;
@@ -638,11 +629,11 @@ function formatGitHubMessage(event, payload) {
 // ─── YouTrack helpers ───────────────────────────────────────────────
 
 /** Validate YouTrack webhook shared secret */
-function validateYouTrackSecret(req) {
-  if (!YOUTRACK_WEBHOOK_SECRET) return false;
+function validateYouTrackSecret(req, secret) {
+  if (!secret) return false;
   const provided = req.headers["x-youtrack-token"];
   if (!provided) return false;
-  const expected = Buffer.from(YOUTRACK_WEBHOOK_SECRET);
+  const expected = Buffer.from(secret);
   const actual = Buffer.from(provided);
   if (expected.length !== actual.length) return false;
   return timingSafeEqual(expected, actual);
@@ -786,14 +777,15 @@ function formatYouTrackMessage(payload) {
 // ─── Batching helpers ────────────────────────────────────────────────
 
 /**
- * Per-event check metadata, used at flush time to spot an all-green CI batch on
- * a commit we authored ourselves.
+ * Per-event check metadata, used at dispatch time to spot an all-green CI batch
+ * on a commit we authored ourselves.
  *
  * Deliberately gathered per event rather than filtered per event: `check_run`
  * payloads carry no commit author at all (only `check_suite` has
  * `head_commit.author`), and `check_run created` arrives before the suite
- * completes. Judging the whole batch sidesteps both problems, because by flush
- * time the suite's authorship is in hand no matter what order things arrived.
+ * completes. Judging the whole batch sidesteps both problems, because by
+ * dispatch time the suite's authorship is in hand no matter what order things
+ * arrived.
  *
  * Note the actor filter cannot do this job: on these payloads `sender` is the
  * repo owner (`derek-miller`), not the bot that authored the commit.
@@ -820,8 +812,8 @@ function getCheckMeta(event, payload) {
  * is unaffected, and green CI on a human's commit still gets through, so
  * AGENT-36 (green means mergeable) is unaffected.
  */
-function isSelfAuthoredGreenCheckBatch(events) {
-  if (GITHUB_SELF_USERS.length === 0) return false;
+function isSelfAuthoredGreenCheckBatch(events, selfUsers) {
+  if (selfUsers.length === 0) return false;
   if (events.length === 0) return false;
   if (!events.every((e) => e.check?.isCheck)) return false;
 
@@ -832,12 +824,12 @@ function isSelfAuthoredGreenCheckBatch(events) {
   if (!conclusions.every((c) => c === "success")) return false;
 
   const author = events.map((e) => e.check.commitAuthor).find(Boolean);
-  return !!author && GITHUB_SELF_USERS.includes(author.toLowerCase());
+  return !!author && selfUsers.includes(author.toLowerCase());
 }
 
-/** Return true if this event should flush its batch right away */
-function isImmediateFlushEvent(event, payload) {
-  // Only flush immediately on approval — changes_requested reviews are
+/** Return true if this event should go out without waiting for related events */
+function isDueImmediately(event, payload) {
+  // Only an approval goes out right away — changes_requested reviews are
   // typically accompanied by review comments that arrive as separate webhook
   // events shortly after, so we let the batch window collect them together.
   if (event === "pull_request_review") {
@@ -879,76 +871,109 @@ function getYouTrackEventDetail(payload) {
   return { eventType: action, detail: issueId };
 }
 
-/** Add an event entry to a pending batch, starting the debounce timer if needed */
-function addToBatch(key, eventEntry, guardrails, source, sessionKey = null, deliveryId = null) {
-  if (pendingBatches.has(key)) {
-    const batch = pendingBatches.get(key);
-    batch.events.push(eventEntry);
-    if (deliveryId) batch.deliveryIds.push(deliveryId);
-    // First non-null sessionKey wins (batch events should share the same ticket)
-    if (sessionKey && !batch.sessionKey) batch.sessionKey = sessionKey;
-    logDebug(`Added event to batch ${key} (${batch.events.length} total)`);
-    if (batch.events.length >= MAX_BATCH_SIZE) {
-      logDebug(`Batch ${key} reached max size (${MAX_BATCH_SIZE}), flushing immediately`);
-      flushBatch(key);
-    }
-  } else {
-    const timer = setTimeout(() => {
-      logDebug(`Batch window expired for ${key}, flushing`);
-      flushBatch(key);
-    }, BATCH_WINDOW_MS);
-    pendingBatches.set(key, {
-      events: [eventEntry],
-      timer,
-      guardrails,
-      source,
-      sessionKey,
-      deliveryIds: deliveryId ? [deliveryId] : [],
-    });
-    logDebug(`Started new batch for ${key}${sessionKey ? ` (session: ${sessionKey})` : ""}`);
-  }
+// ─── Inbox ───────────────────────────────────────────────────────────
+
+const db = new DatabaseSync(INBOX_PATH, { timeout: 5000 });
+db.exec(`
+  CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY,
+    received_at INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    thread_key TEXT NOT NULL,
+    session_key TEXT NOT NULL,
+    delivery_id TEXT,
+    event_type TEXT,
+    detail TEXT,
+    message TEXT NOT NULL,
+    check_json TEXT,
+    status TEXT NOT NULL,
+    due_at INTEGER NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    run_id TEXT,
+    sent_at INTEGER,
+    last_error TEXT
+  );
+  CREATE INDEX IF NOT EXISTS events_status_session ON events (status, session_key);
+  CREATE INDEX IF NOT EXISTS events_thread ON events (thread_key);
+`);
+// A send cut off by a restart has no run id for a completion line to match.
+db.exec(`UPDATE events SET status = 'pending' WHERE status = 'sent' AND run_id IS NULL`);
+
+// status: pending → sent → done; skipped, or dead once out of attempts.
+const insertEvent = db.prepare(`
+  INSERT INTO events (received_at, source, thread_key, session_key, delivery_id,
+                      event_type, detail, message, check_json, status, due_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`);
+const moveThreadToKey = db.prepare(`
+  UPDATE events SET session_key = ? WHERE thread_key = ? AND status = 'pending'`);
+const latestTicketKey = db.prepare(`
+  SELECT session_key FROM events
+  WHERE thread_key = ? AND session_key LIKE 'ticket:%' ORDER BY id DESC LIMIT 1`);
+const inboxStats = db.prepare(`
+  SELECT COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+         COUNT(DISTINCT session_key) FILTER (WHERE status = 'sent') AS inFlight,
+         COUNT(*) FILTER (WHERE status = 'dead') AS dead
+  FROM events`);
+const sourceNames = JSON.stringify(SOURCES.map((s) => s.name));
+const nextDueKey = db.prepare(`
+  SELECT session_key, MIN(due_at) AS due FROM events
+  WHERE status = 'pending' AND source IN (SELECT value FROM json_each(?))
+    AND session_key NOT IN (SELECT session_key FROM events WHERE status = 'sent')
+  GROUP BY session_key HAVING due <= ? ORDER BY due, MIN(id) LIMIT 1`);
+const dueSource = db.prepare(`
+  SELECT source FROM events
+  WHERE status = 'pending' AND session_key = ? AND source IN (SELECT value FROM json_each(?))
+  ORDER BY due_at, id LIMIT 1`);
+const pendingRows = db.prepare(`
+  SELECT * FROM events WHERE status = 'pending' AND session_key = ? AND source = ?
+  ORDER BY id LIMIT ${MAX_BATCH_SIZE}`);
+const markSkipped = db.prepare(`
+  UPDATE events SET status = 'skipped' WHERE id IN (SELECT value FROM json_each(?))`);
+const markSent = db.prepare(`
+  UPDATE events SET status = 'sent', sent_at = ?, run_id = NULL
+  WHERE id IN (SELECT value FROM json_each(?))`);
+const setRunId = db.prepare(`
+  UPDATE events SET run_id = ? WHERE id IN (SELECT value FROM json_each(?))`);
+const markDone = db.prepare(`
+  UPDATE events SET status = 'done' WHERE run_id = ? AND status IN ('sent', 'pending')
+  RETURNING session_key`);
+const sentByRun = db.prepare(`SELECT id FROM events WHERE status = 'sent' AND run_id = ?`);
+const sentByKey = db.prepare(`
+  SELECT id FROM events
+  WHERE status = 'sent' AND lower(session_key) = ? AND sent_at BETWEEN ? AND ?`);
+const overdueRows = db.prepare(`
+  SELECT id, session_key FROM events WHERE status = 'sent' AND sent_at < ?`);
+const requeueRows = db.prepare(`
+  UPDATE events SET status = 'pending', due_at = ?
+  WHERE status = 'sent' AND id IN (SELECT value FROM json_each(?))
+  RETURNING session_key`);
+const failRows = db.prepare(`
+  UPDATE events SET attempts = attempts + 1, last_error = ?,
+    status = CASE WHEN attempts + 1 >= ${MAX_ATTEMPTS} THEN 'dead' ELSE 'pending' END,
+    due_at = ? + (attempts + 1) * ${RETRY_BACKOFF_MS}
+  WHERE status = 'sent' AND id IN (SELECT value FROM json_each(?))
+  RETURNING session_key, status`);
+const pruneRows = db.prepare(`
+  DELETE FROM events WHERE status IN ('done', 'skipped', 'dead') AND received_at < ?`);
+
+/** Queue one accepted event; throws if the inbox cannot take it */
+function enqueue(source, threadKey, sessionKey, deliveryId, eventEntry, dueNow) {
+  const now = Date.now();
+  insertEvent.run(
+    now,
+    source.name,
+    threadKey,
+    sessionKey,
+    deliveryId ?? null,
+    eventEntry.eventType ?? null,
+    eventEntry.detail,
+    eventEntry.formattedMessage,
+    eventEntry.check ? JSON.stringify(eventEntry.check) : null,
+    dueNow ? 0 : now + BATCH_WINDOW_MS
+  );
 }
 
-/** Build the combined message for a batch and forward it to OpenClaw */
-async function flushBatch(key) {
-  const batch = pendingBatches.get(key);
-  if (!batch) return;
-  clearTimeout(batch.timer);
-  pendingBatches.delete(key);
-
-  const { events, guardrails, source, sessionKey, deliveryIds } = batch;
-  if (events.length === 0) return;
-
-  if (source === "GitHub" && isSelfAuthoredGreenCheckBatch(events)) {
-    console.log(
-      `[${new Date().toISOString()}] Dropping batch ${key}: ${events.length} green check event(s) on a commit authored by ${events.map((e) => e.check.commitAuthor).find(Boolean)}`
-    );
-    return;
-  }
-
-  let message;
-  if (events.length === 1) {
-    message = `${guardrails}\n${events[0].formattedMessage}`;
-  } else {
-    const parts = events.map(
-      (e, i) =>
-        `--- Event ${i + 1} of ${events.length}: ${e.eventType} (${e.detail}) ---\n${e.formattedMessage}`
-    );
-    message = `${guardrails}\n\n${parts.join("\n\n")}`;
-  }
-
-  logDebug(`Flushing batch ${key} with ${events.length} event(s)${sessionKey ? ` → session ${sessionKey}` : ""}`);
-  await forwardToOpenClaw(message, source, sessionKey, (deliveryIds || []).join(","));
-}
-
-/** Flush all pending batches — called on graceful shutdown */
-async function flushAllBatches() {
-  const keys = [...pendingBatches.keys()];
-  if (keys.length > 0) {
-    console.log(`[${new Date().toISOString()}] Flushing ${keys.length} pending batch(es) before shutdown`);
-    await Promise.all(keys.map((k) => flushBatch(k)));
-  }
-}
+const idList = (rows) => JSON.stringify(rows.map((row) => row.id));
 
 // ─── User filtering ─────────────────────────────────────────────────
 
@@ -979,8 +1004,16 @@ function shouldProcessUser(actor, allowList, ignoreList) {
 const server = createServer(async (req, res) => {
   // Health check
   if (req.method === "GET" && req.url === "/health") {
+    let stats;
+    try {
+      stats = inboxStats.get();
+    } catch (err) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "inbox unavailable", logStream, error: err.message }));
+      return;
+    }
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok" }));
+    res.end(JSON.stringify({ status: "ok", logStream, ...stats }));
     return;
   }
 
@@ -1004,12 +1037,12 @@ const server = createServer(async (req, res) => {
   const body = Buffer.concat(chunks);
 
   // ── GitHub path ──
-  if (source === "github") {
+  if (source.kind === "github") {
     // Validate GitHub signature
     const signature = req.headers["x-hub-signature-256"];
-    if (!validateGitHubSignature(body, signature)) {
+    if (!validateGitHubSignature(body, signature, source.secret)) {
       console.error(
-        `[${new Date().toISOString()}] REJECTED GitHub: invalid signature from ${req.socket.remoteAddress}`
+        `[${new Date().toISOString()}] REJECTED GitHub ${source.name}: invalid signature from ${req.socket.remoteAddress}`
       );
       res.writeHead(403);
       res.end("Invalid signature");
@@ -1043,7 +1076,7 @@ const server = createServer(async (req, res) => {
     const repo = payload.repository?.full_name || "unknown";
 
     console.log(
-      `[${new Date().toISOString()}] GitHub ${event} on ${repo} (delivery: ${delivery})`
+      `[${new Date().toISOString()}] GitHub ${source.name} ${event} on ${repo} (delivery: ${delivery})`
     );
 
     // Filter check_run events: only forward completed runs, skip neutral/skipped
@@ -1123,8 +1156,8 @@ const server = createServer(async (req, res) => {
     }
     const { process: processGitHub, reason: githubReason } = shouldProcessUser(
       actor,
-      GITHUB_ALLOW_USERS,
-      GITHUB_IGNORE_USERS
+      source.allowUsers,
+      source.ignoreUsers
     );
     if (!processGitHub) {
       console.log(
@@ -1137,10 +1170,10 @@ const server = createServer(async (req, res) => {
 
     const eventMessage = formatGitHubMessage(event, payload);
 
-    // One resolved thread identity drives both the batch key and the session
-    // key, so a PR's events can never split across batches or lanes (HL-17).
+    // One resolved thread identity drives the session key, so a PR's events
+    // can never split across lanes (HL-17).
     //
-    // Every event batches, with no per-type opt-out. The previous allowlist was
+    // Every event is queued, with no per-type opt-out. The previous allowlist was
     // both incomplete and stale: `pull_request_review_thread` is subscribed but
     // was missing, so it forwarded immediately exactly the way check_run and
     // check_suite used to, while `push` was listed and neither App subscribes to
@@ -1148,9 +1181,8 @@ const server = createServer(async (req, res) => {
     // subscriptions change, and silently reintroduces the duplicate-review bug
     // when it isn't. The thread id is defined for any payload, so key on it.
     const thread = resolveGitHubThread(event, payload);
-    const batchKey = `github:${thread.id}`;
-    const sessionKey = thread.sessionKey;
-    logDebug(`GitHub ${event}: thread ${thread.id} → session ${sessionKey}`);
+    const threadKey = `github:${thread.id}`;
+    let sessionKey = thread.sessionKey;
 
     const { eventType, detail } = getGitHubEventDetail(event, payload);
     const eventEntry = {
@@ -1160,25 +1192,32 @@ const server = createServer(async (req, res) => {
       check: getCheckMeta(event, payload),
     };
 
-    if (isImmediateFlushEvent(event, payload)) {
-      logDebug(`GitHub ${event} (${detail}): immediate flush trigger`);
-      addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub", sessionKey, delivery);
-      res.writeHead(200);
-      res.end("OK");
-      flushBatch(batchKey);
+    try {
+      // A PR or issue stays on the newest ticket key it has resolved, and its
+      // queued events move with it.
+      if (thread.numbered && sessionKey.startsWith("ticket:")) {
+        moveThreadToKey.run(sessionKey, threadKey);
+      } else if (thread.numbered) {
+        sessionKey = latestTicketKey.get(threadKey)?.session_key ?? sessionKey;
+      }
+      enqueue(source, threadKey, sessionKey, delivery, eventEntry, isDueImmediately(event, payload));
+    } catch (err) {
+      logWarn(`Failed to queue GitHub ${event} (delivery: ${delivery}): ${err.message}`);
+      res.writeHead(500);
+      res.end("Failed to queue event");
       return;
     }
+    logDebug(`GitHub ${event} (${detail}): thread ${thread.id} → session ${sessionKey}`);
 
-    addToBatch(batchKey, eventEntry, GITHUB_GUARDRAILS, "GitHub", sessionKey, delivery);
     res.writeHead(200);
     res.end("OK");
     return;
   }
 
   // ── YouTrack path ──
-  if (source === "youtrack") {
+  if (source.kind === "youtrack") {
     // Validate YouTrack shared secret
-    if (!validateYouTrackSecret(req)) {
+    if (!validateYouTrackSecret(req, source.secret)) {
       console.error(
         `[${new Date().toISOString()}] REJECTED YouTrack: invalid token from ${req.socket.remoteAddress}`
       );
@@ -1214,8 +1253,8 @@ const server = createServer(async (req, res) => {
       null;
     const { process: processYouTrack, reason: youtrackReason } = shouldProcessUser(
       updaterLogin,
-      YOUTRACK_ALLOW_USERS,
-      YOUTRACK_IGNORE_USERS
+      source.allowUsers,
+      source.ignoreUsers
     );
     if (!processYouTrack) {
       console.log(
@@ -1227,92 +1266,242 @@ const server = createServer(async (req, res) => {
     }
 
     const eventMessage = formatYouTrackMessage(payload);
-    const batchKey = `youtrack:${issueId}`;
     const { eventType, detail } = getYouTrackEventDetail(payload);
 
     // Extract ticket ID for session routing; without one, fall back to a
     // per-issue lane instead of the shared default `hook:ingress` lane.
     const ticketId = extractTicketIdFromYouTrack(payload);
-    const sessionKey = ticketId
-      ? `ticket:${ticketId}`
-      : (issueId && issueId !== "unknown" ? `hook:youtrack:${issueId}` : null);
-    if (sessionKey) {
-      logDebug(`YouTrack ${action}: routed to session ${sessionKey}`);
-    }
+    const sessionKey = ticketId ? `ticket:${ticketId}` : `hook:youtrack:${issueId}`;
+    logDebug(`YouTrack ${action}: routed to session ${sessionKey}`);
 
-    addToBatch(batchKey, { eventType, detail, formattedMessage: eventMessage }, YOUTRACK_GUARDRAILS, "YouTrack", sessionKey);
+    try {
+      enqueue(source, `youtrack:${issueId}`, sessionKey, null, { eventType, detail, formattedMessage: eventMessage }, false);
+    } catch (err) {
+      logWarn(`Failed to queue YouTrack ${action} on ${issueId}: ${err.message}`);
+      res.writeHead(500);
+      res.end("Failed to queue event");
+      return;
+    }
     res.writeHead(200);
     res.end("OK");
     return;
   }
 });
 
-/** Forward a formatted message to the OpenClaw hooks API */
-async function forwardToOpenClaw(message, sourceName, sessionKey = null, idempotencyKey = null) {
+/** Forward a formatted message to the OpenClaw hooks API; returns the run id */
+async function forwardToOpenClaw(message, sourceName, sessionKey) {
+  const hookPayload = JSON.stringify({
+    message,
+    name: sourceName,
+    wakeMode: OPENCLAW_WAKE_MODE,
+    // The gateway logs the completion line the dispatcher waits for only when deliver is false.
+    deliver: false,
+    sessionKey,
+    timeoutSeconds: OPENCLAW_TIMEOUT_SECONDS,
+  });
+
+  logDebug(`Forwarding ${sourceName} message to OpenClaw:\n${message}`);
+
+  const response = await fetch(OPENCLAW_HOOKS_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENCLAW_HOOKS_TOKEN}`,
+    },
+    body: hookPayload,
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`OpenClaw hooks returned ${response.status}: ${text}`);
+  }
+  return JSON.parse(text).runId;
+}
+
+// ─── Dispatcher ──────────────────────────────────────────────────────
+
+/** Build the combined message for one turn */
+function buildMessage(guardrails, rows) {
+  if (rows.length === 1) return `${guardrails}\n${rows[0].message}`;
+  const parts = rows.map(
+    (e, i) =>
+      `--- Event ${i + 1} of ${rows.length}: ${e.event_type} (${e.detail}) ---\n${e.message}`
+  );
+  return `${guardrails}\n\n${parts.join("\n\n")}`;
+}
+
+async function notifyDiscord(text) {
   try {
-    const hookBody = {
-      message,
-      name: sourceName,
-      wakeMode: OPENCLAW_WAKE_MODE,
-      deliver: OPENCLAW_DELIVER,
-    };
-    if (sessionKey) {
-      hookBody.sessionKey = sessionKey;
-    }
-    // Delivery GUID(s) of the source webhook(s): lets OpenClaw drop a replay if
-    // the upstream retries or the proxy is restarted mid-flush.
-    if (idempotencyKey) {
-      hookBody.idempotencyKey = idempotencyKey;
-    }
-    const hookPayload = JSON.stringify(hookBody);
-
-    logDebug(`Forwarding ${sourceName} message to OpenClaw:\n${message}`);
-
-    const response = await fetch(OPENCLAW_HOOKS_URL, {
+    const response = await fetch(DISCORD_WEBHOOK_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENCLAW_HOOKS_TOKEN}`,
-      },
-      body: hookPayload,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: text.slice(0, 2000) }),
+      signal: AbortSignal.timeout(10_000),
     });
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error(
-        `[${new Date().toISOString()}] OpenClaw hooks returned ${response.status}: ${text}`
-      );
-      return;
-    }
-
-    console.log(
-      `[${new Date().toISOString()}] Forwarded ${sourceName} event to OpenClaw hooks`
-    );
+    if (!response.ok) logWarn(`Discord webhook returned ${response.status}`);
   } catch (err) {
-    console.error(
-      `[${new Date().toISOString()}] Failed to forward to OpenClaw: ${err.message}`
-    );
+    logWarn(`Discord webhook failed: ${err.message}`);
   }
 }
 
-async function shutdown(signal) {
-  console.log(`[${new Date().toISOString()}] Received ${signal}, shutting down`);
-  await flushAllBatches();
-  server.close(() => {
-    console.log(`[${new Date().toISOString()}] Server closed`);
-    process.exit(0);
+/** Count a failed turn against its events; events out of attempts go dead */
+function fail(rows, error) {
+  const failed = failRows.all(error, Date.now(), idList(rows));
+  if (failed.length === 0) return;
+  const sessionKey = failed[0].session_key;
+  logInfo(`Turn for ${sessionKey} failed (${failed.length} event(s)): ${error}`);
+
+  const dead = failed.filter((row) => row.status === "dead").length;
+  if (dead === 0) return;
+  const text = `openclaw-webhook-proxy: ${dead} event(s) for ${sessionKey} gave up after ${MAX_ATTEMPTS} attempts: ${error}`;
+  logWarn(text);
+  if (DISCORD_WEBHOOK_URL) notifyDiscord(text);
+}
+
+/** Put a turn's events back in the queue without counting an attempt */
+function requeueBusy(rows, reason) {
+  const requeued = requeueRows.all(Date.now() + BUSY_RETRY_MS, idList(rows));
+  if (requeued.length === 0) return;
+  logInfo(`Session ${requeued[0].session_key} busy (${reason}); ${requeued.length} event(s) requeued`);
+}
+
+/** Send due sessions' events, one turn per session, while under the in-flight cap */
+async function dispatch() {
+  while (inboxStats.get().inFlight < OPENCLAW_MAX_IN_FLIGHT) {
+    const now = Date.now();
+    const next = nextDueKey.get(sourceNames, now);
+    if (!next) return;
+    const sessionKey = next.session_key;
+    const source = SOURCES.find((s) => s.name === dueSource.get(sessionKey, sourceNames).source);
+
+    const rows = [];
+    let size = Buffer.byteLength(JSON.stringify(source.guardrails));
+    for (const row of pendingRows.all(sessionKey, source.name)) {
+      size += Buffer.byteLength(JSON.stringify(row.message));
+      if (rows.length > 0 && size > MAX_MESSAGE_BYTES) break;
+      rows.push(row);
+    }
+
+    const events = rows.map((row) => ({ check: JSON.parse(row.check_json) }));
+    if (isSelfAuthoredGreenCheckBatch(events, source.selfUsers)) {
+      markSkipped.run(idList(rows));
+      logInfo(
+        `Dropping ${rows.length} green check event(s) for ${sessionKey} on a commit authored by ${events.map((e) => e.check.commitAuthor).find(Boolean)}`
+      );
+      continue;
+    }
+
+    markSent.run(now, idList(rows));
+    try {
+      const runId = await forwardToOpenClaw(buildMessage(source.guardrails, rows), source.label, sessionKey);
+      setRunId.run(runId, idList(rows));
+      logInfo(`Sent ${rows.length} ${source.name} event(s) to ${sessionKey} (run ${runId})`);
+    } catch (err) {
+      fail(rows, err.message);
+    }
+  }
+}
+
+async function tick() {
+  try {
+    const now = Date.now();
+    pruneRows.run(now - RETENTION_MS);
+    if (logStream === "up") {
+      const overdue = Map.groupBy(overdueRows.all(now - BACKSTOP_MS), (row) => row.session_key);
+      for (const rows of overdue.values()) fail(rows, "no completion line");
+      await dispatch();
+    }
+  } catch (err) {
+    logWarn(`Dispatcher error: ${err.message}`);
+  }
+  setTimeout(tick, 2000);
+}
+
+// ─── Gateway log ─────────────────────────────────────────────────────
+
+function startLogStream() {
+  const child = spawn(
+    "ssh",
+    [
+      "-i", "/app/ssh/id_ed25519",
+      "-o", "UserKnownHostsFile=/app/ssh/known_hosts",
+      "-o", "BatchMode=yes",
+      "-o", "ServerAliveInterval=30",
+      "-o", "ServerAliveCountMax=3",
+      OPENCLAW_LOG_SSH,
+    ],
+    { stdio: ["ignore", "pipe", "pipe"] }
+  );
+  for (const output of [child.stdout, child.stderr]) {
+    createInterface({ input: output }).on("line", (line) => {
+      try {
+        handleLogLine(line);
+      } catch (err) {
+        logWarn(`Failed to handle gateway log line: ${err.message}`);
+      }
+    });
+  }
+  child.on("close", (code, signal) => {
+    logStream = "down";
+    logWarn(`Gateway log stream exited (${signal ?? `code ${code}`}); restarting in 10s`);
+    setTimeout(startLogStream, 10_000);
   });
+}
+
+function handleLogLine(line) {
+  let record;
+  try {
+    record = JSON.parse(line);
+  } catch {
+    logInfo(`[gateway log] ${line}`);
+    return;
+  }
+  if (record.type === "notice" || record.type === "error") {
+    logInfo(`[gateway log] ${record.message}${record.error ? `: ${record.error}` : ""}`);
+    if (record.message.includes("gateway disconnected")) logStream = "disconnected";
+    else if (record.message.includes("gateway reconnected")) logStream = "up";
+    return;
+  }
+  logStream = "up";
+  if (record.type !== "log" || record.subsystem !== "gateway/hooks") return;
+
+  // The message joins all of the call's arguments, so it carries their fields too.
+  const text = record.message;
+  const fields = JSON.parse(record.raw)["1"];
+  if (text.includes("hook agent run completed without announcement")) {
+    const done = markDone.all(fields.runId);
+    if (done.length > 0) logInfo(`Turn for ${done[0].session_key} done (run ${fields.runId})`);
+  } else if (text.includes("hook agent run returned non-ok status")) {
+    const rows = sentByRun.all(fields.runId);
+    if (text.includes(CAPACITY_ERROR)) requeueBusy(rows, "gateway at capacity");
+    else fail(rows, fields.summary ?? fields.status);
+  } else if (text.includes("hook agent failed: ")) {
+    // Names the session but not the run, so only our sends just before it can be the one refused.
+    const key = text.match(/Session "agent:[^:"]+:([^"]+)"/)?.[1];
+    if (!key) return;
+    const at = Date.parse(record.time);
+    const rows = sentByKey.all(key.toLowerCase(), at - 65_000, at + 5_000);
+    if (text.includes("while starting work. Retry.")) requeueBusy(rows, "session claimed");
+    else fail(rows, text.slice(text.indexOf("hook agent failed: ")));
+  }
+}
+
+function shutdown(signal) {
+  logInfo(`Received ${signal}, shutting down`);
+  process.exit(0);
 }
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
 
 server.listen(PORT, () => {
-  const sources = [];
-  if (GITHUB_ENABLED) sources.push(`GitHub (${GITHUB_HOOK_PATH})`);
-  if (YOUTRACK_ENABLED) sources.push(`YouTrack (${YOUTRACK_HOOK_PATH})`);
   console.log(`OpenClaw webhook proxy listening on port ${PORT}`);
-  console.log(`Forwarding to: ${OPENCLAW_HOOKS_URL}`);
-  console.log(`Active sources: ${sources.join(", ")}`);
+  console.log(`Forwarding to: ${OPENCLAW_HOOKS_URL} (at most ${OPENCLAW_MAX_IN_FLIGHT} sessions in flight)`);
+  console.log(`Active sources: ${SOURCES.map((s) => `${s.name} (${s.hookPath})`).join(", ")}`);
+  console.log(`Inbox: ${INBOX_PATH}`);
   console.log(`Log level: ${LOG_LEVEL}`);
 });
+
+startLogStream();
+tick();
