@@ -75,20 +75,16 @@
   changed_when: "'Homebridge setup complete' in (_hb_install.stdout | default(''))"
 
 # ---- Node.js upgrades via hb-service -----------------------------------
-# After the initial .pkg bootstrap, hb-service owns Node.js lifecycle so
-# it stays within Homebridge's supported range. Empty homebridge_node_version
-# lets hb-service pick the latest recommended LTS; a pinned version forces
-# an exact upgrade or downgrade. Idempotent: stdout reports "already
-# up-to-date" when the target already matches.
+# After the initial .pkg bootstrap, hb-service owns Node.js: each run moves
+# it to the newest release Homebridge supports, when there is one. hb-service
+# prints to stderr and restarts Homebridge itself after an update.
 - name: keep Node.js at the Homebridge-managed version
   command: >-
     {{ homebridge_hbservice_bin }} update-node
     --user {{ homebridge_user }}
     -S {{ homebridge_service_name }}
-    {% if homebridge_node_version is truthy %}{{ homebridge_node_version }}{% endif %}
   register: _hb_update_node
-  changed_when: "'Installing Node.js' in (_hb_update_node.stdout | default(''))"
-  notify: homebridge changed
+  changed_when: "'Updating Node.js' in _hb_update_node.stderr"
 
 # ---- UI certificate ----------------------------------------------------
 - name: create the UI certificate directory

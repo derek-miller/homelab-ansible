@@ -17,12 +17,6 @@ homebridge_node_bootstrap_version: "22.11.0"
 homebridge_node_pkg_url: >-
   https://nodejs.org/dist/v{{ homebridge_node_bootstrap_version }}/node-v{{ homebridge_node_bootstrap_version }}.pkg
 
-# Target Node.js version for `hb-service update-node`, run on every
-# playbook run after hb-service is installed. Empty (default) lets
-# hb-service pick the latest Homebridge-recommended LTS. Set to a
-# specific version (e.g. "22.11.0") to pin.
-homebridge_node_version: ""
-
 # The npm -g packages to keep at the latest version. `homebridge` is the
 # server itself; `homebridge-config-ui-x` provides the web UI. Plugins are
 # extensible — append to this list to bring more under management.
