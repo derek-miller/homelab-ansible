@@ -48,10 +48,11 @@ homebridge_user: "{{ mac_user | mandatory }}"
 # directly using certs referenced in config.json).
 homebridge_ui_port: 8581
 
-# -S, --service-name — LaunchDaemon label written to
-# /Library/LaunchDaemons/<name>.plist. Default matches the stock hb-service
-# convention. Change only if running multiple Homebridge instances.
-homebridge_service_name: com.homebridge.server
+# -S, --service-name — hb-service's name for the service, letters, digits
+# and dashes only. It labels the LaunchDaemon com.<name lowercased>.server.
+# Default matches hb-service's. Change only if running multiple Homebridge
+# instances.
+homebridge_service_name: Homebridge
 
 # -P, --plugin-path — directory where Homebridge looks for plugins.
 # Leave unset to use hb-service's default (/usr/local/lib/node_modules).
@@ -62,4 +63,4 @@ homebridge_plugin_path: ""
 homebridge_user_storage_path: ""
 
 # System LaunchDaemon plist, derived from homebridge_service_name.
-homebridge_launchdaemon: "/Library/LaunchDaemons/{{ homebridge_service_name }}.plist"
+homebridge_launchdaemon: "/Library/LaunchDaemons/com.{{ homebridge_service_name | lower }}.server.plist"

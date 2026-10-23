@@ -84,6 +84,7 @@
   command: >-
     {{ homebridge_hbservice_bin }} update-node
     --user {{ homebridge_user }}
+    -S {{ homebridge_service_name }}
     {% if homebridge_node_version is truthy %}{{ homebridge_node_version }}{% endif %}
   register: _hb_update_node
   changed_when: "'Installing Node.js' in (_hb_update_node.stdout | default(''))"
