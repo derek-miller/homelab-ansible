@@ -7,6 +7,7 @@
   authorized_key:
     user: "{{ item.user }}"
     key: "{{ item.key }}"
+    key_options: "{{ item.key_options | default(omit) }}"
     state: "{{ item.state|default('present') }}"
   with_items: "{{ authorized_keys|default([]) }}"
 
