@@ -1354,7 +1354,7 @@ function fail(rows, error) {
 
   const dead = failed.filter((row) => row.status === "dead").length;
   if (dead === 0) return;
-  const text = `openclaw-webhook-proxy: ${dead} event(s) for ${sessionKey} gave up after ${MAX_ATTEMPTS} attempts: ${error}`;
+  const text = `${dead} event(s) for ${sessionKey} gave up after ${MAX_ATTEMPTS} attempts: ${error}`;
   logWarn(text);
   if (DISCORD_WEBHOOK_URL) notifyDiscord(text);
 }
