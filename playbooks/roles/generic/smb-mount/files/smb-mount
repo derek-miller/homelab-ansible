@@ -1,0 +1,42 @@
+#!/bin/sh
+# Usage: smb-mount <mount_smbfs options> <credentials file> <mount root> <share>...
+#
+# Keeps each share mounted at <mount root>/<share> as the user running this.
+# Logs every mount it makes, and a problem only when it differs from the last.
+# Never read a file on a share from here: launchd jobs running Apple's binaries
+# are denied that.
+set -eu
+
+log() { echo "$(date '+%F %T') $*"; }
+
+options=$1 credentials=$2 root=$3
+shift 3
+read -r login < "$credentials"
+
+while :; do
+  table=$(/sbin/mount)
+  i=0
+  for share in "$@"; do
+    i=$((i + 1))
+    dir=$root/$share
+    case $table in
+      *" on $dir (autofs,"*)
+        msg="an autofs trigger is on $dir, not mounting" ;;
+      *" on $dir (smbfs,"*)
+        msg= ;;
+      *)
+        if out=$(/sbin/mount_smbfs -N -o "$options" "//$login/$share" "$dir" 2>&1); then
+          log "$share: mounted"
+          msg=
+        else
+          msg="mount failed: $(printf '%s\n' "$out" | sed 's#//[^[:space:]]*@#//<redacted>@#g')"
+        fi ;;
+    esac
+    eval "last=\${said_$i-}"
+    if [ -n "$msg" ] && [ "$msg" != "$last" ]; then
+      log "$share: $msg"
+    fi
+    eval "said_$i=\$msg"
+  done
+  sleep 30
+done

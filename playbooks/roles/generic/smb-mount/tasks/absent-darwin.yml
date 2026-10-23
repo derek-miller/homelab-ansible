@@ -1,40 +1,44 @@
 ---
-# Tear down autofs config. The /etc/auto_master line removal requires a
-# GUI-Terminal one-liner because writes to it fail over SSH (and even from
-# a boot-time LaunchDaemon — see defaults/main.yml).
+- name: check for the mount LaunchDaemon
+  stat:
+    path: "/Library/LaunchDaemons/{{ smb_mount_darwin_label }}.plist"
+  register: _smb_mount_plist
 
-- name: remove autofs SMB map file
+- name: unload the mount LaunchDaemon
+  community.general.launchd:
+    name: "{{ smb_mount_darwin_label }}"
+    state: unloaded
+  when: _smb_mount_plist.stat.exists
+
+- name: remove the mount LaunchDaemon, its script, credentials and log
   file:
-    path: "{{ smb_mount_map_path }}"
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/Library/LaunchDaemons/{{ smb_mount_darwin_label }}.plist"
+    - "{{ smb_mount_darwin_script }}"
+    - "{{ smb_mount_darwin_credentials_path }}"
+    - "{{ smb_mount_darwin_log }}"
+
+- name: remove the autofs SMB map
+  file:
+    path: /etc/auto_smb
     state: absent
   notify: reload autofs
 
-- name: probe /etc/auto_master for stale map entry
-  command: "grep -qE '^/-[[:space:]]+{{ smb_mount_map_path | basename }}$' /etc/auto_master"
-  register: _automaster_probe
-  changed_when: false
-  failed_when: false
-
-- name: prompt user to remove map line from /etc/auto_master via GUI Terminal
-  pause:
-    seconds: 600
-    prompt: |
-
-      =====================================================================
-      MANUAL STEP REQUIRED — remove autofs map line from /etc/auto_master
-      =====================================================================
-
-      Writing /etc/auto_master fails over SSH on this host. In a
-      Terminal.app window on the Mac (NOT over SSH), paste:
-
-        sudo /usr/bin/sed -i '' "/^\/-[[:space:]]\\{1,\\}{{ smb_mount_map_path | basename }}$/d" /etc/auto_master
-
-      Then press Ctrl+C, then C, here. The play otherwise resumes on its
-      own after 10 minutes.
-  when: _automaster_probe.rc == 0
-
 - name: flush handlers
   meta: flush_handlers
+
+- name: read the mount table
+  command: /sbin/mount
+  register: _smb_mount_table
+  changed_when: false
+
+- name: unmount the shares
+  command: "/sbin/umount {{ smb_mount_darwin_target }}/{{ item }}"
+  become_user: "{{ mac_user }}"
+  loop: "{{ smb_share_names }}"
+  when: "' on ' ~ smb_mount_darwin_target ~ '/' ~ item ~ ' (smbfs,' in _smb_mount_table.stdout"
 
 - name: remove the synthetic link declaration
   lineinfile:
@@ -49,6 +53,7 @@
   args:
     removes: "{{ smb_mount_darwin_target }}/{{ item }}"
   loop: "{{ smb_share_names }}"
+  when: "' on ' ~ smb_mount_darwin_target ~ '/' ~ item ~ ' (autofs,' not in _smb_mount_table.stdout"
   register: _smb_rmdir
   failed_when: false
   changed_when: _smb_rmdir is changed and _smb_rmdir.rc == 0
