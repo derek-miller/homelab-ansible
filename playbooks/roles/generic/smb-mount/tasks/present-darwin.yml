@@ -64,6 +64,7 @@
   command: /sbin/mount
   register: _smb_mount_table
   changed_when: false
+  check_mode: no
 
 # Never touch a path in the mount table: chown goes through to the NAS, and a
 # stat on an autofs trigger mounts the share as root.
@@ -104,6 +105,15 @@
     group: "{{ root_group }}"
     mode: '0755'
   notify: restart smb-mount
+
+# launchd won't start a job whose log directory is missing.
+- name: create the log directory
+  file:
+    path: "{{ smb_mount_darwin_log | dirname }}"
+    state: directory
+    owner: "{{ mac_user }}"
+    group: staff
+    mode: '0755'
 
 - name: install the mount LaunchDaemon
   template:

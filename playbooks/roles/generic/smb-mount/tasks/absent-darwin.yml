@@ -33,6 +33,7 @@
   command: /sbin/mount
   register: _smb_mount_table
   changed_when: false
+  check_mode: no
 
 - name: unmount the shares
   command: "/sbin/umount {{ smb_mount_darwin_target }}/{{ item }}"
