@@ -53,11 +53,13 @@
     group: "{{ virtualenv_group }}"
     mode: 0644
 
+# -B: root mustn't leave bytecode in the base interpreter's tree, which on a
+# Mac belongs to the Homebrew user.
 - name: create virtualenv and upgrade setuptools
   pip:
     virtualenv: "{{ virtualenv_path }}"
     virtualenv_site_packages: "{{ virtualenv_site_packages }}"
-    virtualenv_command: "{{ virtualenv_python }} -m venv"
+    virtualenv_command: "{{ virtualenv_python }} -B -m venv"
     name: setuptools{{ setuptools_version_spec }}
     extra_args: --upgrade-strategy only-if-needed
     state: latest
@@ -66,7 +68,7 @@
   pip:
     virtualenv: "{{ virtualenv_path }}"
     virtualenv_site_packages: "{{ virtualenv_site_packages }}"
-    virtualenv_command: "{{ virtualenv_python }} -m venv"
+    virtualenv_command: "{{ virtualenv_python }} -B -m venv"
     name: pip{{ pip_version_spec }}
     extra_args: --upgrade-strategy only-if-needed
     state: latest

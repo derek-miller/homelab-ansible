@@ -94,6 +94,13 @@
         state: latest
       become_user: "{{ mac_user }}"
 
+    # Otherwise brew autoremove deletes it once no other formula depends on it.
+    - name: mark the Homebrew Python formula as installed on request
+      command: "{{ homebrew_prefix }}/bin/brew tab --installed-on-request {{ python_homebrew_formula }}"
+      register: _python_tab
+      changed_when: "'already marked' not in _python_tab.stdout"
+      become_user: "{{ mac_user }}"
+
     # Compiled ahead as mac_user, root's module runs only read the bytecode.
     - name: compile the Homebrew Python standard library
       command: >-
