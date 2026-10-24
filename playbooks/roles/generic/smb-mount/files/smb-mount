@@ -20,8 +20,6 @@ while :; do
     i=$((i + 1))
     dir=$root/$share
     case $table in
-      *" on $dir (autofs,"*)
-        msg="an autofs trigger is on $dir, not mounting" ;;
       *" on $dir (smbfs,"*)
         msg= ;;
       *)

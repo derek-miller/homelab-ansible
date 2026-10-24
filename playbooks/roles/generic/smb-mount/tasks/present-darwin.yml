@@ -51,23 +51,13 @@
   when: _synthetic_probe.stat.lnk_target | default('') != smb_mount_darwin_target
 
 # ---- mounts ------------------------------------------------------------
-- name: remove the autofs SMB map
-  file:
-    path: /etc/auto_smb
-    state: absent
-  notify: reload autofs
-
-- name: flush handlers
-  meta: flush_handlers
-
 - name: read the mount table
   command: /sbin/mount
   register: _smb_mount_table
   changed_when: false
   check_mode: no
 
-# Never touch a path in the mount table: chown goes through to the NAS, and a
-# stat on an autofs trigger mounts the share as root.
+# Never touch a path in the mount table: chown would go through to the NAS.
 - name: create the mount points
   file:
     path: "{{ smb_mount_darwin_target }}/{{ item }}"
@@ -138,7 +128,7 @@
 - name: wait for each share to be mounted by {{ mac_user }}
   shell: >-
     /sbin/mount | grep -F ' on {{ smb_mount_darwin_target }}/{{ item }} (smbfs, '
-    | grep -v automounted | grep -qF 'mounted by {{ mac_user }})'
+    | grep -qF 'mounted by {{ mac_user }})'
   register: _smb_mounted
   until: _smb_mounted.rc == 0
   retries: 12

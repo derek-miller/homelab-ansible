@@ -20,15 +20,6 @@
     - "{{ smb_mount_darwin_credentials_path }}"
     - "{{ smb_mount_darwin_log }}"
 
-- name: remove the autofs SMB map
-  file:
-    path: /etc/auto_smb
-    state: absent
-  notify: reload autofs
-
-- name: flush handlers
-  meta: flush_handlers
-
 - name: read the mount table
   command: /sbin/mount
   register: _smb_mount_table
@@ -54,7 +45,6 @@
   args:
     removes: "{{ smb_mount_darwin_target }}/{{ item }}"
   loop: "{{ smb_share_names }}"
-  when: "' on ' ~ smb_mount_darwin_target ~ '/' ~ item ~ ' (autofs,' not in _smb_mount_table.stdout"
   register: _smb_rmdir
   failed_when: false
   changed_when: _smb_rmdir is changed and _smb_rmdir.rc == 0
