@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{{ smb_mount_darwin_label }}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{ smb_mount_darwin_script }}</string>
+    <string>{{ smb_mount_darwin_options }}</string>
+    <string>{{ smb_mount_darwin_credentials_path }}</string>
+    <string>{{ smb_mount_darwin_target }}</string>
+{% for share in smb_share_names %}
+    <string>{{ share }}</string>
+{% endfor %}
+  </array>
+  <key>UserName</key>
+  <string>{{ mac_user }}</string>
+  <key>GroupName</key>
+  <string>staff</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>{{ smb_mount_darwin_log }}</string>
+  <key>StandardErrorPath</key>
+  <string>{{ smb_mount_darwin_log }}</string>
+</dict>
+</plist>

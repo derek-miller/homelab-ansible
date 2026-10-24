@@ -1,7 +1,7 @@
 ---
-- name: reload autofs
-  # `automount -vc` flushes cached map data and re-reads /etc/auto_master
-  # plus all referenced map files. Safe to re-run; mounted shares aren't
-  # disturbed (only re-trigger on next access if config changed).
-  command: /usr/sbin/automount -vc
-  changed_when: true
+# Reloads the plist too. The shares stay mounted across it.
+- name: restart smb-mount
+  community.general.launchd:
+    name: "{{ smb_mount_darwin_label }}"
+    state: restarted
+  when: not ansible_check_mode

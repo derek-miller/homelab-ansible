@@ -8,3 +8,7 @@ smb_mount_path: "{{ smb_mount_dir }}/{{ smb_share_name }}"
 smb_mount_service_name: "{{ smb_mount_path[1:] | replace('/', '-') }}"
 
 smb_mount_darwin_target: "/System/Volumes/Data{{ smb_mount_dir }}"
+smb_mount_darwin_credentials_path: "/etc/.{{ smb_share_config }}_smbfs_creds"
+smb_mount_darwin_label: local.smb-mount
+smb_mount_darwin_script: /usr/local/sbin/smb-mount
+smb_mount_darwin_log: "/Users/{{ mac_user }}/Library/Logs/{{ smb_mount_darwin_label }}.log"
