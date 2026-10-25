@@ -9,3 +9,7 @@ spec:
   version: {{ _flux_chart_releases['flux-operator'] | to_json }}
   targetNamespace: flux-system
   createNamespace: true
+  valuesContent: |-
+    # The Swarm Traefik reaches the web UI only on this node (flux.yaml).
+    nodeSelector:
+      kubernetes.io/hostname: {{ inventory_hostname | to_json }}
