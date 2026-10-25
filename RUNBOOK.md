@@ -132,6 +132,8 @@ The deploy copies the tree to rackvm1, decrypting vaulted files on the way, pins
 
 **Hidden apps.** Anything that shouldn't be public goes in a `*.vault.yaml` file, encrypted whole by `make vault-encrypt`, and so does every Secret. File names stay readable, so a hidden suite shares one neutral name (the *arr apps share `media.vault.yaml`), never an app's own. The deploy log is public as well, so the deploy prints no manifests or images, and a failed apply only says to look on rackvm1.
 
+**Namespaces.** Each suite runs in the namespace named by its `[docker_labels]` word, and Portainer in `portainer`. A suite's `kubernetes/<namespace>/namespace.yaml` is a copy of `kubernetes/portainer/namespace.yaml` with the name changed; a hidden suite keeps it in its `*.vault.yaml`. The baseline refuses everything, then lets the namespace's pods reach each other, CoreDNS and the internet, but no private, Tailscale or link-local address, and it refuses host-network pods. Anything more goes in the app's own file: a call between namespaces needs a rule at both ends, naming pods by selector and the port the pod listens on, because a policy sees a Service only after it is translated to a pod; the API server is TCP 6443. HelmChart objects stay in `kube-system` with `targetNamespace` set, since their install Job needs the API. No policy keeps a pod's own node out. To check a policy, restart the pods it covers, since open connections outlive a change, and test with TCP, not ping, which always passes; `sudo tcpdump -ni nflog:100` on the pod's node names the policy behind each refusal.
+
 **Status.** On rackvm1:
 
 ```bash
