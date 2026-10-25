@@ -24,8 +24,8 @@
   command: "k3s kubectl delete --ignore-not-found {{ item | quote }}"
   loop: "{{ _flux_crds.stdout_lines | default([]) | select('search', '\\.fluxcd\\.controlplane\\.io$') | list }}"
 
-- name: delete the namespaces the charts created
-  command: k3s kubectl delete namespace --ignore-not-found --wait --timeout=5m flux-system reloader
+- name: delete the namespace the operator's chart created
+  command: k3s kubectl delete namespace --ignore-not-found --wait --timeout=5m flux-system
   register: _flux_namespaces
   changed_when: "'deleted' in _flux_namespaces.stdout"
 
