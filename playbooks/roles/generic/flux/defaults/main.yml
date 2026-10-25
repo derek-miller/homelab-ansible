@@ -20,3 +20,11 @@ flux_registry_htpasswd: ""
 flux_registry_path: /mnt/data/volumes/zot
 
 flux_apply_timeout: 5m
+
+# The web UI signs users in with this OIDC client, and flux_web_admin may run
+# its actions.
+flux_web_base_url: ""
+flux_web_issuer_url: ""
+flux_web_client_id: ""
+flux_web_client_secret: ""
+flux_web_admin: ""

@@ -54,3 +54,16 @@ spec:
       ports:
         - protocol: TCP
           port: 9080
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flux-web-admin
+subjects:
+  - kind: User
+    name: {{ flux_web_admin | to_json }}
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: flux-web-admin
+  apiGroup: rbac.authorization.k8s.io
