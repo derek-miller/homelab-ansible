@@ -39,3 +39,30 @@ timezone: America/Chicago
 tailscale_host_args: --accept-routes
 
 homebridge_ui_port: 443
+
+openclaw_hooks_token: "{{ vault_openclaw_hooks_token }}"
+openclaw_hooks_timeout_seconds: 3600
+
+openclaw_hooks:
+  enabled: true
+  token: "{{ openclaw_hooks_token }}"
+  defaultSessionKey: hook:ingress
+  allowRequestSessionKey: true
+  allowedSessionKeyPrefixes:
+    - "ticket:"
+    - "hook:"
+  allowedAgentIds:
+    - main
+  mappings:
+    - id: webhook-proxy
+      match:
+        path: proxy
+      action: agent
+      name: !unsafe "{{name}}"
+      sessionKey: !unsafe "{{sessionKey}}"
+      messageTemplate: !unsafe "{{message}}"
+      wakeMode: now
+      # The webhook proxy waits for the completion line the gateway logs only when this is false.
+      deliver: false
+      timeoutSeconds: "{{ openclaw_hooks_timeout_seconds }}"
+      allowUnsafeExternalContent: true

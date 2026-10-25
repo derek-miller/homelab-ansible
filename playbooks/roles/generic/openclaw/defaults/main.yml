@@ -1,0 +1,6 @@
+---
+openclaw_user: "{{ mac_user | mandatory }}"
+openclaw_config: "/Users/{{ openclaw_user }}/.openclaw/openclaw.json"
+
+# Merged into openclaw.json's hooks; any other key there stays the app's.
+openclaw_hooks: {}

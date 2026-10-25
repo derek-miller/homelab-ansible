@@ -111,5 +111,8 @@ rackmini1
 [plex]
 rackmini1
 
+[openclaw]
+rackmini1
+
 [qemu-guest-agent]
 rackvm[1:5]

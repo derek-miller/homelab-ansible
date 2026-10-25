@@ -11,16 +11,16 @@
  * Always required:
  *   OPENCLAW_HOOKS_TOKEN     — bearer token for the OpenClaw hooks API
  *   OPENCLAW_HOOKS_URL       — full URL to the OpenClaw hook mapping that leaves the untrusted
- *                              markers to this proxy (/hooks/proxy, set in openclaw.json)
+ *                              markers to this proxy (/hooks/proxy)
  *   OPENCLAW_LOG_SSH         — user@host whose forced command prints `openclaw logs --follow --json`;
  *                              the key and known_hosts are read from /app/ssh
  *
  * Optional (with defaults):
  *   PORT                     — listen port (default: 3000)
  *   LOG_LEVEL                — logging level: "info" (default) or "debug"
- *   OPENCLAW_WAKE_MODE       — wake mode for OpenClaw hooks (default: "now")
  *   OPENCLAW_MAX_IN_FLIGHT   — sessions with a turn in flight at once (default: 12)
- *   OPENCLAW_TIMEOUT_SECONDS — timeoutSeconds sent with each turn (default: 3600)
+ *   OPENCLAW_TIMEOUT_SECONDS — the hook mapping's timeoutSeconds; a turn still open 5 minutes
+ *                              past it is given up on (default: 3600)
  *   BATCH_WINDOW_MS          — how long an event waits for related events (default: 10000)
  *   INBOX_PATH               — SQLite inbox file (default: /data/inbox.db)
  *   DISCORD_WEBHOOK_URL      — Discord webhook told when a session's events give up (optional)
@@ -88,7 +88,6 @@ if (missing.length > 0) {
 const OPENCLAW_HOOKS_TOKEN = process.env.OPENCLAW_HOOKS_TOKEN;
 const OPENCLAW_HOOKS_URL = process.env.OPENCLAW_HOOKS_URL;
 const OPENCLAW_LOG_SSH = process.env.OPENCLAW_LOG_SSH;
-const OPENCLAW_WAKE_MODE = process.env.OPENCLAW_WAKE_MODE || "now";
 const OPENCLAW_MAX_IN_FLIGHT = parseInt(process.env.OPENCLAW_MAX_IN_FLIGHT || "12", 10);
 const OPENCLAW_TIMEOUT_SECONDS = parseInt(process.env.OPENCLAW_TIMEOUT_SECONDS || "3600", 10);
 const BATCH_WINDOW_MS = parseInt(process.env.BATCH_WINDOW_MS || "10000", 10);
@@ -1467,15 +1466,7 @@ const server = createServer(async (req, res) => {
 
 /** Forward a formatted message to the OpenClaw hooks API; returns the run id */
 async function forwardToOpenClaw(message, sourceName, sessionKey) {
-  const hookPayload = JSON.stringify({
-    message,
-    name: sourceName,
-    wakeMode: OPENCLAW_WAKE_MODE,
-    // The gateway logs the completion line the dispatcher waits for only when deliver is false.
-    deliver: false,
-    sessionKey,
-    timeoutSeconds: OPENCLAW_TIMEOUT_SECONDS,
-  });
+  const hookPayload = JSON.stringify({ message, name: sourceName, sessionKey });
 
   logDebug(`Forwarding ${sourceName} message to OpenClaw:\n${message}`);
 
