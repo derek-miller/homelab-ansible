@@ -708,6 +708,12 @@
   tags:
     - plex
 
+- hosts: openclaw
+  roles:
+    - role: generic/openclaw
+  tags:
+    - openclaw
+
 # Last, so a host whose image kept its previous build still ran everything else.
 - name: report images that kept their previous build
   hosts: docker-build-images

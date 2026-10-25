@@ -1,0 +1,16 @@
+---
+- name: read the OpenClaw config
+  slurp:
+    src: "{{ openclaw_config }}"
+  register: openclaw_current
+  no_log: true
+
+- name: set the OpenClaw hooks
+  command:
+    argv: [openclaw, config, patch, --stdin]
+    stdin: "{{ {'hooks': openclaw_hooks} | to_json }}"
+  become_user: "{{ openclaw_user }}"
+  vars:
+    openclaw_current_hooks: "{{ (openclaw_current.content | b64decode | from_json).hooks | default({}) }}"
+  when: openclaw_current_hooks | combine(openclaw_hooks) != openclaw_current_hooks
+  no_log: true
