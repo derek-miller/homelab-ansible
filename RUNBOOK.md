@@ -120,6 +120,8 @@ Never run k3s's own `k3s-uninstall.sh` or `k3s-killall.sh` here. Besides removin
   and `sudo systemctl restart k3s-agent` on each agent.
 - *No usable copy.* Run `make run hosts=rackvm1 tags=k3s` for a fresh server with the same token, then `make run tags=k3s` for the agents. An agent that will not rejoin is removed with `k3s_state=absent` and installed again. Everything the cluster ran is then redeployed from the repo; data on the nodes' disks is untouched.
 
+**Rotating the token.** On rackvm1, `sudo k3s token rotate --data-dir /mnt/data/k3s --token <old> --new-token <new>`, then put the new token in `group_vars/k3s/vars.yml` and run `make run tags=k3s` straight away, which restarts every node with it, the server first. An agent that restarts in between can't rejoin. A copy of rackvm1 from before the rotation unlocks only with the old token.
+
 ## Apps on k3s
 
 Apps on the cluster are plain Kubernetes YAML under `kubernetes/`, which Flux applies. Ansible installs Flux and hands it the tree on every deploy, so adding, changing or removing an app is an edit there and a deploy, with no Ansible to write. To deploy just the apps:
