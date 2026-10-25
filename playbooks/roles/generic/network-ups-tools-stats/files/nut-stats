@@ -14,7 +14,7 @@ function join() {
   echo "$*"
 }
 
-declare -A vars
+declare -A vars=()
 
 # read UPS status into `vars`
 while IFS=": " read -r k v; do
@@ -22,7 +22,7 @@ while IFS=": " read -r k v; do
 done < <(upsc "$*" 2>/dev/null)
 
 # exit if empty/unsuccessful
-[[ -z "${vars-}" ]] || exit 1
+(( ${#vars[@]} )) || exit 1
 
 # print a metric in InfluxDB line format
 tags=( "ups=${1%%@*}" )

@@ -63,7 +63,7 @@ docker_daemon_options:
 
 nut_stats_targets:
   - wan-ups
-  - shelter-ups@192.168.1.193:3493
+  - shelter-ups@192.168.1.237:3493
 
 nut_ups_devices:
   - |
