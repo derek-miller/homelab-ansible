@@ -1,0 +1,10 @@
+---
+- assert:
+    that: k3s_stats_state in ('present', 'absent')
+    quiet: yes
+
+- include_tasks: present.yml
+  when: k3s_stats_state == 'present'
+
+- include_tasks: absent.yml
+  when: k3s_stats_state == 'absent'

@@ -1,0 +1,34 @@
+---
+- include_role:
+    name: generic/telegraf/plugin
+  vars:
+    telegraf_plugin_conf_src: k3s-stats.conf.jinja2
+    telegraf_plugin_conf: k3s-stats.conf
+    telegraf_plugin_state: absent
+
+- name: remove telegraf's token and CA copy
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ k3s_stats_token_path }}"
+    - "{{ k3s_stats_ca_path }}"
+
+- name: remove telegraf's login on the cluster
+  when: k3s_role == 'server'
+  block:
+    - name: delete what the manifest created
+      command: "k3s kubectl delete --ignore-not-found -f {{ _k3s_stats_manifest | quote }}"
+      args:
+        removes: "{{ _k3s_stats_manifest }}"
+
+    - name: remove the manifest
+      file:
+        path: "{{ _k3s_stats_manifest }}"
+        state: absent
+
+    # Only once the file is gone; k3s recreates an AddOn whose file still exists.
+    - name: delete the manifest's AddOn
+      command: k3s kubectl -n kube-system delete addon --ignore-not-found telegraf-rbac
+      register: _k3s_stats_addon
+      changed_when: "'deleted' in _k3s_stats_addon.stdout"

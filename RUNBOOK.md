@@ -146,6 +146,8 @@ sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml flux get all -A
 
 lists the source and the Kustomization with the revision last applied, or the error. The Flux Operator's web UI shows the same at `https://flux.<domain>`. It signs in through Keycloak with oauth2-proxy's client, so `flux_web_client_secret` in `host_vars/rackvm1/vars.yml` changes whenever that client's secret does; `flux_web_admin` may run its actions, and anyone else signed in sees only the dashboard. Portainer's `rack-k3s` environment shows Flux's apps as external; change them in the repo, since Flux reverts edits made there.
 
+**Metrics.** Each node's Telegraf reads its own kubelet as the `telegraf` ServiceAccount in `kube-system` (`generic/k3s-stats`), writing `kubernetes_pod_container` (usage) and `kubernetes_pod_container_status` (state, restarts, readiness) among others. The role gives it only `get` on `nodes/stats` and `nodes/pods`; never add `nodes/proxy`, which also allows exec into any container on the node. A new grant takes the kubelet about 30 seconds to honour. To replace the token, delete Secret `telegraf-token` in `kube-system`, run `sudo kubectl apply -f /mnt/data/k3s/server/manifests/telegraf-rbac.yaml` on rackvm1, then `make run tags=k3s-stats`.
+
 **Secrets.** Reloader restarts a workload whenever a Secret or ConfigMap it uses changes, so a rotated value takes effect with the deploy that ships it.
 
 **Portainer.** The cluster's Edge agent is `kubernetes/portainer/`. To re-key it, add the environment again in Portainer (Kubernetes, Edge Agent Standard) and take the Edge ID and key from the command it shows, without running it. Put them in `kubernetes/portainer/edge.vault.yaml`.

@@ -1,0 +1,2 @@
+---
+_k3s_stats_manifest: "{{ k3s_data_dir }}/server/manifests/telegraf-rbac.yaml"
