@@ -634,6 +634,9 @@
     - role: generic/flux
       tags:
         - flux
+    - role: generic/k3s-stats
+      tags:
+        - k3s-stats
   tags:
     - k3s
 
@@ -641,6 +644,9 @@
   serial: 1
   roles:
     - role: generic/k3s
+    - role: generic/k3s-stats
+      tags:
+        - k3s-stats
   tags:
     - k3s
 

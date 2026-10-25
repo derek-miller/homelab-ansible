@@ -1,0 +1,4 @@
+---
+k3s_stats_state: present
+k3s_stats_token_path: /etc/telegraf/k3s-token
+k3s_stats_ca_path: /etc/telegraf/k3s-ca.crt
