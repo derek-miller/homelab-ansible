@@ -1564,7 +1564,7 @@ function wrapUntrusted(body) {
   ].join("\n");
 }
 
-/** Build the combined message for one turn: the rules as written, then the events wrapped */
+/** Build the combined message for one turn: the events wrapped, then the rules as written */
 function buildMessage(guardrails, rows) {
   const events =
     rows.length === 1
@@ -1572,7 +1572,8 @@ function buildMessage(guardrails, rows) {
       : rows
           .map((e, i) => `--- Event ${i + 1} of ${rows.length}: ${e.event_type} (${e.detail}) ---\n${e.message}`)
           .join("\n\n");
-  return `${guardrails}\n\n${wrapUntrusted(events)}`;
+  // The Control UI shows only a message's first 8,000 characters, and the rules run longer.
+  return `${wrapUntrusted(events)}\n\n${guardrails}`;
 }
 
 async function notifyDiscord(text) {
