@@ -13,3 +13,19 @@ spec:
     # The Swarm Traefik reaches the web UI only on this node (flux.yaml).
     nodeSelector:
       kubernetes.io/hostname: {{ inventory_hostname | to_json }}
+    web:
+      config:
+        baseURL: {{ flux_web_base_url | to_json }}
+        authentication:
+          type: OAuth2
+          oauth2:
+            provider: OIDC
+            issuerURL: {{ flux_web_issuer_url | to_json }}
+            clientID: {{ flux_web_client_id | to_json }}
+            clientSecret: {{ flux_web_client_secret | to_json }}
+            # The defaults add offline_access and groups, which the Keycloak
+            # client rejects.
+            scopes:
+              - openid
+              - profile
+              - email

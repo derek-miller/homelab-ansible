@@ -140,7 +140,7 @@ The deploy copies the tree to rackvm1, decrypting vaulted files on the way, pins
 sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml flux get all -A
 ```
 
-lists the source and the Kustomization with the revision last applied, or the error. The Flux Operator's web UI shows the same at `https://flux.<domain>` behind Keycloak, read-only. Portainer's `rack-k3s` environment shows Flux's apps as external; change them in the repo, since Flux reverts edits made there.
+lists the source and the Kustomization with the revision last applied, or the error. The Flux Operator's web UI shows the same at `https://flux.<domain>`. It signs in through Keycloak with oauth2-proxy's client, so `flux_web_client_secret` in `host_vars/rackvm1/vars.yml` changes whenever that client's secret does; `flux_web_admin` may run its actions, and anyone else signed in sees only the dashboard. Portainer's `rack-k3s` environment shows Flux's apps as external; change them in the repo, since Flux reverts edits made there.
 
 **Secrets.** Reloader restarts a workload whenever a Secret or ConfigMap it uses changes, so a rotated value takes effect with the deploy that ships it.
 

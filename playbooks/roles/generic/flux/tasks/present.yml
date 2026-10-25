@@ -5,6 +5,11 @@
       - flux_apps_path | length > 0
       - flux_registry_password | length > 0
       - flux_registry_htpasswd.startswith(flux_registry_user ~ ':')
+      - flux_web_base_url | length > 0
+      - flux_web_issuer_url | length > 0
+      - flux_web_client_id | length > 0
+      - flux_web_client_secret | length > 0
+      - flux_web_admin | length > 0
     quiet: yes
 
 - name: create the registry's volume
@@ -68,6 +73,7 @@
   loop:
     - flux-operator
     - reloader
+  no_log: true
 
 - name: write the registry manifest
   template:
@@ -121,6 +127,7 @@
     group: root
     mode: '0600'
   register: _flux_instance_manifest
+  no_log: true
 
 # Otherwise the reconcile below can still run against the previous spec.
 - name: wait for k3s to apply the FluxInstance manifest
