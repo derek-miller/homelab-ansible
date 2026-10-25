@@ -21,7 +21,8 @@ spec:
     - expression: >-
         object.spec.type != 'LoadBalancer' ||
         (has(object.metadata.labels) &&
-        'svccontroller.k3s.cattle.io/lbpool' in object.metadata.labels)
+        'svccontroller.k3s.cattle.io/lbpool' in object.metadata.labels &&
+        object.metadata.labels['svccontroller.k3s.cattle.io/lbpool'] != '')
       message: >-
         A LoadBalancer Service must name the node it is published on with the
         svccontroller.k3s.cattle.io/lbpool label.
