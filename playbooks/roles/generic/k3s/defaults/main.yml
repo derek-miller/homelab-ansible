@@ -20,7 +20,6 @@ k3s_token: ""
 
 k3s_server_disable:
   - traefik
-  - servicelb
   - local-storage
 
 k3s_tls_san: []

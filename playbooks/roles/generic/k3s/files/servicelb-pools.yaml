@@ -1,0 +1,36 @@
+---
+# ServiceLB publishes a LoadBalancer on every node unless the Service names a pool.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: servicelb-pool-required
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - services
+  validations:
+    - expression: >-
+        object.spec.type != 'LoadBalancer' ||
+        (has(object.metadata.labels) &&
+        'svccontroller.k3s.cattle.io/lbpool' in object.metadata.labels)
+      message: >-
+        A LoadBalancer Service must name the node it is published on with the
+        svccontroller.k3s.cattle.io/lbpool label.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: servicelb-pool-required
+spec:
+  policyName: servicelb-pool-required
+  validationActions:
+    - Deny

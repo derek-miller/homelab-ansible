@@ -6,6 +6,11 @@ k3s_node_ip: "{{ proxmox_guest.address | regex_replace('/.*$', '') }}"
 k3s_tls_san:
   - "{{ inventory_hostname }}.ts.{{ cloudflare_zone }}"
 
+# k3s adds these on every start and never removes one.
+k3s_config_extra:
+  node-label:
+    - "lbpool.svccontroller.k3s.cattle.io/{{ inventory_hostname }}=true"
+
 k3s_token: !vault |
   $ANSIBLE_VAULT;1.1;AES256
   33646366323561396232653930373630653738616133656662336238343362333864333637346531
