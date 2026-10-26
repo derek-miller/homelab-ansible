@@ -1,0 +1,13 @@
+---
+- assert:
+    that:
+      - ansible_os_family == 'Darwin'
+      - nodenv_state in ('present', 'absent')
+    fail_msg: "generic/nodenv only supports macOS hosts (got {{ ansible_os_family }})"
+    quiet: yes
+
+- include_tasks: present.yml
+  when: nodenv_state == 'present'
+
+- include_tasks: absent.yml
+  when: nodenv_state == 'absent'

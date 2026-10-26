@@ -1,0 +1,7 @@
+---
+nodenv_state: present
+
+nodenv_user: "{{ mac_user | mandatory }}"
+nodenv_bin: /opt/homebrew/bin/nodenv
+
+nodenv_versions: []

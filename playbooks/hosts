@@ -114,5 +114,8 @@ rackmini1
 [openclaw]
 rackmini1
 
+[nodenv]
+rackmini1
+
 [qemu-guest-agent]
 rackvm[1:5]

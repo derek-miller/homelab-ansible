@@ -714,6 +714,12 @@
   tags:
     - openclaw
 
+- hosts: nodenv
+  roles:
+    - role: generic/nodenv
+  tags:
+    - nodenv
+
 # Last, so a host whose image kept its previous build still ran everything else.
 - name: report images that kept their previous build
   hosts: docker-build-images
