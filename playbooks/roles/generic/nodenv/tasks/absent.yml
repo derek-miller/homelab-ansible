@@ -1,0 +1,13 @@
+---
+- name: remove the Node versions nodenv installed
+  file:
+    path: "/Users/{{ nodenv_user }}/.nodenv"
+    state: absent
+
+- name: uninstall nodenv
+  community.general.homebrew:
+    name:
+      - nodenv
+      - node-build
+    state: absent
+  become_user: "{{ nodenv_user }}"

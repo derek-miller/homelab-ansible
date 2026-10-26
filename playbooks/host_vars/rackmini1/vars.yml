@@ -40,6 +40,10 @@ tailscale_host_args: --accept-routes
 
 homebridge_ui_port: 443
 
+# The versions repos the bot works on pin in .node-version (control4-zigbee3).
+nodenv_versions:
+  - 24.21.0
+
 openclaw_hooks_token: "{{ vault_openclaw_hooks_token }}"
 openclaw_hooks_timeout_seconds: 3600
 

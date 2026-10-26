@@ -1,0 +1,6 @@
+---
+nodenv_state: present
+
+nodenv_user: "{{ mac_user | mandatory }}"
+
+nodenv_versions: []

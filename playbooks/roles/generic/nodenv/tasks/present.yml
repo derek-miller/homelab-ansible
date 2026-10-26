@@ -1,0 +1,15 @@
+---
+- name: install nodenv
+  community.general.homebrew:
+    name:
+      - nodenv
+      - node-build
+    state: present
+  become_user: "{{ nodenv_user }}"
+
+- name: install the pinned Node versions
+  command: nodenv install {{ item }}
+  args:
+    creates: "/Users/{{ nodenv_user }}/.nodenv/versions/{{ item }}"
+  loop: "{{ nodenv_versions }}"
+  become_user: "{{ nodenv_user }}"
