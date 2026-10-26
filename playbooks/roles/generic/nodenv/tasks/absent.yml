@@ -1,11 +1,4 @@
 ---
-- name: take nodenv's shims off the shell PATH
-  blockinfile:
-    path: "/Users/{{ nodenv_user }}/.zshrc"
-    marker: "# {mark} ANSIBLE MANAGED BLOCK nodenv"
-    state: absent
-  become_user: "{{ nodenv_user }}"
-
 - name: remove the Node versions nodenv installed
   file:
     path: "/Users/{{ nodenv_user }}/.nodenv"

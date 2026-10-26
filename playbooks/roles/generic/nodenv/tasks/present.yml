@@ -8,16 +8,8 @@
   become_user: "{{ nodenv_user }}"
 
 - name: install the pinned Node versions
-  command: "{{ nodenv_bin }} install --skip-existing {{ item }}"
+  command: nodenv install {{ item }}
   args:
     creates: "/Users/{{ nodenv_user }}/.nodenv/versions/{{ item }}"
   loop: "{{ nodenv_versions }}"
-  become_user: "{{ nodenv_user }}"
-
-- name: put nodenv's shims on the shell PATH
-  blockinfile:
-    path: "/Users/{{ nodenv_user }}/.zshrc"
-    marker: "# {mark} ANSIBLE MANAGED BLOCK nodenv"
-    block: eval "$({{ nodenv_bin }} init - zsh)"
-    create: yes
   become_user: "{{ nodenv_user }}"
