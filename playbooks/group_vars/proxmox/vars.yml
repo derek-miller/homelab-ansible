@@ -86,6 +86,8 @@ proxmox_guests: >-
   {%- endfor -%}
   {{ out }}
 
+proxmox_reboot_k3s_server: rackvm1
+
 proxmox_cluster_name: homelab
 proxmox_domain: localdomain
 proxmox_timezone: America/Chicago

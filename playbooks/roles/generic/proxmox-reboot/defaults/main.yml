@@ -12,3 +12,8 @@ proxmox_reboot_ha_mode: downtime
 proxmox_reboot_timeout: 900
 proxmox_reboot_guest_timeout: 300
 proxmox_reboot_ha_settle_timeout: 300
+
+# The guest running the k3s server; each node's reboot waits for it to report
+# ready. Empty skips that wait.
+proxmox_reboot_k3s_server: ""
+proxmox_reboot_k3s_timeout: 300
