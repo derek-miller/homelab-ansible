@@ -33,7 +33,7 @@
  * e.g. GITHUB_DEREK_MILLER_HOOK_PATH:
  *   GITHUB_<NAME>_HOOK_PATH       — URL path prefix for this source's webhooks
  *   GITHUB_<NAME>_WEBHOOK_SECRET  — the webhook secret shared with GitHub
- *   GITHUB_<NAME>_GUARDRAILS_FILE — path to file containing GitHub guardrails text
+ *   GITHUB_<NAME>_GUARDRAILS_FILE — path to file containing GitHub guardrails text, read for each turn
  *   GITHUB_<NAME>_ALLOW_USERS     — comma-separated usernames to allow (allowlist mode; mutually exclusive with GITHUB_<NAME>_IGNORE_USERS)
  *   GITHUB_<NAME>_IGNORE_USERS    — comma-separated usernames to skip (ignorelist mode; mutually exclusive with GITHUB_<NAME>_ALLOW_USERS)
  *   GITHUB_<NAME>_SELF_USERS      — comma-separated commit-author names for this agent's own bots; all-green CI batches on their commits are dropped (optional)
@@ -44,7 +44,7 @@
  *   YOUTRACK_BASE_URL        — base URL for YouTrack instance
  *   YOUTRACK_ALLOW_USERS     — comma-separated usernames to allow (allowlist mode; mutually exclusive with YOUTRACK_IGNORE_USERS)
  *   YOUTRACK_IGNORE_USERS    — comma-separated usernames to skip (ignorelist mode; mutually exclusive with YOUTRACK_ALLOW_USERS)
- *   YOUTRACK_GUARDRAILS_FILE — path to file containing YouTrack guardrails text
+ *   YOUTRACK_GUARDRAILS_FILE — path to file containing YouTrack guardrails text, read for each turn
  */
 
 import { createServer } from "node:http";
@@ -134,13 +134,13 @@ function loadSource(name, kind, prefix) {
     fatal(`${prefix}ALLOW_USERS and ${prefix}IGNORE_USERS are mutually exclusive. Set only one.`);
   }
 
-  return {
+  const source = {
     name,
     kind,
     label: kind === "github" ? "GitHub" : "YouTrack",
     hookPath: env("HOOK_PATH"),
     secret: env("WEBHOOK_SECRET"),
-    guardrails: loadGuardrails(env("GUARDRAILS_FILE"), name),
+    guardrailsFile: env("GUARDRAILS_FILE"),
     allowUsers,
     ignoreUsers,
     // Commit authors that are this agent's own service accounts. Used only to drop
@@ -148,6 +148,12 @@ function loadSource(name, kind, prefix) {
     // isSelfAuthoredGreenCheckBatch(). Empty (the default) disables the behaviour.
     selfUsers: envList(`${prefix}SELF_USERS`),
   };
+  try {
+    readGuardrails(source);
+  } catch (err) {
+    fatal(`Failed to read ${name} guardrails file (${source.guardrailsFile}): ${err.message}`);
+  }
+  return source;
 }
 
 const SOURCES = envList("GITHUB_SOURCES").map((name) =>
@@ -314,14 +320,11 @@ function extractTicketIdFromYouTrack(payload) {
 
 // ─── Load guardrails from mounted files ─────────────────────────────
 
-function loadGuardrails(filePath, label) {
-  try {
-    const content = readFileSync(filePath, "utf-8").trim();
-    if (!content) fatal(`Guardrails file is empty: ${filePath} (${label})`);
-    return content;
-  } catch (err) {
-    fatal(`Failed to read ${label} guardrails file (${filePath}): ${err.message}`);
-  }
+/** Read a source's guardrails; each turn reads them afresh, so a deployed change applies to the next turn */
+function readGuardrails(source) {
+  const content = readFileSync(source.guardrailsFile, "utf-8").trim();
+  if (!content) throw new Error("the file is empty");
+  return content;
 }
 
 // ─── Source detection ───────────────────────────────────────────────
@@ -1620,8 +1623,9 @@ async function dispatch() {
     const sessionKey = next.session_key;
     const source = SOURCES.find((s) => s.name === dueSource.get(sessionKey, sourceNames).source);
 
+    const guardrails = readGuardrails(source);
     const rows = [];
-    let size = Buffer.byteLength(JSON.stringify(source.guardrails));
+    let size = Buffer.byteLength(JSON.stringify(guardrails));
     for (const row of pendingRows.all(sessionKey, source.name)) {
       size += Buffer.byteLength(JSON.stringify(row.message));
       if (rows.length > 0 && size > MAX_MESSAGE_BYTES) break;
@@ -1639,7 +1643,7 @@ async function dispatch() {
 
     markSent.run(now, idList(rows));
     try {
-      const runId = await forwardToOpenClaw(buildMessage(source.guardrails, rows), source.label, sessionKey);
+      const runId = await forwardToOpenClaw(buildMessage(guardrails, rows), source.label, sessionKey);
       setRunId.run(runId, idList(rows));
       logInfo(`Sent ${rows.length} ${source.name} event(s) to ${sessionKey} (run ${runId})`);
     } catch (err) {
