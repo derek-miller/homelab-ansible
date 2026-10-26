@@ -191,6 +191,8 @@ vault-check:
 
 .PHONY: vault-diff
 vault-diff:
+	@git rev-parse --verify --quiet '$(base)^{commit}' > /dev/null \
+		|| { echo "vault-diff: base '$(base)' is not a commit" >&2; exit 1; }
 	@for file in $(vault_files); do \
 		head_tmp=$$(mktemp); \
 		curr_tmp=$$(mktemp); \
