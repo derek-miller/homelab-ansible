@@ -951,6 +951,9 @@ const markDone = db.prepare(`
   UPDATE events SET status = 'done' WHERE run_id = ? AND status IN ('sent', 'pending')
   RETURNING session_key`);
 const sentByRun = db.prepare(`SELECT id FROM events WHERE status = 'sent' AND run_id = ?`);
+const sentRunIdByPrefix = db.prepare(`
+  SELECT run_id FROM events
+  WHERE status = 'sent' AND substr(run_id, 1, length(?)) = ? AND lower(session_key) = ? LIMIT 1`);
 const sentByKey = db.prepare(`
   SELECT id FROM events
   WHERE status = 'sent' AND lower(session_key) = ? AND sent_at BETWEEN ? AND ?`);
@@ -1719,11 +1722,15 @@ function handleLogLine(line) {
   // The message joins all of the call's arguments, so it carries their fields too.
   const text = record.message;
   const fields = JSON.parse(record.raw)["1"];
+  // The gateway's log redaction sometimes cuts a run id short and ends it with "***".
+  const prefix = fields.runId?.endsWith("***") ? fields.runId.slice(0, -3) : null;
+  const sessionKey = fields.sessionKey?.toLowerCase() ?? null;
+  const runId = (prefix ? sentRunIdByPrefix.get(prefix, prefix, sessionKey)?.run_id : fields.runId) ?? null;
   if (text.includes("hook agent run completed without announcement")) {
-    const done = markDone.all(fields.runId);
-    if (done.length > 0) logInfo(`Turn for ${done[0].session_key} done (run ${fields.runId})`);
+    const done = markDone.all(runId);
+    if (done.length > 0) logInfo(`Turn for ${done[0].session_key} done (run ${runId})`);
   } else if (text.includes("hook agent run returned non-ok status")) {
-    const rows = sentByRun.all(fields.runId);
+    const rows = sentByRun.all(runId);
     if (text.includes(CAPACITY_ERROR)) requeueBusy(rows, "gateway at capacity");
     else fail(rows, fields.summary ?? fields.status);
   } else if (text.includes("hook agent failed: ")) {
