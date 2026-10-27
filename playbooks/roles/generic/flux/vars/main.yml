@@ -60,3 +60,11 @@ _flux_held_nodes: >-
   {{ out }}
 _flux_label_nodes: "{{ _flux_inventory_nodes if docker_migrate_labels | bool else _flux_held_nodes }}"
 _flux_volume_list: "{{ (_flux_volume_check.stdout | from_json).volumes }}"
+_flux_volume_hosts: "{{ _flux_volume_list | map(attribute='label') | map('extract', _flux_label_nodes) | unique | sort }}"
+# Delegating to a host outside the run fails: its connection is set up only in the run.
+_flux_volume_hosts_reached: >-
+  {{ _flux_volume_hosts | select('in', groups['all'] | map('extract', hostvars)
+     | selectattr('ansible_facts.default_ipv4', 'defined') | map(attribute='inventory_hostname') | list) | list }}
+_flux_volumes_reached: >-
+  {{ _flux_volume_list | selectattr('label', 'in', _flux_label_nodes | dict2items
+     | selectattr('value', 'in', _flux_volume_hosts_reached) | map(attribute='key') | list) | list }}

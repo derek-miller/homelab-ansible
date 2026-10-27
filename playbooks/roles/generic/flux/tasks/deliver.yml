@@ -74,10 +74,16 @@
         msg: "{{ (_flux_volume_check.stdout | from_json).errors | join('; ') }}"
       when: (_flux_volume_check.stdout | from_json).errors | length > 0
 
+    - name: report the nodes with volumes this run did not reach
+      debug:
+        msg: "{{ item }} is not in this run, so its volume folders were not checked."
+      loop: "{{ _flux_volume_hosts | difference(_flux_volume_hosts_reached) }}"
+
     - name: check the data disk is mounted on each node with volumes
       command: mountpoint -q {{ flux_volumes_root | dirname | quote }}
       delegate_to: "{{ item }}"
-      loop: "{{ _flux_volume_list | map(attribute='label') | map('extract', _flux_label_nodes) | unique | sort }}"
+      become: true
+      loop: "{{ _flux_volume_hosts_reached }}"
       changed_when: false
       check_mode: no
 
@@ -89,7 +95,8 @@
         group: root
         mode: '0700'
       delegate_to: "{{ item }}"
-      loop: "{{ _flux_volume_list | map(attribute='label') | map('extract', _flux_label_nodes) | unique | sort }}"
+      become: true
+      loop: "{{ _flux_volume_hosts_reached }}"
 
     # Never fails outright, so a failure can't print a hidden app's path.
     - name: create each volume's folder on its label's node
@@ -100,7 +107,8 @@
         group: "{{ item.owner }}"
         mode: '0700'
       delegate_to: "{{ _flux_label_nodes[item.label] }}"
-      loop: "{{ _flux_volume_list }}"
+      become: true
+      loop: "{{ _flux_volumes_reached }}"
       loop_control:
         label: "{{ item.label }}"
       register: _flux_volume_folders
