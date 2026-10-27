@@ -37,7 +37,3 @@ k3s_kube_proxy_args:
 
 # Merged over the generated /etc/rancher/k3s/config.yaml.
 k3s_config_extra: {}
-
-# Folders on this node for its PersistentVolumes, each owned by the user the
-# app runs as: [{path, owner}].
-k3s_volumes: []

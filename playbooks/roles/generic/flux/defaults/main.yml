@@ -18,6 +18,10 @@ flux_registry_password: ""
 flux_registry_htpasswd: ""
 flux_registry_path: /mnt/data/volumes/zot
 
+# Every local PersistentVolume in the apps is a folder here, made on its
+# label's node and owned by its homelab.local/volume-owner annotation.
+flux_volumes_root: /mnt/data/volumes
+
 flux_apply_timeout: 5m
 
 # The web UI signs users in with this OIDC client, and flux_web_admin may run

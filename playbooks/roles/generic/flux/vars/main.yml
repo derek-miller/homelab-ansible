@@ -27,3 +27,36 @@ _flux_chart_tag_lists: >-
   {{ dict(_flux_chart_listings | map(attribute='item.item.key')
           | zip(_flux_chart_listings | map(attribute='json.tags'))) }}
 _flux_version: "{{ _flux_applied.stdout | default('') | regex_replace('@.*$', '') | regex_replace('^v', '') }}"
+
+_flux_inventory_nodes: >-
+  {%- set out = {} -%}
+  {%- for host in groups['docker_labels'] | default([]) | sort -%}
+  {%- for label in (hostvars[host].docker_labels | default('')).split(',') | map('trim') | select -%}
+  {%- set _ = out.update({label: host}) -%}
+  {%- endfor -%}
+  {%- endfor -%}
+  {{ out }}
+_flux_apps_exists: "{{ (_flux_label_record.stdout | default('')).startswith('apps ') }}"
+_flux_label_record_map: >-
+  {{ (_flux_label_record.stdout[5:] | from_json)
+     if _flux_apps_exists and _flux_label_record.stdout[5:] | trim else {} }}
+_flux_volume_label_nodes: >-
+  {%- set out = {} -%}
+  {%- for line in _flux_volume_nodes.stdout_lines | default([]) -%}
+  {%- set label, _, node = line.partition('=') -%}
+  {%- if label and node and label not in out -%}
+  {%- set _ = out.update({label: node}) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ out }}
+# Where each label's k3s apps run: the last applied sync manifest, else its
+# volumes' node, else the inventory.
+_flux_held_nodes: >-
+  {%- set out = {} -%}
+  {%- for label, host in _flux_inventory_nodes.items() -%}
+  {%- set _ = out.update({label: _flux_label_record_map.get('node_' ~ label)
+                                 or _flux_volume_label_nodes.get(label) or host}) -%}
+  {%- endfor -%}
+  {{ out }}
+_flux_label_nodes: "{{ _flux_inventory_nodes if docker_migrate_labels | bool else _flux_held_nodes }}"
+_flux_volume_list: "{{ (_flux_volume_check.stdout | from_json).volumes }}"

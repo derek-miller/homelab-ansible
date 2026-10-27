@@ -1,0 +1,33 @@
+---
+- name: check every label can be a Flux variable
+  assert:
+    that: _flux_inventory_nodes.keys() | reject('match', '^[a-z][a-z0-9_]*$') | list | length == 0
+    fail_msg: "[docker_labels] words must be lowercase letters, digits and underscores."
+    quiet: yes
+
+- name: read where each label's apps run
+  command: >-
+    k3s kubectl -n flux-system get kustomization apps --ignore-not-found
+    -o 'jsonpath={.metadata.name} {.spec.postBuild.substitute}'
+  register: _flux_label_record
+  changed_when: false
+  check_mode: no
+
+- name: read the node each label's volumes are on
+  command: >-
+    k3s kubectl get pv
+    -o 'jsonpath={range .items[*]}{.spec.claimRef.namespace}={.spec.nodeAffinity.required.nodeSelectorTerms[0].matchExpressions[0].values[0]}{"\n"}{end}'
+  register: _flux_volume_nodes
+  changed_when: false
+  check_mode: no
+
+- name: report each label whose apps wait to move
+  debug:
+    msg: >-
+      {{ item }} runs on {{ _flux_held_nodes[item] }}, the inventory says
+      {{ _flux_inventory_nodes[item] }}. Its k3s apps stay put until a run with
+      docker_migrate_labels=yes.
+  loop: "{{ _flux_inventory_nodes.keys() | sort }}"
+  when:
+    - _flux_held_nodes[item] != _flux_inventory_nodes[item]
+    - not docker_migrate_labels | bool

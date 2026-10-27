@@ -52,6 +52,8 @@ apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: traefik
+  annotations:
+    homelab.local/volume-owner: "65532"
 spec:
   capacity:
     storage: 128Mi
@@ -71,7 +73,7 @@ spec:
             - key: kubernetes.io/hostname
               operator: In
               values:
-                - rackvm1
+                - ${node_edge}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -101,8 +103,7 @@ spec:
     mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
     operation: copy
 ---
-# The domain, the ACME email and the Swarm Traefik's address are in
-# traefik.vault.yaml's traefik-values.
+# The domain and the ACME email are in traefik.vault.yaml's traefik-values.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -141,6 +142,8 @@ spec:
               swarm:
                 loadBalancer:
                   serversTransport: swarm
+                  servers:
+                    - url: https://${node_edge}:7443
             serversTransports:
               swarm:
                 insecureSkipVerify: true
@@ -174,6 +177,6 @@ spec:
       enabled: true
     service:
       labels:
-        svccontroller.k3s.cattle.io/lbpool: rackvm1
+        svccontroller.k3s.cattle.io/lbpool: ${node_edge}
       spec:
         externalTrafficPolicy: Local
