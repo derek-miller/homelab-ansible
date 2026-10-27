@@ -63,16 +63,13 @@
   loop_control:
     label: "{{ item.key }}"
 
-- name: write the Flux Operator and Reloader manifests
+- name: write the Flux Operator manifest
   template:
-    src: "{{ item }}.yaml.jinja2"
-    dest: "{{ _flux_manifests_dir }}/{{ item }}.yaml"
+    src: flux-operator.yaml.jinja2
+    dest: "{{ _flux_manifests_dir }}/flux-operator.yaml"
     owner: root
     group: root
     mode: '0600'
-  loop:
-    - flux-operator
-    - reloader
   no_log: true
 
 - name: write the registry manifest

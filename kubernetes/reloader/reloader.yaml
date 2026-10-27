@@ -1,0 +1,46 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kube-apiserver
+  namespace: reloader
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # Policy sees the kubernetes Service after DNAT, as the server's port 6443.
+    - ports:
+        - protocol: TCP
+          port: 6443
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: reloader
+  namespace: reloader
+spec:
+  interval: 1h
+  url: oci://ghcr.io/stakater/charts/reloader
+  ref:
+    semver: 2.x
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: reloader
+  namespace: reloader
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: reloader
+  values:
+    reloader:
+      autoReloadAll: true
+      reloadStrategy: annotations
+      # k3s rewrites CoreDNS's ConfigMap whenever a node changes.
+      ignoreNamespaces: kube-system
