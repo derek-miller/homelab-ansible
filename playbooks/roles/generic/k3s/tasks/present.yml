@@ -172,6 +172,17 @@
     - k3s_role == 'server'
     - not (ansible_check_mode and _k3s_unit is changed)
 
+- name: add a storage class that keeps a volume's data
+  copy:
+    src: local-retain.yaml
+    dest: "{{ k3s_data_dir }}/server/manifests/local-retain.yaml"
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - k3s_role == 'server'
+    - not (ansible_check_mode and _k3s_unit is changed)
+
 # An agent has no admin kubeconfig, but its kubelet's may read its own Node.
 - name: wait for the node to report Ready
   command: >-

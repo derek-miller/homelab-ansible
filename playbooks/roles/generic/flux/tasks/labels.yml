@@ -11,6 +11,7 @@
     -o 'jsonpath={.metadata.name} {.spec.postBuild.substitute}'
   register: _flux_label_record
   changed_when: false
+  failed_when: not ansible_check_mode and _flux_label_record.rc != 0
   check_mode: no
 
 - name: read the node each label's volumes are on
@@ -19,6 +20,7 @@
     -o 'jsonpath={range .items[*]}{.spec.claimRef.namespace}={.spec.nodeAffinity.required.nodeSelectorTerms[0].matchExpressions[0].values[0]}{"\n"}{end}'
   register: _flux_volume_nodes
   changed_when: false
+  failed_when: not ansible_check_mode and _flux_volume_nodes.rc != 0
   check_mode: no
 
 - name: report each label whose apps wait to move

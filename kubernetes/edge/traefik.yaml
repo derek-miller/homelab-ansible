@@ -49,42 +49,14 @@ spec:
           port: 443
 ---
 apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: traefik
-  annotations:
-    homelab.local/volume-owner: "65532"
-spec:
-  capacity:
-    storage: 128Mi
-  accessModes:
-    - ReadWriteOnce
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: ""
-  claimRef:
-    namespace: edge
-    name: traefik-data
-  local:
-    path: /mnt/data/volumes/traefik
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - ${node_edge}
----
-apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: traefik-data
+  name: traefik
   namespace: edge
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: ""
-  volumeName: traefik
+  storageClassName: local-retain
   resources:
     requests:
       storage: 128Mi
@@ -172,7 +144,9 @@ spec:
           name: traefik-cloudflare
     persistence:
       enabled: true
-      existingClaim: traefik-data
+      existingClaim: traefik
+    nodeSelector:
+      kubernetes.io/hostname: ${node_edge}
     accessLog:
       enabled: true
     service:

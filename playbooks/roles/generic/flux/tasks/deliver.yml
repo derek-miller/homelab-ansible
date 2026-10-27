@@ -57,71 +57,21 @@
       changed_when: false
       check_mode: no
 
-    - name: check the apps' node variables and volumes
+    - name: check the apps pin to nodes only through their label's variable
       script: >-
-        flux-volumes.py {{ (_flux_work ~ '/apps') | quote }}
+        flux-node-variables.py {{ (_flux_work ~ '/apps') | quote }}
         {{ _flux_inventory_nodes.keys() | sort | join(',') | quote }}
-        {{ flux_volumes_root | quote }}
       args:
         executable: python3
-      register: _flux_volume_check
+      register: _flux_variable_check
       changed_when: false
       check_mode: no
       no_log: true
 
-    - name: report the apps' broken node variables and volumes
+    - name: report the apps' broken node variables
       fail:
-        msg: "{{ (_flux_volume_check.stdout | from_json).errors | join('; ') }}"
-      when: (_flux_volume_check.stdout | from_json).errors | length > 0
-
-    - name: report the nodes with volumes this run did not reach
-      debug:
-        msg: "{{ item }} is not in this run, so its volume folders were not checked."
-      loop: "{{ _flux_volume_hosts | difference(_flux_volume_hosts_reached) }}"
-
-    - name: check the data disk is mounted on each node with volumes
-      command: mountpoint -q {{ flux_volumes_root | dirname | quote }}
-      delegate_to: "{{ item }}"
-      become: true
-      loop: "{{ _flux_volume_hosts_reached }}"
-      changed_when: false
-      check_mode: no
-
-    - name: create the volumes' folder on each node with volumes
-      file:
-        path: "{{ flux_volumes_root }}"
-        state: directory
-        owner: root
-        group: root
-        mode: '0700'
-      delegate_to: "{{ item }}"
-      become: true
-      loop: "{{ _flux_volume_hosts_reached }}"
-
-    # Never fails outright, so a failure can't print a hidden app's path.
-    - name: create each volume's folder on its label's node
-      file:
-        path: "{{ item.path }}"
-        state: directory
-        owner: "{{ item.owner }}"
-        group: "{{ item.owner }}"
-        mode: '0700'
-      delegate_to: "{{ _flux_label_nodes[item.label] }}"
-      become: true
-      loop: "{{ _flux_volumes_reached }}"
-      loop_control:
-        label: "{{ item.label }}"
-      register: _flux_volume_folders
-      failed_when: false
-      no_log: true
-
-    - name: report a volume folder that could not be made
-      fail:
-        msg: "A {{ item.item.label }} volume folder on {{ _flux_label_nodes[item.item.label] }} could not be made; check {{ flux_volumes_root }} there."
-      loop: "{{ _flux_volume_folders.results }}"
-      loop_control:
-        label: "{{ item.item.label }}"
-      when: item.failed_when_suppressed_exception is defined
+        msg: "{{ (_flux_variable_check.stdout | from_json).errors | join('; ') }}"
+      when: (_flux_variable_check.stdout | from_json).errors | length > 0
 
     - name: pin each image to its current digest
       script: "flux-pin-images.py {{ (_flux_work ~ '/apps') | quote }}"
