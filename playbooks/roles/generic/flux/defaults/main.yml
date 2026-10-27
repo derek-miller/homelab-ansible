@@ -11,6 +11,7 @@ flux_apps_path: ""
 flux_operator_chart_version: 0.x
 reloader_chart_version: 2.x
 zot_chart_version: 0.x
+traefik_chart_version: 42.x
 flux_distribution_version: 2.x
 
 flux_registry_user: flux
@@ -18,6 +19,16 @@ flux_registry_password: ""
 # bcrypt htpasswd line for flux_registry_user and flux_registry_password.
 flux_registry_htpasswd: ""
 flux_registry_path: /mnt/data/volumes/zot
+
+# Traefik answers on the server's ports 80 and 443 with a Let's Encrypt
+# wildcard for flux_ingress_domain, and passes any request no route claims to
+# flux_ingress_fallback_url.
+flux_ingress_domain: ""
+flux_ingress_acme_email: ""
+flux_ingress_cloudflare_email: ""
+flux_ingress_cloudflare_api_key: ""
+flux_ingress_fallback_url: ""
+flux_ingress_path: /mnt/data/volumes/traefik
 
 flux_apply_timeout: 5m
 

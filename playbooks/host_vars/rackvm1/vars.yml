@@ -97,6 +97,12 @@ flux_registry_htpasswd: !vault |
   30353539393065633933306336373937343631336235323438643935623231313438346261623936
   32346632353134333464
 
+flux_ingress_domain: "{{ cloudflare_zone }}"
+flux_ingress_acme_email: "{{ letsencrypt_email }}"
+flux_ingress_cloudflare_email: "{{ cloudflare_email }}"
+flux_ingress_cloudflare_api_key: "{{ cloudflare_api_key }}"
+flux_ingress_fallback_url: "https://{{ k3s_node_ip }}:7443"
+
 flux_web_base_url: "https://flux.{{ cloudflare_zone }}"
 flux_web_issuer_url: "https://keycloak.{{ cloudflare_zone }}/realms/{{ cloudflare_zone }}"
 flux_web_client_id: oauth2-proxy

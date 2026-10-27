@@ -4,6 +4,7 @@ _flux_manifests:
   - flux-operator
   - reloader
   - zot
+  - ingress
   - flux
   - flux-sync
 
@@ -28,6 +29,11 @@ _flux_charts:
     version: "{{ zot_chart_version }}"
     namespace: zot
     workload: statefulset/zot
+  traefik:
+    repo: traefik/helm/traefik
+    version: "{{ traefik_chart_version }}"
+    namespace: traefik
+    workload: deployment/traefik
 _flux_chart_listings: "{{ _flux_chart_tags.results | default([]) | selectattr('json', 'defined') | list }}"
 _flux_chart_tag_lists: >-
   {{ dict(_flux_chart_listings | map(attribute='item.item.key')

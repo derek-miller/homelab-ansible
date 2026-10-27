@@ -138,6 +138,8 @@ The deploy copies the tree to rackvm1, decrypting vaulted files on the way, pins
 
 **Ports on the rackvms.** A port clients reach on a rackvm's own address is a `type: LoadBalancer` Service with `externalTrafficPolicy: Local` and the label `svccontroller.k3s.cattle.io/lbpool: <node>`, the node the app's volume pins it to. Every node is a pool of its own name, and the cluster refuses a LoadBalancer without the label, since ServiceLB would otherwise publish it on all five. The app sees each LAN client's real address, so its policy admits them by `ipBlock`; a client on the node's Tailscale address or localhost arrives from the Service's ServiceLB pod in `kube-system`, labelled `svccontroller.k3s.cattle.io/svcname` and `svcnamespace`. ServiceLB takes the port on every address of that node ahead of anything listening there, so pick one `ss -lntu` shows free, and remove a Swarm host-mode publish of the same port in the same change. k3s ignores a later change to the pool label until its server restarts, so delete the Service to move it. An app that trusts a forward-auth header or has no login of its own is never a LoadBalancer.
 
+**Ingress.** Traefik answers on rackvm1's ports 80 and 443, redirecting 80 to HTTPS. It holds its own Let's Encrypt wildcard, solved over Cloudflare DNS with the Swarm Traefik's key, in `/mnt/data/volumes/traefik/acme.json`. A request no route of its own claims goes on to the Swarm Traefik on 7443, so it can take the UDM's forwards in place of 7080 and 7443 with every Swarm host still served. Those requests reach the Swarm Traefik from docker_gwbridge's gateway, 172.19.0.1, which it trusts to report the client's address. Helm installs a chart's CRDs only once, so each deploy applies the CRDs Traefik publishes on GitHub for the release it runs.
+
 **Status.** On rackvm1:
 
 ```bash
@@ -152,11 +154,11 @@ lists the source and the Kustomization with the revision last applied, or the er
 
 **Portainer.** The cluster's Edge agent is `kubernetes/portainer/`. To re-key it, add the environment again in Portainer (Kubernetes, Edge Agent Standard) and take the Edge ID and key from the command it shows, without running it. Put them in `kubernetes/portainer/edge.vault.yaml`.
 
-**Upgrading.** The Flux Operator, Reloader and Zot charts pin only their major in `generic/flux/defaults/main.yml`, and each deploy moves them to the newest release in it, waiting until k3s has rolled each one out. Flux follows `2.x`: each operator release brings the newest Flux it ships, and the deploy installs the flux CLI at that version. To hold a chart back, set it to a minor such as `0.61.x` or an exact version such as `0.61.0`; crossing a major means changing the value. An older operator can only take over while it ships the Flux minor the cluster already runs, so roll a bad operator forward rather than back once it has moved Flux up a minor.
+**Upgrading.** The Flux Operator, Reloader, Zot and Traefik charts pin only their major in `generic/flux/defaults/main.yml`, and each deploy moves them to the newest release in it, waiting until k3s has rolled each one out. Flux follows `2.x`: each operator release brings the newest Flux it ships, and the deploy installs the flux CLI at that version. To hold a chart back, set it to a minor such as `0.61.x` or an exact version such as `0.61.0`; crossing a major means changing the value. An older operator can only take over while it ships the Flux minor the cluster already runs, so roll a bad operator forward rather than back once it has moved Flux up a minor.
 
 **Registry password.** Change `flux_registry_password` and `flux_registry_htpasswd` in `host_vars/rackvm1/vars.yml` together, each as `ansible-vault encrypt_string` output. `htpasswd -nB flux` prompts for the new password and prints the line for the second. The registry's volume, `/mnt/data/volumes/zot` on rackvm1, holds only what deploys pushed. If it is lost, apps keep running and Flux reports its source failing until the next deploy pushes again.
 
-**Removing it.** This deletes every app Flux applied, then Flux, Reloader and the registry with its volume. Run it before removing k3s from the server:
+**Removing it.** This deletes every app Flux applied, then Flux, Reloader, Traefik and the registry, with their volumes. Run it before removing k3s from the server:
 
 ```bash
 make run hosts=rackvm1 tags=flux ANSIBLE_FLAGS="-e flux_state=absent"

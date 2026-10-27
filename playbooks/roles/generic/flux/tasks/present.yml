@@ -10,6 +10,11 @@
       - flux_web_client_id | length > 0
       - flux_web_client_secret | length > 0
       - flux_web_admin | length > 0
+      - flux_ingress_domain | length > 0
+      - flux_ingress_acme_email | length > 0
+      - flux_ingress_cloudflare_email | length > 0
+      - flux_ingress_cloudflare_api_key | length > 0
+      - flux_ingress_fallback_url | length > 0
     quiet: yes
 
 - name: create the registry's volume
@@ -18,6 +23,15 @@
     state: directory
     owner: root
     group: root
+    mode: '0700'
+
+# The traefik chart runs as 65532 and keeps its certificates here.
+- name: create the ingress's volume
+  file:
+    path: "{{ flux_ingress_path }}"
+    state: directory
+    owner: '65532'
+    group: '65532'
     mode: '0700'
 
 - name: get tokens for the charts that float
@@ -84,6 +98,16 @@
     mode: '0600'
   no_log: true
 
+# Not traefik.yaml: k3s deletes any manifest named after an addon it disables.
+- name: write the ingress manifest
+  template:
+    src: ingress.yaml.jinja2
+    dest: "{{ _flux_manifests_dir }}/ingress.yaml"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+
 - name: wait for k3s to install each chart's release
   command: >-
     k3s kubectl -n {{ item.value.namespace }} get {{ item.value.workload }}
@@ -105,6 +129,27 @@
   loop: "{{ _flux_charts | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: read the Traefik release the chart runs
+  command: >-
+    k3s kubectl -n traefik get deployment traefik
+    -o 'jsonpath={.spec.template.spec.containers[?(@.name=="traefik")].image}'
+  register: _flux_traefik_image
+  changed_when: false
+  failed_when: _flux_traefik_image.stdout is not match('^\S+:v\d+\.\d+\.\d+$')
+  when: not ansible_check_mode
+
+# Helm installs a chart's CRDs with its first release and never updates them.
+- name: bring Traefik's CRDs up to that release
+  command: >-
+    k3s kubectl apply --server-side --force-conflicts -f
+    https://raw.githubusercontent.com/traefik/traefik/{{ _flux_traefik_image.stdout | regex_replace('^.*:', '') }}/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
+  register: _flux_traefik_crds
+  until: _flux_traefik_crds is succeeded
+  retries: 3
+  delay: 10
   changed_when: false
   when: not ansible_check_mode
 
