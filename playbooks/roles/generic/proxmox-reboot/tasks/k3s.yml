@@ -1,0 +1,24 @@
+---
+- name: find the node running {{ proxmox_reboot_k3s_server }}
+  command: pvesh get /cluster/resources --type vm --output-format json
+  register: cluster_guests
+  changed_when: false
+  delegate_to: "{{ witness }}"
+
+# The API server answers /readyz only to an authenticated client, so ask from
+# inside the guest, where k3s has its own admin credentials.
+- name: wait for k3s on {{ proxmox_reboot_k3s_server }} to report ready
+  command: >-
+    qm guest exec {{ k3s_guest.vmid }} --timeout 15 --
+    /usr/local/bin/k3s kubectl get --raw /readyz
+  vars:
+    k3s_guest: >-
+      {{ cluster_guests.stdout | from_json
+         | selectattr('name', 'eq', proxmox_reboot_k3s_server) | first }}
+  register: k3s_ready
+  changed_when: false
+  failed_when: k3s_ready.stdout is not search('"out-data"\\s*:\\s*"ok"')
+  delegate_to: "{{ k3s_guest.node }}"
+  until: k3s_ready is not failed
+  retries: "{{ (proxmox_reboot_k3s_timeout | int / 10) | int }}"
+  delay: 10

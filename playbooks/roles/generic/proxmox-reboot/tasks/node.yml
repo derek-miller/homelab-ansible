@@ -143,3 +143,7 @@
   retries: "{{ (proxmox_reboot_ha_settle_timeout | int / 10) | int }}"
   delay: 10
   when: ha_here.stdout_lines | length > 0
+
+- name: wait for k3s to report ready
+  include_tasks: k3s.yml
+  when: proxmox_reboot_k3s_server | length > 0
