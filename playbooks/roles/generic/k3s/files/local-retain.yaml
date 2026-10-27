@@ -8,4 +8,4 @@ provisioner: rancher.io/local-path
 reclaimPolicy: Retain
 volumeBindingMode: WaitForFirstConsumer
 parameters:
-  pathPattern: "{{ .PVC.Namespace }}/{{ .PVC.Name }}"
+  pathPattern: "{{ .PVC.Namespace }}/{{ .PVC.Name }}/data"

@@ -140,7 +140,7 @@ The deploy copies the tree to rackvm1, decrypting vaulted files on the way, pins
 
 **Node variables.** Nothing in `kubernetes/` names a node. Each `[docker_labels]` word is a Flux variable, `${node_<label>}`, that the sync manifest sets to the node the label runs on. A suite's stateful pods pin with `nodeSelector: {kubernetes.io/hostname: ${node_<label>}}` and its LoadBalancers' pools use the same variable. Flux would rewrite any other `$` too, so an object holding a literal one carries the annotation `kustomize.toolkit.fluxcd.io/substitute: disabled`. The deploy refuses a tree that breaks these rules and names the file and line.
 
-**Volumes.** An app asks for a volume with a PersistentVolumeClaim of `storageClassName: local-retain`, and a chart is given that class in its values. k3s's local-path provisioner makes the folder, `/mnt/data/volumes/<namespace>/<claim>`, on the node the pod is scheduled to, so the pod's node selector decides where it lives. The class keeps the folder when its claim goes, pruned or not, and so does removing k3s from a node; k3s's own `local-path` class would delete it.
+**Volumes.** An app asks for a volume with a PersistentVolumeClaim of `storageClassName: local-retain`, and a chart is given that class in its values. k3s's local-path provisioner makes the folder, `/mnt/data/volumes/<namespace>/<claim>/data`, on the node the pod is scheduled to, so the pod's node selector decides where it lives. The class keeps the folder when its claim goes, pruned or not, and so does removing k3s from a node; k3s's own `local-path` class would delete it.
 
 **Moving a label.** A label moved in `[docker_labels]` leaves its k3s apps where their data is: each deploy reports it and keeps setting the old node. To move them:
 

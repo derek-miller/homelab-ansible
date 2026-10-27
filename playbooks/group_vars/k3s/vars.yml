@@ -5,7 +5,7 @@ k3s_node_ip: "{{ proxmox_guest.address | regex_replace('/.*$', '') }}"
 
 # On the data disk beside Docker's data-root; the unit waits for its mount.
 k3s_data_dir: /mnt/data/k3s
-# Where the local-path provisioner makes each volume, as <namespace>/<claim>.
+# Where the local-path provisioner makes each volume, as <namespace>/<claim>/data.
 k3s_local_storage_path: /mnt/data/volumes
 
 k3s_tls_san:
