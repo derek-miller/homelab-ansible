@@ -9,7 +9,6 @@ flux_apps_path: ""
 # exact version holds it back. The operator's release brings the newest Flux
 # 2.x it ships.
 flux_operator_chart_version: 0.x
-reloader_chart_version: 2.x
 zot_chart_version: 0.x
 flux_distribution_version: 2.x
 

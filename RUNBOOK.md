@@ -165,11 +165,11 @@ lists the source and the Kustomization with the revision last applied, or the er
 
 **Portainer.** The cluster's Edge agent is `kubernetes/portainer/`. To re-key it, add the environment again in Portainer (Kubernetes, Edge Agent Standard) and take the Edge ID and key from the command it shows, without running it. Put them in `kubernetes/portainer/edge.vault.yaml`.
 
-**Upgrading.** The Flux Operator, Reloader and Zot charts pin only their major in `generic/flux/defaults/main.yml`, and each deploy moves them to the newest release in it, waiting until k3s has rolled each one out. Flux follows `2.x`: each operator release brings the newest Flux it ships, and the deploy installs the flux CLI at that version. To hold a chart back, set it to a minor such as `0.61.x` or an exact version such as `0.61.0`; crossing a major means changing the value. An older operator can only take over while it ships the Flux minor the cluster already runs, so roll a bad operator forward rather than back once it has moved Flux up a minor.
+**Upgrading.** The Flux Operator and Zot charts pin only their major in `generic/flux/defaults/main.yml`, and each deploy moves them to the newest release in it, waiting until k3s has rolled each one out. Flux follows `2.x`: each operator release brings the newest Flux it ships, and the deploy installs the flux CLI at that version. To hold a chart back, set it to a minor such as `0.61.x` or an exact version such as `0.61.0`; crossing a major means changing the value. An older operator can only take over while it ships the Flux minor the cluster already runs, so roll a bad operator forward rather than back once it has moved Flux up a minor.
 
 **Registry password.** Change `flux_registry_password` and `flux_registry_htpasswd` in `host_vars/rackvm1/vars.yml` together, each as `ansible-vault encrypt_string` output. `htpasswd -nB flux` prompts for the new password and prints the line for the second. The registry's volume, `/mnt/data/volumes/zot` on rackvm1, holds only what deploys pushed. If it is lost, apps keep running and Flux reports its source failing until the next deploy pushes again.
 
-**Removing it.** This deletes every app Flux applied, then Flux, Reloader and the registry with its volume. Run it before removing k3s from the server:
+**Removing it.** This deletes every app Flux applied, Reloader among them, then Flux and the registry with its volume. Run it before removing k3s from the server:
 
 ```bash
 make run hosts=rackvm1 tags=flux ANSIBLE_FLAGS="-e flux_state=absent"
