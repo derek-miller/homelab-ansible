@@ -14,15 +14,15 @@
   loop_control:
     label: "{{ item.item }}"
 
-- name: list the Flux Operator's and Traefik's CRDs
+- name: list the Flux Operator's CRDs
   command: k3s kubectl get crd -o name
   register: _flux_crds
   changed_when: false
   check_mode: no
 
-- name: delete the Flux Operator's and Traefik's CRDs
+- name: delete the Flux Operator's CRDs
   command: "k3s kubectl delete --ignore-not-found {{ item | quote }}"
-  loop: "{{ _flux_crds.stdout_lines | default([]) | select('search', '\\.(fluxcd\\.controlplane|traefik)\\.io$') | list }}"
+  loop: "{{ _flux_crds.stdout_lines | default([]) | select('search', '\\.fluxcd\\.controlplane\\.io$') | list }}"
 
 - name: delete the namespace the operator's chart created
   command: k3s kubectl delete namespace --ignore-not-found --wait --timeout=5m flux-system
@@ -44,11 +44,6 @@
 - name: remove the registry's volume
   file:
     path: "{{ flux_registry_path }}"
-    state: absent
-
-- name: remove the ingress's volume
-  file:
-    path: "{{ flux_ingress_path }}"
     state: absent
 
 - name: remove the flux CLI

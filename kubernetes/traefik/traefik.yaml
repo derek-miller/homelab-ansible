@@ -1,83 +1,4 @@
 ---
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: traefik
-  labels:
-    # A hostNetwork pod would bypass every NetworkPolicy below.
-    pod-security.kubernetes.io/enforce: baseline
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: default-deny
-  namespace: traefik
-spec:
-  podSelector: {}
-  policyTypes:
-    - Ingress
-    - Egress
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-same-namespace
-  namespace: traefik
-spec:
-  podSelector: {}
-  policyTypes:
-    - Ingress
-    - Egress
-  ingress:
-    - from:
-        - podSelector: {}
-  egress:
-    - to:
-        - podSelector: {}
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-dns
-  namespace: traefik
-spec:
-  podSelector: {}
-  policyTypes:
-    - Egress
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-internet
-  namespace: traefik
-spec:
-  podSelector: {}
-  policyTypes:
-    - Egress
-  egress:
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-            except:
-              - 10.0.0.0/8
-              - 100.64.0.0/10
-              - 169.254.0.0/16
-              - 172.16.0.0/12
-              - 192.168.0.0/16
----
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -119,7 +40,7 @@ spec:
   policyTypes:
     - Egress
   egress:
-    # Policy sees the published port after Docker's DNAT, on docker_gwbridge.
+    # Policy sees the Swarm Traefik's published port after Docker's DNAT, on docker_gwbridge.
     - to:
         - ipBlock:
             cidr: 172.19.0.0/16
@@ -142,7 +63,7 @@ spec:
     namespace: traefik
     name: traefik-data
   local:
-    path: {{ flux_ingress_path | to_json }}
+    path: /mnt/data/volumes/traefik
   nodeAffinity:
     required:
       nodeSelectorTerms:
@@ -150,7 +71,7 @@ spec:
             - key: kubernetes.io/hostname
               operator: In
               values:
-                - {{ inventory_hostname | to_json }}
+                - rackvm1
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -166,26 +87,40 @@ spec:
     requests:
       storage: 128Mi
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: traefik-cloudflare
-  namespace: traefik
-type: Opaque
-stringData:
-  CF_API_EMAIL: {{ flux_ingress_cloudflare_email | to_json }}
-  CF_API_KEY: {{ flux_ingress_cloudflare_api_key | to_json }}
----
-apiVersion: helm.cattle.io/v1
-kind: HelmChart
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
 metadata:
   name: traefik
-  namespace: kube-system
+  namespace: traefik
 spec:
-  chart: oci://ghcr.io/{{ _flux_charts.traefik.repo }}
-  version: {{ _flux_chart_releases.traefik | to_json }}
-  targetNamespace: traefik
-  valuesContent: |-
+  interval: 1h
+  url: oci://ghcr.io/traefik/helm/traefik
+  ref:
+    semver: 42.x
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+---
+# The domain, the ACME email and the Swarm Traefik's address are in
+# traefik.vault.yaml's traefik-values.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: traefik
+  namespace: traefik
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: traefik
+  install:
+    crds: CreateReplace
+  upgrade:
+    crds: CreateReplace
+  valuesFrom:
+    - kind: Secret
+      name: traefik-values
+  values:
     ingressClass:
       enabled: false
     providers:
@@ -206,8 +141,6 @@ spec:
               swarm:
                 loadBalancer:
                   serversTransport: swarm
-                  servers:
-                    - url: {{ flux_ingress_fallback_url | to_json }}
             serversTransports:
               swarm:
                 insecureSkipVerify: true
@@ -222,14 +155,9 @@ spec:
         http:
           tls:
             certResolver: letsencrypt
-            domains:
-              - main: {{ flux_ingress_domain | to_json }}
-                sans:
-                  - {{ ('*.' ~ flux_ingress_domain) | to_json }}
     certificatesResolvers:
       letsencrypt:
         acme:
-          email: {{ flux_ingress_acme_email | to_json }}
           storage: /data/acme.json
           dnsChallenge:
             provider: cloudflare
@@ -246,6 +174,6 @@ spec:
       enabled: true
     service:
       labels:
-        svccontroller.k3s.cattle.io/lbpool: {{ inventory_hostname | to_json }}
+        svccontroller.k3s.cattle.io/lbpool: rackvm1
       spec:
         externalTrafficPolicy: Local
