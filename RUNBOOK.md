@@ -142,9 +142,10 @@ The deploy copies the tree to rackvm1, decrypting vaulted files on the way, pins
 
 1. On rackvm1, `sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml flux suspend kustomization apps -n flux-system`.
 2. Delete the app's PersistentVolumeClaim and PersistentVolume with `--wait=false`, then its pods, and its LoadBalancer Service if it has one.
-3. Copy the folder's data to the new node.
-4. Deploy the PersistentVolume's new node and the moved `k3s_volumes` entry with `tags=k3s`. It pushes the change, then reports that Flux did not apply the apps, since the sync is suspended.
-5. `flux reconcile source oci apps -n flux-system`, then `flux resume kustomization apps -n flux-system`, the same way as step 1. The source goes first, or the resume re-applies the old node.
+3. Change the PersistentVolume's node and move the `k3s_volumes` entry to the new node's host_vars, then `make run hosts=<new node> tags=k3s` to create its folder.
+4. Copy the folder's data into it, keeping the owner.
+5. `make run hosts=rackvm1 tags=flux` pushes the change, then fails at the apply, since the sync is suspended.
+6. `flux reconcile source oci apps -n flux-system`, then `flux resume kustomization apps -n flux-system`, the same way as step 1. The source goes first, or the resume re-applies the old node.
 
 **Ports on the rackvms.** A port clients reach on a rackvm's own address is a `type: LoadBalancer` Service with `externalTrafficPolicy: Local` and the label `svccontroller.k3s.cattle.io/lbpool: <node>`, the node the app's volume pins it to. Every node is a pool of its own name, and the cluster refuses a LoadBalancer without the label, since ServiceLB would otherwise publish it on all five. The app sees each LAN client's real address, so its policy admits them by `ipBlock`; a client on the node's Tailscale address or localhost arrives from the Service's ServiceLB pod in `kube-system`, labelled `svccontroller.k3s.cattle.io/svcname` and `svcnamespace`. ServiceLB takes the port on every address of that node ahead of anything listening there, so pick one `ss -lntu` shows free, and remove a Swarm host-mode publish of the same port in the same change. k3s ignores a later change to the pool label until its server restarts, so delete the Service to move it. An app that trusts a forward-auth header or has no login of its own is never a LoadBalancer.
 
