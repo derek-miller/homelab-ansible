@@ -73,14 +73,6 @@
     - /run/flannel
     - /etc/sysctl.d/90-k3s.conf
 
-- name: remove the node's volumes
-  file:
-    path: "{{ item.path }}"
-    state: absent
-  loop: "{{ k3s_volumes }}"
-  loop_control:
-    label: "{{ item.path }}"
-
 - name: remove /etc/rancher if nothing else uses it
   command: rmdir /etc/rancher
   register: _k3s_rancher_rmdir
