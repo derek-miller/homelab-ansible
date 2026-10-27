@@ -225,6 +225,17 @@
 
 - include_tasks: labels.yml
 
+- name: report each label whose apps wait to move
+  debug:
+    msg: >-
+      {{ item }} runs on {{ _flux_held_nodes[item] }}, the inventory says
+      {{ _flux_inventory_nodes[item] }}. Its k3s apps stay put until a run with
+      docker_migrate_labels=yes.
+  loop: "{{ _flux_inventory_nodes.keys() | sort }}"
+  when:
+    - _flux_held_nodes[item] != _flux_inventory_nodes[item]
+    - not docker_migrate_labels | bool
+
 - name: write the sync manifest
   template:
     src: flux-sync.yaml.jinja2

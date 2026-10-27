@@ -124,6 +124,23 @@ check("a claim with no class is refused", len(run({"edge/app.yaml": claim().repl
 check("a claim bound to a named volume passes",
       run({"edge/app.yaml": claim(storage="other").replace("spec:\n", "spec:\n  volumeName: v\n")}), [])
 
+STATEFULSET = """---
+kind: StatefulSet
+metadata:
+  name: secretapp
+  namespace: edge
+spec:
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+%s"""
+errors = run({"edge/app.yaml": STATEFULSET % "        accessModes: [ReadWriteOnce]\n"})
+check("a StatefulSet claim template with no class is refused", len(errors), 1)
+check("that error names no object", names_nothing(errors), True)
+check("a StatefulSet claim template on local-retain passes",
+      run({"edge/app.yaml": STATEFULSET % "        storageClassName: local-retain\n"}), [])
+
 check("a static volume on its label's variable passes", run({"pv.yaml": static_pv("${node_edge}")}), [])
 check("a static volume on a literal node is refused", len(run({"pv.yaml": static_pv("rackvm1")})), 1)
 check("a static volume outside a label is refused",

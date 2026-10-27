@@ -76,8 +76,13 @@ def check_document(where, start, text, doc, labels):
         if terms is not None and (label not in labels or values != [node_variable(label)]):
             errors.append("%s:%d: a PersistentVolume must claim into a [docker_labels] namespace and pin to ${node_<that namespace>}"
                           % (where, start))
-    if doc.get("kind") == "PersistentVolumeClaim" and not spec.get("volumeName") \
-            and spec.get("storageClassName") != STORAGE_CLASS:
+    if doc.get("kind") == "PersistentVolumeClaim":
+        claims = [spec]
+    elif doc.get("kind") == "StatefulSet":
+        claims = [(t or {}).get("spec") or {} for t in spec.get("volumeClaimTemplates") or []]
+    else:
+        claims = []
+    if any(not c.get("volumeName") and c.get("storageClassName") != STORAGE_CLASS for c in claims):
         errors.append("%s:%d: a PersistentVolumeClaim needs storageClassName: %s"
                       % (where, start, STORAGE_CLASS))
     return errors
