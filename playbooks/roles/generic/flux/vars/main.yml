@@ -10,6 +10,9 @@ _flux_kubeconfig: /etc/rancher/k3s/k3s.yaml
 _flux_work: /run/flux
 _flux_registry_cluster_address: zot.zot.svc.cluster.local:5000
 _flux_registry_auth: "{{ (flux_registry_user ~ ':' ~ flux_registry_password) | b64encode }}"
+_flux_image_registry_auths: >-
+  {{ {flux_image_registry.host: {'auth': (flux_image_registry.username ~ ':' ~ flux_image_registry.password) | b64encode}}
+     if flux_image_registry else {} }}
 
 _flux_charts:
   flux-operator:

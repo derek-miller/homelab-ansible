@@ -164,6 +164,33 @@ def basic_only(method, url, auth):
 check("resolve: basic auth is refused, not guessed",
       run_error(basic_only, "reg.example/o/app:6"), "the registry asked for basic auth")
 
+
+def basic_with_auth(method, url, auth):
+    if auth == "Basic dXNlcjpwYXNz":
+        return Response(Docker_Content_Digest=DIGEST)
+    return http_error(url, 401, WWW_Authenticate='Basic realm="zot"')
+
+
+reg = Registry(basic_with_auth)
+check("resolve: a mirror's name is asked of its host, with that host's basic credentials",
+      pin.resolve("registry.homelab.local/app:latest", reg,
+                  mirrors={"registry.homelab.local": "registry.example"},
+                  auths={"registry.example": "dXNlcjpwYXNz"}), DIGEST)
+check("resolve: asks the mirror's host for the image",
+      [c[1] for c in reg.calls], ["https://registry.example/v2/app/manifests/latest"] * 2)
+try:
+    pin.resolve("reg.example/o/app:6b", Registry(basic_with_auth), auths={"registry.example": "dXNlcjpwYXNz"})
+    other_host = "resolved"
+except pin.ResolveError as e:
+    other_host = str(e)
+check("resolve: basic credentials for another host are not sent", other_host, "the registry asked for basic auth")
+
+with tempfile.TemporaryDirectory() as config:
+    with open(os.path.join(config, "config.json"), "w") as f:
+        json.dump({"auths": {"registry.example": {"auth": "dXNlcjpwYXNz"}, "10.43.0.5:5000": {}}}, f)
+    check("load_auths: keeps each host's basic credentials", pin.load_auths(config), {"registry.example": "dXNlcjpwYXNz"})
+    check("load_auths: a missing config is no credentials", pin.load_auths(os.path.join(config, "missing")), {})
+
 flaky_count = {"n": 0}
 
 

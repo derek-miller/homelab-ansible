@@ -1,0 +1,103 @@
+---
+# Images the build hosts make, served through the edge Traefik; the Ingress and the accounts are in zot.vault.yaml.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-edge-traefik
+  namespace: registry
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: zot
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: edge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 5000
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: zot
+  namespace: registry
+spec:
+  interval: 1h
+  url: oci://ghcr.io/project-zot/helm-charts/zot
+  ref:
+    semver: 0.x
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: zot
+  namespace: registry
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: zot
+  values:
+    service:
+      type: ClusterIP
+    # Two copies of Zot must never share the volume.
+    strategy:
+      type: Recreate
+    persistence: true
+    pvc:
+      create: true
+      storageClassName: local-retain
+      storage: 200Gi
+    nodeSelector:
+      homelab.local/registry: "true"
+    externalSecrets:
+      - secretName: zot-htpasswd
+        mountPath: /secret
+    mountConfig: true
+    configFiles:
+      config.json: |-
+        {
+          "storage": {
+            "rootDirectory": "/var/lib/registry",
+            "gc": true,
+            "dedupe": true,
+            "retention": {
+              "delay": "24h",
+              "policies": [
+                {
+                  "repositories": ["**"],
+                  "deleteReferrers": true,
+                  "deleteUntagged": true,
+                  "keepTags": [{ "mostRecentlyPushedCount": 3 }]
+                }
+              ]
+            }
+          },
+          "http": {
+            "address": "0.0.0.0",
+            "port": "5000",
+            "compat": ["docker2s2"],
+            "auth": { "htpasswd": { "path": "/secret/htpasswd" } },
+            "accessControl": {
+              "repositories": {
+                "**": {
+                  "policies": [
+                    { "users": ["builder"], "actions": ["read", "create", "update", "delete"] },
+                    { "users": ["k3s"], "actions": ["read"] }
+                  ]
+                }
+              }
+            }
+          },
+          "log": { "level": "info" }
+        }

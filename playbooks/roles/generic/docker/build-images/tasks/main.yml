@@ -13,6 +13,25 @@
     docker_images_list: "{{ docker_images_to_build.split(',') | map('trim') | list }}"
   when: docker_images_to_build is defined
 
+# The registry's name carries the site's domain, so neither task prints it.
+- name: Log in to the image registry
+  community.docker.docker_login:
+    registry_url: "{{ docker_build_images_registry }}"
+    username: "{{ docker_build_images_registry_username }}"
+    password: "{{ docker_build_images_registry_password }}"
+  register: _registry_login
+  failed_when: false
+  no_log: true
+  when:
+    - docker_images_to_build is defined
+    - docker_build_images_registry | length > 0
+    - not ansible_check_mode
+
+- name: Note a registry login that failed
+  set_fact:
+    docker_build_images_failed: "{{ docker_build_images_failed | default([]) + ['image registry (login)'] }}"
+  when: _registry_login.failed_when_suppressed_exception is defined
+
 - name: Build requested docker images
   include_tasks: build_image.yml
   loop: "{{ docker_images_list }}"

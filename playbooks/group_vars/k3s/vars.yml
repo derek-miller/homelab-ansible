@@ -21,3 +21,15 @@ k3s_token: !vault |
           65663336343363373235343261343563336635386232383237303862323632303165313932316435
           63373433343665613966333738346531393738396136353736343030386234343137626164623962
           34363737656563366264
+
+# Apps name the images the build hosts make registry.homelab.local/<name>, which
+# every node pulls from the image registry the k3s server's host_vars describe.
+image_registry_name: registry.homelab.local
+k3s_registries: >-
+  {{ {'mirrors': {image_registry_name: {'endpoint': ['https://' ~ hostvars[k3s_server_host].image_registry_host]}},
+      'configs': {hostvars[k3s_server_host].image_registry_host:
+                    {'auth': {'username': 'k3s', 'password': hostvars[k3s_server_host].image_registry_pull_password}}}}
+     if hostvars[k3s_server_host].image_registry_host is defined else {} }}
+docker_build_images_registry: "{{ hostvars[k3s_server_host].image_registry_host | default('') }}"
+docker_build_images_registry_username: builder
+docker_build_images_registry_password: "{{ hostvars[k3s_server_host].image_registry_push_password | default('') }}"

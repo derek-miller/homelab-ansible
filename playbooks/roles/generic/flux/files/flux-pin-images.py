@@ -2,6 +2,10 @@
 """Pin every `image:` in a manifest tree to the digest its tag points at now.
 
 Usage: flux-pin-images.py DIR
+
+FLUX_PIN_MIRRORS maps a registry name the tree uses to the host that answers
+for it, as JSON. A registry asking for basic auth gets the credentials
+$DOCKER_CONFIG/config.json holds for its host.
 """
 
 import hashlib
@@ -83,9 +87,19 @@ def token(header, name, urlopen):
     return value
 
 
-def resolve(ref, urlopen=urllib.request.urlopen):
+def load_auths(docker_config):
+    try:
+        with open(os.path.join(docker_config, "config.json"), encoding="utf-8") as f:
+            auths = json.load(f).get("auths", {})
+    except (OSError, ValueError):
+        return {}
+    return {host: v["auth"] for host, v in auths.items() if isinstance(v, dict) and v.get("auth")}
+
+
+def resolve(ref, urlopen=urllib.request.urlopen, mirrors=None, auths=None):
     registry, name, tag = parse(ref)
-    url = "https://%s/v2/%s/manifests/%s" % (registry, name, tag)
+    host = (mirrors or {}).get(registry, registry)
+    url = "https://%s/v2/%s/manifests/%s" % (host, name, tag)
     headers = {"Accept": ACCEPT}
     try:
         while True:
@@ -100,7 +114,10 @@ def resolve(ref, urlopen=urllib.request.urlopen):
                 if e.code != 401 or "Authorization" in headers:
                     raise
                 challenge_header = e.headers.get("WWW-Authenticate", "")
-                headers["Authorization"] = "Bearer " + token(challenge_header, name, urlopen)
+                if challenge(challenge_header)[0] == "basic" and host in (auths or {}):
+                    headers["Authorization"] = "Basic " + auths[host]
+                else:
+                    headers["Authorization"] = "Bearer " + token(challenge_header, name, urlopen)
     except urllib.error.HTTPError as e:
         raise ResolveError("HTTP %d" % e.code)
     except (urllib.error.URLError, OSError, ValueError) as e:
@@ -150,7 +167,9 @@ def main(argv):
     if len(argv) != 2 or not os.path.isdir(argv[1]):
         print("usage: flux-pin-images.py DIR", file=sys.stderr)
         return 2
-    pinned, images, errors = pin_tree(argv[1])
+    mirrors = json.loads(os.environ.get("FLUX_PIN_MIRRORS") or "{}")
+    auths = load_auths(os.environ.get("DOCKER_CONFIG") or os.path.expanduser("~/.docker"))
+    pinned, images, errors = pin_tree(argv[1], lambda ref: resolve(ref, mirrors=mirrors, auths=auths))
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1

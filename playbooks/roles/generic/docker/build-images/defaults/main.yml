@@ -1,4 +1,10 @@
 ---
+# Registry every build is also pushed to, as <registry>/<name>:<input hash> and
+# :latest; empty pushes nowhere.
+docker_build_images_registry: ""
+docker_build_images_registry_username: ""
+docker_build_images_registry_password: ""
+
 available_docker_images:
   sourcebot:
     repo: https://github.com/sourcebot-dev/sourcebot.git
