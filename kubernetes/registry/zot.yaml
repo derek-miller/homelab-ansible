@@ -50,9 +50,6 @@ spec:
   values:
     service:
       type: ClusterIP
-    # Two copies of Zot must never share the volume.
-    strategy:
-      type: Recreate
     persistence: true
     pvc:
       create: true
