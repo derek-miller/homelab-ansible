@@ -152,6 +152,32 @@ The deploy copies the tree to rackvm1, decrypting vaulted files on the way, pins
 
 A failure before step 4 leaves the label where it was, so the apps come back where their data still is. A move cut off part way, by Ctrl-C or a lost connection, leaves the label's workloads scaled down, and every deploy refuses to run until the same move command runs again and finishes it, overwriting its own partial copy. Cut off after the label moved, it also leaves the old folders unrenamed and its `k3s-<label>-<n>.tar` archives in the transit folder, for you to remove. A move onto a node that isn't yet a Ready k3s node stops the run before anything moves, Swarm included; join it first with `make run hosts=<node> tags=k3s`. `edge` moves only with the full command, never `tags=k3s-migrate-labels`, since the k3s Traefik passes what it doesn't route to the Swarm Traefik on its own node; it also needs the UDM's forwards pointed at the new node.
 
+**Moving a suite off Swarm.** Move one suite at a time. Its change takes the suite's services and its `backup_<label>` out of the stack definition and adds its app to `kubernetes/`. For each of its Swarm volumes it adds an entry to `swarm_volume_copies`: the stack's name for the volume, the label, and the app's claim. Set the list in `host_vars/rackvm1/vars.yml` from `vault.yml`, since it names apps. Then:
+
+1. [Pause deploys](#pausing-deploys), merge the change, and wait for any Deploy already running to finish. Until the copy has run, every deploy refuses, `tags=flux` and `tags=docker-stack` included, so an app never starts on an empty folder.
+2. From an up-to-date master, run:
+
+   ```bash
+   make run ANSIBLE_FLAGS="-e swarm_copy_volumes=yes"
+   ```
+
+3. Resume deploys, and in the next change take the suite's entries out of `swarm_volume_copies`.
+
+Ahead of the stack deploy that removes the services, on the label's node, the copy:
+
+1. stops the Swarm services using each volume, noting their replicas on them;
+2. has the label's backup service take a final backup;
+3. copies each volume with `tar --numeric-owner` into `data.copy` beside `/mnt/data/volumes/<label>/<claim>/data`;
+4. compares the two copies' files, owners and modes, then renames the copy to `data`.
+
+The provisioner then gives the app's claim that folder. A failure removes the copies and starts the Swarm services again. A run cut off part way leaves the services stopped and the folder empty, so deploys keep refusing until the same command runs again. A copy refuses while the stack still has services using the volume, or while Swarm and k3s have the label on different nodes, and a label with listed volumes doesn't move.
+
+The Swarm volume is left as it was, as the way back while the label stays on its node:
+
+1. Scale the app to zero, or take it out of `kubernetes/`; `local-retain` keeps its folder.
+2. Copy the folder back into the volume if the app has written to it.
+3. Restore the service blocks and deploy.
+
 **Ports on the rackvms.** A port clients reach on a rackvm's own address is a `type: LoadBalancer` Service with `externalTrafficPolicy: Local` and the label `svccontroller.k3s.cattle.io/lbpool: <label>`, its namespace. Each deploy also makes a label's node the ServiceLB pool of that name, and the cluster refuses a LoadBalancer without its namespace's pool, since ServiceLB would otherwise publish it on all five. ServiceLB follows a label that moves, and the Service's address follows its pods. The app sees each LAN client's real address, so its policy admits them by `ipBlock`; a client on the node's Tailscale address or localhost arrives from the Service's ServiceLB pod in `kube-system`, labelled `svccontroller.k3s.cattle.io/svcname` and `svcnamespace`. ServiceLB takes the port on every address of that node ahead of anything listening there, so pick one `ss -lntu` shows free, and remove a Swarm host-mode publish of the same port in the same change. An app that trusts a forward-auth header or has no login of its own is never a LoadBalancer.
 
 **Ingress.** Traefik, `kubernetes/edge/`, answers on rackvm1's ports 80 and 443, redirecting 80 to HTTPS. It keeps its own Let's Encrypt wildcard on its volume, solved over Cloudflare DNS with a copy of the Swarm Traefik's key in `traefik.vault.yaml`, so a new key goes in both. An app's route is a built-in `Ingress` with the annotation `traefik.ingress.kubernetes.io/router.entrypoints: websecure`, as the Flux UI's is, and a policy at each end letting Traefik reach the app's port. A request no route of its own claims goes on to the Swarm Traefik on 7443, so it can take the UDM's forwards in place of 7080 and 7443 with every Swarm host still served. Those requests reach the Swarm Traefik from docker_gwbridge's gateway, 172.19.0.1, which it trusts to report the client's address. Beside it, `homebridge-cert` pushes the certificate to the Homebridge UI on rackmini1 every hour, as the input to the forced command `homebridge-tls-install`, which restarts Homebridge only when the certificate has changed.

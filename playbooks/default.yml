@@ -459,10 +459,17 @@
     - docker-compose
     - docker-build-images
 
-# Ahead of the swarm play, so a refused k3s move stops the run before Swarm moves anything.
+# Ahead of the swarm play, so a refused k3s move stops the run before Swarm moves anything,
+# and ahead of the stack deploy, which removes the services whose volumes are copied.
 - hosts: k3s_server
   any_errors_fatal: true
   tasks:
+    - import_role:
+        name: generic/flux
+        tasks_from: swarm_copy.yml
+      when: swarm_volume_copies | length > 0
+      tags:
+        - docker-stack
     - import_role:
         name: generic/flux
         tasks_from: migrate.yml

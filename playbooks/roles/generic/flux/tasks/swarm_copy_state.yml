@@ -1,0 +1,75 @@
+---
+- name: check each Swarm volume copy names a label, a volume and a claim
+  assert:
+    that:
+      - swarm_volume_copies | map(attribute='label') | reject('in', _flux_inventory_nodes) | list | length == 0
+      - swarm_volume_copies | map(attribute='volume') | reject('match', '^[A-Za-z0-9][A-Za-z0-9_.-]*$') | list | length == 0
+      - swarm_volume_copies | map(attribute='claim') | reject('match', '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$') | list | length == 0
+    fail_msg: >-
+      Each swarm_volume_copies entry needs a [docker_labels] word as its label, the stack's
+      name for the volume and a claim name of lowercase letters, digits and hyphens.
+    quiet: yes
+
+- name: check the node of each label with Swarm volumes to copy is in the run
+  assert:
+    that: hostvars[_flux_held_nodes[item]].ansible_facts.default_ipv4 is defined
+    fail_msg: >-
+      {{ item }}: its Swarm volumes are read on {{ _flux_held_nodes[item] }} by delegation, so
+      it must be in the run; drop hosts= or add it. Nothing was changed.
+    quiet: yes
+  loop: "{{ _flux_copy_labels }}"
+
+- name: read the Swarm node of each label with volumes to copy
+  command: >-
+    docker node ls --filter node.label={{ (item ~ '=true') | quote }}
+    --format '{% raw %}{{.Hostname}}{% endraw %}'
+  delegate_to: "{{ docker_swarm_delegate_manager }}"
+  become: true
+  loop: "{{ _flux_copy_labels }}"
+  register: _flux_copy_swarm_nodes
+  changed_when: false
+  check_mode: no
+
+- name: refuse a label that Swarm runs on another node than k3s
+  fail:
+    msg: >-
+      {{ item.item }} is on {{ item.stdout_lines | join(', ') or 'no node' }} on Swarm but on
+      {{ _flux_held_nodes[item.item] }} on k3s, where its volumes would be copied. Finish its
+      move first; nothing was changed.
+  loop: "{{ _flux_copy_swarm_nodes.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.stdout_lines != [_flux_held_nodes[item.item]]
+
+# Prints nothing once a volume is copied or empty, "missing" for a volume not on the node
+# whose folder is empty, and otherwise the volume's path.
+- name: read which Swarm volumes wait to be copied
+  shell: >-
+    set -eo pipefail;
+    vol={{ (_flux_stack_name ~ '_' ~ item.volume) | quote }};
+    dst={{ (k3s_local_storage_path ~ '/' ~ item.label ~ '/' ~ item.claim ~ '/data') | quote }};
+    copied() { [ -d "$dst" ] && [ -n "$(find "$dst" -mindepth 1 -print -quit)" ]; };
+    vols=$(docker volume ls -q);
+    if ! grep -qxF -- "$vol" <<< "$vols"; then copied || echo missing; exit 0; fi;
+    src=$(docker volume inspect --format '{% raw %}{{.Mountpoint}}{% endraw %}' "$vol");
+    [ -d "$src" ];
+    [ -n "$(find "$src" -mindepth 1 -print -quit)" ] || exit 0;
+    copied || echo "$src"
+  args:
+    executable: /bin/bash
+  delegate_to: "{{ _flux_held_nodes[item.label] }}"
+  become: true
+  loop: "{{ swarm_volume_copies }}"
+  loop_control:
+    label: "{{ item.label }}"
+  register: _flux_copy_state
+  changed_when: false
+  check_mode: no
+  no_log: true
+
+- name: refuse a listed Swarm volume that isn't on its label's node
+  fail:
+    msg: >-
+      {{ _flux_copies_missing | join(', ') }}: a volume in swarm_volume_copies isn't on the
+      label's node, and its k3s folder is empty; nothing was changed.
+  when: _flux_copies_missing | length > 0

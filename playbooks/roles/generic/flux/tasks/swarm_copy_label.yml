@@ -1,0 +1,163 @@
+---
+# Tasks that carry volume paths or app names are no_log, and failures name only the label.
+- name: "{{ copy_label }} | find the Swarm services using its volumes"
+  shell: >-
+    set -o pipefail;
+    docker ps -a {{ _flux_copy_filters }}
+    --format '{% raw %}{{ .Label "com.docker.swarm.service.name" }}{% endraw %}' | sort -u
+  args:
+    executable: /bin/bash
+  delegate_to: "{{ _flux_copy_node }}"
+  become: true
+  register: _flux_copy_users
+  changed_when: false
+  no_log: true
+
+# A run cut off after stopping them noted their replicas on them.
+- name: "{{ copy_label }} | read their replicas"
+  shell: >-
+    for s in {{ _flux_copy_users.stdout_lines | select | map('quote') | join(' ') }}; do
+    r=$(docker service inspect "$s" 2>/dev/null --format
+    '{% raw %}{{ or (index .Spec.Labels "homelab.local/replicas") .Spec.Mode.Replicated.Replicas }}{% endraw %}')
+    || continue; echo "$s $r"; done
+  delegate_to: "{{ docker_swarm_delegate_manager }}"
+  become: true
+  register: _flux_copy_replicas
+  changed_when: false
+  no_log: true
+
+- name: "{{ copy_label }} | stop its Swarm services, copy its volumes and check the copies"
+  block:
+    - name: "{{ copy_label }} | note its Swarm services' replicas on them"
+      command: >-
+        docker service update --detach
+        --label-add {{ ('homelab.local/replicas=' ~ item.value) | quote }} {{ item.key | quote }}
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
+      become: true
+      loop: "{{ _flux_copy_services | dict2items }}"
+      loop_control:
+        label: "{{ copy_label }}"
+      no_log: true
+
+    - name: "{{ copy_label }} | stop its Swarm services"
+      command: >-
+        docker service scale
+        {{ _flux_copy_apps | map('regex_replace', '$', '=0') | map('quote') | join(' ') }}
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
+      become: true
+      when: _flux_copy_apps | length > 0
+      no_log: true
+
+    # A backup service already stopped was stopped after its final backup.
+    - name: "{{ copy_label }} | take a final backup of its volumes"
+      shell: >-
+        c=$(docker ps -q --filter label=com.docker.swarm.service.name={{ _flux_copy_backup | quote }} | head -n 1);
+        [ -z "$c" ] || docker exec "$c" backup
+      delegate_to: "{{ _flux_copy_node }}"
+      become: true
+      when: _flux_copy_backup in _flux_copy_services
+      no_log: true
+
+    - name: "{{ copy_label }} | stop its backup service"
+      command: "docker service scale {{ (_flux_copy_backup ~ '=0') | quote }}"
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
+      become: true
+      when: _flux_copy_backup in _flux_copy_services
+      no_log: true
+
+    - name: "{{ copy_label }} | wait until no container uses its volumes"
+      command: "docker ps -q {{ _flux_copy_filters }}"
+      delegate_to: "{{ _flux_copy_node }}"
+      become: true
+      register: _flux_copy_running
+      until: _flux_copy_running.stdout == ''
+      retries: 30
+      delay: 10
+      changed_when: false
+      no_log: true
+
+    # Beside the claim's folder, which stays empty until a checked copy replaces it.
+    - name: "{{ copy_label }} | copy each volume beside its claim's folder"
+      shell: >-
+        set -eo pipefail;
+        install -d -o root -g root -m 0700 {{ (item.dest | dirname | dirname) | quote }} {{ (item.dest | dirname) | quote }};
+        rm -rf {{ (item.dest ~ '.copy') | quote }};
+        mkdir {{ (item.dest ~ '.copy') | quote }};
+        tar --numeric-owner -C {{ item.source | quote }} -cf - . | tar --numeric-owner -xpf - -C {{ (item.dest ~ '.copy') | quote }}
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ _flux_copy_node }}"
+      become: true
+      loop: "{{ _flux_copy_entries }}"
+      loop_control:
+        label: "{{ copy_label }}"
+      no_log: true
+
+    - name: "{{ copy_label }} | list the files of each volume and of its copy"
+      shell: >-
+        set -o pipefail; cd {{ item | quote }} &&
+        find . \( -type f -printf '%P\t%s\t%U\t%G\t%m\n' \) -o -printf '%P\t-\t%U\t%G\t%m\n' | LC_ALL=C sort | sha256sum
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ _flux_copy_node }}"
+      become: true
+      loop: >-
+        {{ (_flux_copy_entries | map(attribute='source') | list)
+           + (_flux_copy_entries | map(attribute='dest') | map('regex_replace', '$', '.copy') | list) }}
+      loop_control:
+        label: "{{ copy_label }}"
+      register: _flux_copy_listings
+      changed_when: false
+      no_log: true
+
+    - name: "{{ copy_label }} | refuse a copy that differs from its volume"
+      fail:
+        msg: "{{ copy_label }}: a copy of one of its Swarm volumes doesn't match the volume."
+      when: >-
+        _flux_copy_listings.results[:(_flux_copy_entries | length)] | map(attribute='stdout') | list
+        != _flux_copy_listings.results[(_flux_copy_entries | length):] | map(attribute='stdout') | list
+
+    - name: "{{ copy_label }} | put each copy in its claim's folder"
+      command: "mv -T {{ (item.dest ~ '.copy') | quote }} {{ item.dest | quote }}"
+      delegate_to: "{{ _flux_copy_node }}"
+      become: true
+      loop: "{{ _flux_copy_entries }}"
+      loop_control:
+        label: "{{ copy_label }}"
+      no_log: true
+
+    - name: "{{ copy_label }} | report the copy"
+      debug:
+        msg: >-
+          {{ copy_label }}: copied {{ _flux_copy_entries | length }} Swarm volume(s) into its
+          k3s folders on {{ _flux_copy_node }}. The stack deploy removes its stopped Swarm services.
+  rescue:
+    - name: "{{ copy_label }} | remove its copies"
+      shell: >-
+        rm -rf {{ (item.dest ~ '.copy') | quote }} &&
+        { [ ! -d {{ item.dest | quote }} ] || find {{ item.dest | quote }} -mindepth 1 -delete; }
+      delegate_to: "{{ _flux_copy_node }}"
+      become: true
+      loop: "{{ _flux_copy_entries }}"
+      loop_control:
+        label: "{{ copy_label }}"
+      ignore_errors: true
+      no_log: true
+
+    - name: "{{ copy_label }} | start its Swarm services again"
+      shell: >-
+        docker service scale --detach
+        {% for name, replicas in _flux_copy_services | dictsort %}{{ (name ~ '=' ~ replicas) | quote }} {% endfor %}
+        && for s in {{ _flux_copy_services.keys() | map('quote') | join(' ') }}; do
+        docker service update --detach --label-rm homelab.local/replicas "$s"; done
+      delegate_to: "{{ docker_swarm_delegate_manager }}"
+      become: true
+      when: _flux_copy_services | length > 0
+      ignore_errors: true
+      no_log: true
+
+    - name: "{{ copy_label }} | report the failed copy"
+      fail:
+        msg: >-
+          {{ copy_label }}: its Swarm volumes could not be copied into k3s, so its k3s folders
+          were emptied and its Swarm services started again on their volumes.

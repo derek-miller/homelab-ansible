@@ -23,6 +23,10 @@ docker_migrate_transit_dir: /mnt/Backups/migrate
 docker_migrate_labels: false
 docker_migrate_force: false
 docker_migrate_keep_transit: false
+# Swarm volumes to copy into k3s claims, as {volume, label, claim}: the stack's name for
+# the volume, the label its services run under, and the claim of the app replacing them.
+swarm_volume_copies: []
+swarm_copy_volumes: false
 # Recipient for offen's AGE_PUBLIC_KEYS. Its private half is
 # playbooks/files/vault/docker-volume-backup-age.key.
 docker_volume_backup_age_public_key: age1nzyr0mk08nwy7x0w2wjw462kvnyq6lwhmgufzyzl4xq57gtdv40qe8lnqg

@@ -153,3 +153,41 @@ _flux_resume_workloads: >-
   {{ out }}
 _flux_resume_charts: "{{ (_flux_resume_reads.results[1].stdout | from_json)['items'] | map(attribute='metadata.name') | list }}"
 _flux_stopped_labels: "{{ _flux_stopped_workloads.stdout | default('') | split | unique | sort }}"
+
+_flux_stack_name: "{{ hostvars[groups['docker_swarm_manager'][0]].docker_stack_name }}"
+_flux_copy_labels: "{{ swarm_volume_copies | map(attribute='label') | unique | sort }}"
+_flux_copy_moving: "{{ _flux_moves | map(attribute='label') | select('in', _flux_copy_labels) | list }}"
+_flux_copies_pending: >-
+  {%- set out = [] -%}
+  {%- for result in _flux_copy_state.results | default([]) if result.stdout | default('') not in ['', 'missing'] -%}
+  {%- set _ = out.append(result.item | combine({'source': result.stdout,
+        'dest': k3s_local_storage_path ~ '/' ~ result.item.label ~ '/' ~ result.item.claim ~ '/data'})) -%}
+  {%- endfor -%}
+  {{ out }}
+_flux_copies_missing: >-
+  {{ _flux_copy_state.results | default([]) | selectattr('stdout', 'defined') | selectattr('stdout', 'eq', 'missing')
+     | map(attribute='item.label') | unique | sort }}
+_flux_copy_node: "{{ _flux_held_nodes[copy_label] }}"
+_flux_copy_entries: "{{ _flux_copies_pending | selectattr('label', 'eq', copy_label) | list }}"
+_flux_copy_filters: >-
+  {% for entry in _flux_copy_entries %}--filter volume={{ (_flux_stack_name ~ '_' ~ entry.volume) | quote }} {% endfor %}
+_flux_copy_stack_users: >-
+  {%- set volumes = _flux_copies_pending | map(attribute='volume') | list -%}
+  {%- set out = [] -%}
+  {%- for name, service in (hostvars[groups['docker_swarm_manager'][0]].docker_stack_definition.services | default({})) | dictsort -%}
+  {%- for volume in service.volumes | default([]) -%}
+  {%- if (volume.source | default('') if volume is mapping else volume.split(':')[0]) in volumes -%}
+  {%- set _ = out.append(name) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {%- endfor -%}
+  {{ out | unique | list }}
+_flux_copy_services: >-
+  {%- set out = {} -%}
+  {%- for line in _flux_copy_replicas.stdout_lines | default([]) -%}
+  {%- set name, _, replicas = line.partition(' ') -%}
+  {%- set _ = out.update({name: replicas}) -%}
+  {%- endfor -%}
+  {{ out }}
+_flux_copy_backup: "{{ _flux_stack_name }}_backup_{{ copy_label }}"
+_flux_copy_apps: "{{ _flux_copy_services.keys() | reject('eq', _flux_copy_backup) | list }}"

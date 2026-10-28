@@ -1,0 +1,39 @@
+---
+- include_tasks: labels.yml
+
+- name: refuse to move a label with Swarm volumes to copy
+  fail:
+    msg: >-
+      {{ _flux_copy_moving | join(', ') }} has Swarm volumes listed in swarm_volume_copies,
+      so it can't move; nothing was moved.
+  when:
+    - docker_migrate_labels | bool
+    - _flux_copy_moving | length > 0
+
+- include_tasks: swarm_copy_state.yml
+
+- name: refuse to remove Swarm services whose data waits to be copied
+  fail:
+    msg: >-
+      {{ _flux_copies_pending | map(attribute='label') | unique | join(', ') }} has Swarm
+      volumes its k3s folders don't have yet. Run with swarm_copy_volumes=yes to copy them;
+      nothing was changed.
+  when:
+    - _flux_copies_pending | length > 0
+    - not swarm_copy_volumes | bool
+
+# The stack deploy would start them again on the old volumes.
+- name: check the Swarm stack no longer has services using the volumes to copy
+  assert:
+    that: _flux_copy_stack_users | length == 0
+    fail_msg: >-
+      {{ _flux_copies_pending | map(attribute='label') | unique | join(', ') }}: the Swarm stack
+      still has services using its volumes to copy. Take them out of the stack in the same
+      change; nothing was copied.
+    quiet: yes
+
+- include_tasks: swarm_copy_label.yml
+  loop: "{{ _flux_copies_pending | map(attribute='label') | unique | sort }}"
+  loop_control:
+    loop_var: copy_label
+  when: not ansible_check_mode
