@@ -86,33 +86,6 @@
   register: _hb_update_node
   changed_when: "'Updating Node.js' in _hb_update_node.stderr"
 
-# hb-service rebuilds these as root after a Node.js update, which can fail, and
-# restarts Homebridge anyway; the UI then exits at startup without node-pty.
-- name: rebuild the Config UI's native modules as the homebridge user
-  vars:
-    _hb_ui_dir: "{{ homebridge_node_bin | dirname | dirname }}/lib/node_modules/homebridge-config-ui-x"
-    _hb_load_pty: >-
-      {{ homebridge_node_bin }} -e "require('@homebridge/node-pty-prebuilt-multiarch')"
-  become_user: "{{ homebridge_user }}"
-  block:
-    - name: check the Config UI's terminal module loads
-      command: "{{ _hb_load_pty }}"
-      args:
-        chdir: "{{ _hb_ui_dir }}"
-      register: _hb_ui_pty
-      changed_when: false
-      failed_when: false
-      check_mode: no
-
-    - name: rebuild the Config UI's native modules
-      shell: "{{ homebridge_npm_bin }} rebuild && {{ _hb_load_pty }}"
-      args:
-        chdir: "{{ _hb_ui_dir }}"
-      environment:
-        PATH: "{{ homebridge_node_bin | dirname }}:/usr/bin:/bin:/usr/sbin:/sbin"
-      when: _hb_update_node is changed or _hb_ui_pty.rc != 0
-      notify: homebridge changed
-
 # ---- UI certificate ----------------------------------------------------
 - name: create the UI certificate directory
   file:
@@ -140,3 +113,31 @@
   loop:
     - "{{ homebridge_node_bin | dirname | dirname }}/lib/node_modules"
     - "{{ homebridge_node_bin | dirname }}"
+
+# hb-service rebuilds these as root after a Node.js update, which can fail, and
+# restarts Homebridge anyway; the UI then exits at startup without node-pty.
+# After the ownership task, since a failed root rebuild leaves its output root's.
+- name: rebuild the Config UI's native modules as the homebridge user
+  vars:
+    _hb_ui_dir: "{{ homebridge_node_bin | dirname | dirname }}/lib/node_modules/homebridge-config-ui-x"
+    _hb_load_pty: >-
+      {{ homebridge_node_bin }} -e "require('@homebridge/node-pty-prebuilt-multiarch')"
+  become_user: "{{ homebridge_user }}"
+  block:
+    - name: check the Config UI's terminal module loads
+      command: "{{ _hb_load_pty }}"
+      args:
+        chdir: "{{ _hb_ui_dir }}"
+      register: _hb_ui_pty
+      changed_when: false
+      failed_when: false
+      check_mode: no
+
+    - name: rebuild the Config UI's native modules
+      shell: "{{ homebridge_npm_bin }} rebuild && {{ _hb_load_pty }}"
+      args:
+        chdir: "{{ _hb_ui_dir }}"
+      environment:
+        PATH: "{{ homebridge_node_bin | dirname }}:/usr/bin:/bin:/usr/sbin:/sbin"
+      when: _hb_update_node is changed or _hb_ui_pty.rc != 0
+      notify: homebridge changed
