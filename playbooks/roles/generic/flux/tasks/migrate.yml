@@ -20,6 +20,17 @@
   loop_control:
     label: "{{ item.label }}"
 
+# A move cut off after its label moved isn't pending any more, but its apps are still stopped.
+- include_tasks: migrate_resume.yml
+  loop: >-
+    {{ _flux_stopped_labels
+       | reject('in', _flux_moves | selectattr('to', 'in', _flux_ready_nodes) | map(attribute='label') | list)
+       | map('community.general.dict_kv', 'label') | list }}
+  loop_control:
+    loop_var: move
+    label: "{{ move.label }}"
+  when: not ansible_check_mode
+
 - include_tasks: migrate_label.yml
   loop: "{{ _flux_moves | selectattr('to', 'in', _flux_ready_nodes) | list }}"
   loop_control:

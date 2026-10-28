@@ -121,20 +121,26 @@ _flux_move_pvs: >-
   {%- endif -%}
   {%- endfor -%}
   {{ out }}
-_flux_move_volumes: "{{ _flux_move_pvs | selectattr('path') | list }}"
+_flux_move_volumes: "{{ _flux_move_found.stdout_lines | default([]) | sort }}"
 _flux_move_charts: "{{ (_flux_move_hr_json.stdout | from_json)['items'] | map(attribute='metadata.name') | list }}"
 _flux_move_workloads: >-
   {%- set out = [] -%}
   {%- for w in (_flux_move_workload_json.stdout | from_json)['items'] -%}
-  {%- set _ = out.append({'kind': w.kind | lower, 'name': w.metadata.name, 'replicas': w.spec.replicas | default(1)}) -%}
+  {%- set noted = (w.metadata.annotations | default({})).get(_flux_replicas_annotation) -%}
+  {%- set _ = out.append({'kind': w.kind | lower, 'name': w.metadata.name,
+        'replicas': noted | int if noted is not none else w.spec.replicas | default(1)}) -%}
   {%- endfor -%}
   {{ out | selectattr('replicas', '>', 0) | list }}
-# What Flux applied itself, as opposed to a chart or a StatefulSet, and so recreates on resume.
-_flux_move_flux_claims: >-
+# A move notes each workload's replicas here before scaling it to zero.
+_flux_replicas_annotation: homelab.local/replicas
+_flux_resume_workloads: >-
   {%- set out = [] -%}
-  {%- for c in (_flux_move_pvc_json.stdout | from_json)['items'] -%}
-  {%- if 'kustomize.toolkit.fluxcd.io/name' in (c.metadata.labels | default({})) -%}
-  {%- set _ = out.append(c.metadata.name) -%}
+  {%- for w in (_flux_resume_reads.results[0].stdout | from_json)['items'] -%}
+  {%- set noted = (w.metadata.annotations | default({})).get(_flux_replicas_annotation) -%}
+  {%- if noted is not none -%}
+  {%- set _ = out.append({'kind': w.kind | lower, 'name': w.metadata.name, 'replicas': noted | int}) -%}
   {%- endif -%}
   {%- endfor -%}
   {{ out }}
+_flux_resume_charts: "{{ (_flux_resume_reads.results[1].stdout | from_json)['items'] | map(attribute='metadata.name') | list }}"
+_flux_stopped_labels: "{{ _flux_stopped_workloads.stdout | default('') | split | unique | sort }}"
