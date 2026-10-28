@@ -1,6 +1,2 @@
 ---
 docker_swarm_port: 2377
-
-docker_migrate_labels: false
-docker_migrate_force: false
-docker_migrate_keep_transit: false

@@ -1,0 +1,24 @@
+---
+- name: check every label can name a namespace
+  assert:
+    that: _flux_inventory_nodes.keys() | reject('match', '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$') | list | length == 0
+    fail_msg: "[docker_labels] words name k3s namespaces, so they must be lowercase letters, digits and hyphens."
+    quiet: yes
+
+- name: read which node carries each label
+  command: >-
+    k3s kubectl get nodes
+    -o 'jsonpath={range .items[*]}{.metadata.name} {.metadata.labels}{"\n"}{end}'
+  register: _flux_node_labels
+  changed_when: false
+  failed_when: not ansible_check_mode and _flux_node_labels.rc != 0
+  check_mode: no
+
+- name: read the node each label's volumes are on
+  command: >-
+    k3s kubectl get pv
+    -o 'jsonpath={range .items[*]}{.spec.claimRef.namespace}={.spec.nodeAffinity.required.nodeSelectorTerms[0].matchExpressions[0].values[0]}{"\n"}{end}'
+  register: _flux_volume_nodes
+  changed_when: false
+  failed_when: not ansible_check_mode and _flux_volume_nodes.rc != 0
+  check_mode: no

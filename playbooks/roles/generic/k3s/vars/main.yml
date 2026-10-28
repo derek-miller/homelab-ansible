@@ -14,6 +14,7 @@ _k3s_config: >-
     | combine(
         {
           'disable': k3s_server_disable,
+          'default-local-storage-path': k3s_local_storage_path,
           'secrets-encryption': true,
           'tls-san': k3s_tls_san,
         }

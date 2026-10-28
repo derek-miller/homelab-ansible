@@ -22,10 +22,10 @@ spec:
         object.spec.type != 'LoadBalancer' ||
         (has(object.metadata.labels) &&
         'svccontroller.k3s.cattle.io/lbpool' in object.metadata.labels &&
-        object.metadata.labels['svccontroller.k3s.cattle.io/lbpool'] != '')
+        object.metadata.labels['svccontroller.k3s.cattle.io/lbpool'] == object.metadata.namespace)
       message: >-
-        A LoadBalancer Service must name the node it is published on with the
-        svccontroller.k3s.cattle.io/lbpool label.
+        A LoadBalancer Service must carry the svccontroller.k3s.cattle.io/lbpool
+        label naming its namespace, the label whose node publishes it.
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding

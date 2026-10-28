@@ -1,0 +1,45 @@
+---
+# k3s's own local-path class deletes a volume's folder with its claim.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-retain
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  pathPattern: "{{ .PVC.Namespace }}/{{ .PVC.Name }}/data"
+---
+# k3s's local-path is the default class, so a claim that names none would land there.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: local-retain-required
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - persistentvolumeclaims
+  validations:
+    - expression: >-
+        (has(object.spec.volumeName) && object.spec.volumeName != '') ||
+        (has(object.spec.storageClassName) && object.spec.storageClassName == 'local-retain')
+      message: >-
+        A PersistentVolumeClaim must use the local-retain storage class, which keeps its
+        folder when the claim goes, or name the volume it binds to.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: local-retain-required
+spec:
+  policyName: local-retain-required
+  validationActions:
+    - Deny

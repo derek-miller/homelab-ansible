@@ -3,13 +3,13 @@ k3s_server_host: "{{ groups['k3s_server'] | first }}"
 k3s_server_address: "{{ hostvars[k3s_server_host].proxmox_guest.address | regex_replace('/.*$', '') }}"
 k3s_node_ip: "{{ proxmox_guest.address | regex_replace('/.*$', '') }}"
 
+# On the data disk beside Docker's data-root; the unit waits for its mount.
+k3s_data_dir: /mnt/data/k3s
+# Where the local-path provisioner makes each volume, as <namespace>/<claim>/data.
+k3s_local_storage_path: /mnt/data/volumes
+
 k3s_tls_san:
   - "{{ inventory_hostname }}.ts.{{ cloudflare_zone }}"
-
-# k3s adds these on every start and never removes one.
-k3s_config_extra:
-  node-label:
-    - "lbpool.svccontroller.k3s.cattle.io/{{ inventory_hostname }}=true"
 
 k3s_token: !vault |
           $ANSIBLE_VAULT;1.1;AES256

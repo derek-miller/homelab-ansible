@@ -9,9 +9,6 @@ k3s_role: agent
 # either way, and agents run whatever the server runs.
 k3s_version: stable
 
-# On the data disk beside Docker's data-root; the unit waits for its mount.
-k3s_data_dir: /mnt/data/k3s
-
 # Must be on the interface flannel carries pod traffic over.
 k3s_node_ip: ""
 
@@ -20,7 +17,6 @@ k3s_token: ""
 
 k3s_server_disable:
   - traefik
-  - local-storage
 
 k3s_tls_san: []
 
@@ -37,7 +33,3 @@ k3s_kube_proxy_args:
 
 # Merged over the generated /etc/rancher/k3s/config.yaml.
 k3s_config_extra: {}
-
-# Folders on this node for its PersistentVolumes, each owned by the user the
-# app runs as: [{path, owner}].
-k3s_volumes: []
