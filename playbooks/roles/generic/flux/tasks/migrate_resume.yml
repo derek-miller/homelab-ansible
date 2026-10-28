@@ -4,9 +4,7 @@
   environment:
     KUBECONFIG: "{{ _flux_kubeconfig }}"
   block:
-    - name: "{{ move.label }} | resume Flux"
-      command: flux resume kustomization apps -n flux-system --wait=false
-
+    # Before Flux resumes, which it does with the move's notes on the workloads.
     - name: "{{ move.label }} | read its workloads and charts"
       command: "k3s kubectl -n {{ move.label }} get {{ item }} -o json"
       loop:
@@ -16,11 +14,12 @@
       changed_when: false
       no_log: true
 
+    - name: "{{ move.label }} | resume Flux"
+      command: flux resume kustomization apps -n flux-system --wait=false
+
     # A pod whose claim is not back yet waits for it.
     - name: "{{ move.label }} | put its workloads back"
-      shell: >-
-        k3s kubectl -n {{ move.label }} scale {{ item.kind }} {{ item.name | quote }} --replicas={{ item.replicas }} &&
-        k3s kubectl -n {{ move.label }} annotate {{ item.kind }} {{ item.name | quote }} {{ _flux_replicas_annotation }}-
+      command: "k3s kubectl -n {{ move.label }} scale {{ item.kind }} {{ item.name | quote }} --replicas={{ item.replicas }}"
       loop: "{{ _flux_resume_workloads }}"
       loop_control:
         label: "{{ move.label }}"
@@ -39,6 +38,15 @@
       args:
         executable: /bin/bash
       when: _flux_resume_charts | length > 0
+      no_log: true
+
+    - name: "{{ move.label }} | clear the move's notes"
+      command: >-
+        k3s kubectl -n {{ move.label }} annotate {{ item.kind }} {{ item.name | quote }}
+        {{ _flux_replicas_annotation }}- --field-manager={{ _flux_mover_field_manager }}
+      loop: "{{ _flux_resume_workloads }}"
+      loop_control:
+        label: "{{ move.label }}"
       no_log: true
 
     - name: "{{ move.label }} | wait for its workloads"

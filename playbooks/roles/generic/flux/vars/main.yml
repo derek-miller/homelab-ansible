@@ -117,11 +117,15 @@ _flux_move_pvs: >-
   {%- set claim = pv.spec.claimRef | default({}) -%}
   {%- if claim.namespace | default('') == move.label -%}
   {%- set _ = out.append({'name': pv.metadata.name, 'claim': claim.name | default(''),
-        'path': (pv.spec.hostPath | default(pv.spec.local) | default({})).path | default('')}) -%}
+        'path': (pv.spec.hostPath | default(pv.spec.local) | default({})).path | default(''),
+        'node': pv.spec.nodeAffinity.required.nodeSelectorTerms[0].matchExpressions[0]['values'][0]
+                if pv.spec.nodeAffinity is defined else ''}) -%}
   {%- endif -%}
   {%- endfor -%}
   {{ out }}
 _flux_move_volumes: "{{ _flux_move_found.stdout_lines | default([]) | sort }}"
+# A label a move left stopped can only hold that move's own copy on the new node.
+_flux_move_overwrite: "{{ docker_migrate_force | bool or move.label in _flux_stopped_labels }}"
 _flux_move_charts: "{{ (_flux_move_hr_json.stdout | from_json)['items'] | map(attribute='metadata.name') | list }}"
 _flux_move_workloads: >-
   {%- set out = [] -%}
@@ -131,8 +135,10 @@ _flux_move_workloads: >-
         'replicas': noted | int if noted is not none else w.spec.replicas | default(1)}) -%}
   {%- endfor -%}
   {{ out | selectattr('replicas', '>', 0) | list }}
-# A move notes each workload's replicas here before scaling it to zero.
+# A move notes each workload's replicas here before scaling it to zero, as a
+# field manager Flux leaves alone; it takes over any whose name starts with kubectl.
 _flux_replicas_annotation: homelab.local/replicas
+_flux_mover_field_manager: label-mover
 _flux_resume_workloads: >-
   {%- set out = [] -%}
   {%- for w in (_flux_resume_reads.results[0].stdout | from_json)['items'] -%}

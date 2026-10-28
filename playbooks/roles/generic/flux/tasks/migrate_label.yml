@@ -67,10 +67,12 @@
         fail_msg: "{{ move.label }}: {{ move.from }} is not a ready k3s node, so its pods can't be stopped; nothing was changed."
         quiet: yes
 
-    - name: "{{ move.label }} | check its volumes are where the provisioner puts them"
+    - name: "{{ move.label }} | check its volumes are on {{ move.from }}, where the provisioner puts them"
       assert:
-        that: item.path == k3s_local_storage_path ~ '/' ~ move.label ~ '/' ~ item.claim ~ '/data'
-        fail_msg: "{{ move.label }}: a volume is not at {{ k3s_local_storage_path }}/<namespace>/<claim>/data; nothing was changed."
+        that:
+          - item.node == move.from
+          - item.path == k3s_local_storage_path ~ '/' ~ move.label ~ '/' ~ item.claim ~ '/data'
+        fail_msg: "{{ move.label }}: a volume is not on {{ move.from }} at {{ k3s_local_storage_path }}/<namespace>/<claim>/data; nothing was changed."
         quiet: yes
       loop: "{{ _flux_move_pvs | selectattr('path') | list }}"
       loop_control:
@@ -90,7 +92,7 @@
       changed_when: false
       failed_when: false
       no_log: true
-      when: not docker_migrate_force | bool
+      when: not _flux_move_overwrite
 
     - name: "{{ move.label }} | refuse to overwrite data on {{ move.to }}"
       fail:
@@ -98,7 +100,7 @@
           {{ move.label }}: {{ move.to }} already has data in a volume folder. Set
           docker_migrate_force=yes to overwrite it; nothing was changed.
       when:
-        - not docker_migrate_force | bool
+        - not _flux_move_overwrite
         - _flux_move_targets.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list | length > 0
 
     - name: "{{ move.label }} | stop it, copy its volumes and move it to {{ move.to }}"
@@ -116,7 +118,7 @@
         - name: "{{ move.label }} | note its workloads' replicas on them"
           command: >-
             k3s kubectl -n {{ move.label }} annotate {{ item.kind }} {{ item.name | quote }}
-            {{ _flux_replicas_annotation }}={{ item.replicas }} --overwrite
+            {{ _flux_replicas_annotation }}={{ item.replicas }} --overwrite --field-manager={{ _flux_mover_field_manager }}
           loop: "{{ _flux_move_workloads }}"
           loop_control:
             label: "{{ move.label }}"
@@ -191,7 +193,7 @@
               shell: >-
                 set -eo pipefail;
                 install -d -o root -g root -m 0700 {{ (item | dirname | dirname) | quote }} {{ (item | dirname) | quote }};
-                {% if docker_migrate_force | bool %}[ ! -e {{ item | quote }} ] || find {{ item | quote }} -mindepth 1 -delete;{% endif %}
+                {% if _flux_move_overwrite %}[ ! -e {{ item | quote }} ] || find {{ item | quote }} -mindepth 1 -delete;{% endif %}
                 mkdir -p {{ item | quote }};
                 tar --numeric-owner -xpf {{ (docker_migrate_transit_dir ~ '/k3s-' ~ move.label ~ '-' ~ index ~ '.tar') | quote }}
                 -C {{ item | quote }}
