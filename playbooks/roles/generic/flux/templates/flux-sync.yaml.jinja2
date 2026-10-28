@@ -36,8 +36,3 @@ spec:
   prune: true
   wait: true
   timeout: {{ flux_apply_timeout | to_json }}
-  postBuild:
-    substitute:
-{% for label, node in _flux_label_nodes | dictsort %}
-      node_{{ label }}: {{ node | to_json }}
-{% endfor %}

@@ -115,7 +115,8 @@ spec:
                 loadBalancer:
                   serversTransport: swarm
                   servers:
-                    - url: https://${node_edge}:7443
+                    # Traefik renders the file as a Go template; the Swarm Traefik publishes 7443 on this node.
+                    - url: https://{{ env `NODE_IP` }}:7443
             serversTransports:
               swarm:
                 insecureSkipVerify: true
@@ -139,6 +140,11 @@ spec:
             resolvers:
               - 1.1.1.1:53
               - 1.0.0.1:53
+    env:
+      - name: NODE_IP
+        valueFrom:
+          fieldRef:
+            fieldPath: status.hostIP
     envFrom:
       - secretRef:
           name: traefik-cloudflare
@@ -146,11 +152,11 @@ spec:
       enabled: true
       existingClaim: traefik
     nodeSelector:
-      kubernetes.io/hostname: ${node_edge}
+      homelab.local/edge: "true"
     accessLog:
       enabled: true
     service:
       labels:
-        svccontroller.k3s.cattle.io/lbpool: ${node_edge}
+        svccontroller.k3s.cattle.io/lbpool: edge
       spec:
         externalTrafficPolicy: Local

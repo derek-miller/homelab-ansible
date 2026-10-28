@@ -236,6 +236,10 @@
     - _flux_held_nodes[item] != _flux_inventory_nodes[item]
     - not docker_migrate_labels | bool
 
+- include_tasks: place.yml
+  vars:
+    _flux_place_nodes: "{{ _flux_label_placement }}"
+
 - name: write the sync manifest
   template:
     src: flux-sync.yaml.jinja2
@@ -246,23 +250,14 @@
   register: _flux_sync
   no_log: true
 
-# Otherwise the apps can be applied with the previous label nodes.
 - name: wait for k3s to apply the sync manifest
-  when: _flux_sync is changed and not ansible_check_mode
-  block:
-    - name: hash the sync manifest
-      stat:
-        path: "{{ _flux_manifests_dir }}/flux-sync.yaml"
-        checksum_algorithm: sha256
-      register: _flux_sync_file
-
-    - name: wait for k3s to apply the sync manifest
-      command: k3s kubectl -n kube-system get addon flux-sync -o 'jsonpath={.spec.checksum}'
-      register: _flux_sync_addon
-      until: _flux_sync_addon.stdout == _flux_sync_file.stat.checksum
-      retries: 12
-      delay: 5
-      changed_when: false
+  command: k3s kubectl -n flux-system get kustomization apps -o name
+  register: _flux_sync_applied
+  until: _flux_sync_applied is succeeded
+  retries: 12
+  delay: 5
+  changed_when: false
+  when: not ansible_check_mode
 
 - include_tasks: deliver.yml
-  when: not (ansible_check_mode and not _flux_apps_exists)
+  when: not (ansible_check_mode and _flux_sync is changed)

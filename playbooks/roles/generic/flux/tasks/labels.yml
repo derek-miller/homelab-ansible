@@ -1,17 +1,17 @@
 ---
-- name: check every label can be a Flux variable
+- name: check every label can name a namespace
   assert:
-    that: _flux_inventory_nodes.keys() | reject('match', '^[a-z][a-z0-9_]*$') | list | length == 0
-    fail_msg: "[docker_labels] words must be lowercase letters, digits and underscores."
+    that: _flux_inventory_nodes.keys() | reject('match', '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$') | list | length == 0
+    fail_msg: "[docker_labels] words name k3s namespaces, so they must be lowercase letters, digits and hyphens."
     quiet: yes
 
-- name: read where each label's apps run
+- name: read which node carries each label
   command: >-
-    k3s kubectl -n flux-system get kustomization apps --ignore-not-found
-    -o 'jsonpath={.metadata.name} {.spec.postBuild.substitute}'
-  register: _flux_label_record
+    k3s kubectl get nodes
+    -o 'jsonpath={range .items[*]}{.metadata.name} {.metadata.labels}{"\n"}{end}'
+  register: _flux_node_labels
   changed_when: false
-  failed_when: not ansible_check_mode and _flux_label_record.rc != 0
+  failed_when: not ansible_check_mode and _flux_node_labels.rc != 0
   check_mode: no
 
 - name: read the node each label's volumes are on
