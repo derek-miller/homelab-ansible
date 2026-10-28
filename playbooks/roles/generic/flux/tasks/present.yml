@@ -232,9 +232,14 @@
       {{ _flux_inventory_nodes[item] }}. Its k3s apps stay put until a run with
       docker_migrate_labels=yes.
   loop: "{{ _flux_inventory_nodes.keys() | sort }}"
-  when:
-    - _flux_held_nodes[item] != _flux_inventory_nodes[item]
-    - not docker_migrate_labels | bool
+  when: _flux_held_nodes[item] != _flux_inventory_nodes[item]
+
+- name: refuse to deploy while a label move is unfinished
+  fail:
+    msg: >-
+      A label move stopped part way, leaving {{ _flux_stopped_labels | join(', ') }} scaled down.
+      Run the move again with docker_migrate_labels=yes to finish it.
+  when: _flux_stopped_labels | length > 0
 
 - include_tasks: place.yml
   vars:

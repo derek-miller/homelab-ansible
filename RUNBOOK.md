@@ -41,9 +41,9 @@ Skipping the first swarm manager (rackvm1) skips the stack deploy too, which run
 
 ## Moving a swarm workload to another host
 
-Swarm does not move local volumes, so a move happens in two halves: copy the data while the services are stopped, and only then let the label follow. `generic/docker/swarm` does both, driven by the inventory.
+Swarm does not move local volumes, so a move happens in two halves: copy the data while the services are stopped, and only then let the label follow. `generic/docker/swarm` does both, driven by the inventory, and the label's k3s apps move first in the same run (see [Moving a label](#apps-on-k3s) under Apps on k3s).
 
-Move the label to the new host in `[docker_labels]`, then:
+[Pause deploys](#pausing-deploys) for the move. Move the label to the new host in `[docker_labels]`, then:
 
 ```bash
 make run tags=docker-swarm ANSIBLE_FLAGS="-e docker_migrate_labels=yes"
@@ -142,13 +142,15 @@ The deploy copies the tree to rackvm1, decrypting vaulted files on the way, pins
 
 **Volumes.** An app asks for a volume with a PersistentVolumeClaim of `storageClassName: local-retain`, and a chart is given that class in its values. k3s's local-path provisioner makes the folder, `/mnt/data/volumes/<namespace>/<claim>/data`, on the node the pod is scheduled to, so the pod's node selector decides where it lives. The class keeps the folder when its claim goes, pruned or not, and so does removing k3s from a node; k3s's own `local-path` class would delete it, so the cluster refuses a new claim on any class but `local-retain` unless it names its volume, a chart's claims included. So removing an app leaves its volume Released and its folder in place: once the data isn't wanted, `sudo kubectl delete pv <volume>` on rackvm1 and remove the folder.
 
-**Moving a label.** A label moved in `[docker_labels]` stays on its node, so its k3s apps stay where their data is: each deploy reports it. To move them:
+**Moving a label.** A label moved in `[docker_labels]` stays on its node, so its k3s apps stay where their data is: each deploy reports it. The Swarm move command (see [Moving a swarm workload](#moving-a-swarm-workload-to-another-host)) moves them first, one label at a time, and the same command with `tags=k3s-migrate-labels` moves only them. A label with nothing on k3s just moves. For any other it:
 
-1. On rackvm1, `sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml flux suspend kustomization apps -n flux-system`.
-2. Delete the suite's PersistentVolumeClaims and PersistentVolumes with `--wait=false`, then its pods.
-3. Copy each volume's folder to the same path on the new node as root, keeping owners.
-4. `make run hosts=rackvm1 tags=flux ANSIBLE_FLAGS="-e docker_migrate_labels=yes"` moves the label, then fails at the apply, since the sync is suspended.
-5. `flux resume kustomization apps -n flux-system`, the same way as step 1. The pods start on the new node and the provisioner gives them the copied folders.
+1. checks that both nodes are in the run and Ready, their data disks and the transit share are mounted, and the new node's folders are empty, unless `docker_migrate_force=yes`, which overwrites them;
+2. pauses Flux and the label's charts, notes each workload's replicas on it and scales it to zero, and deletes the label's volume claims and volumes;
+3. copies each of the label's folders on the old node through `docker_migrate_transit_dir` as a tar archive, as the Swarm move does, then compares the two copies' files, owners and modes;
+4. moves the label, resumes Flux, scales the workloads back and upgrades the charts together, so the pods come up on the new node with the copied folders;
+5. renames the old folders `data.moved-<time>` for you to remove once you're happy.
+
+A failure before step 4 leaves the label where it was, so the apps come back where their data still is. A move cut off part way, by Ctrl-C or a lost connection, leaves the label's workloads scaled down, and every deploy refuses to run until the same move command runs again and finishes it, overwriting its own partial copy. Cut off after the label moved, it also leaves the old folders unrenamed and its `k3s-<label>-<n>.tar` archives in the transit folder, for you to remove. A move onto a node that isn't yet a Ready k3s node stops the run before anything moves, Swarm included; join it first with `make run hosts=<node> tags=k3s`. `edge` moves only with the full command, never `tags=k3s-migrate-labels`, since the k3s Traefik passes what it doesn't route to the Swarm Traefik on its own node; it also needs the UDM's forwards pointed at the new node.
 
 **Ports on the rackvms.** A port clients reach on a rackvm's own address is a `type: LoadBalancer` Service with `externalTrafficPolicy: Local` and the label `svccontroller.k3s.cattle.io/lbpool: <label>`, its namespace. Each deploy also makes a label's node the ServiceLB pool of that name, and the cluster refuses a LoadBalancer without its namespace's pool, since ServiceLB would otherwise publish it on all five. ServiceLB follows a label that moves, and the Service's address follows its pods. The app sees each LAN client's real address, so its policy admits them by `ipBlock`; a client on the node's Tailscale address or localhost arrives from the Service's ServiceLB pod in `kube-system`, labelled `svccontroller.k3s.cattle.io/svcname` and `svcnamespace`. ServiceLB takes the port on every address of that node ahead of anything listening there, so pick one `ss -lntu` shows free, and remove a Swarm host-mode publish of the same port in the same change. An app that trusts a forward-auth header or has no login of its own is never a LoadBalancer.
 

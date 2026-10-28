@@ -1,0 +1,44 @@
+---
+- include_tasks: labels.yml
+
+- name: read which k3s nodes are ready
+  command: >-
+    k3s kubectl get nodes
+    -o 'jsonpath={range .items[*]}{.metadata.name}={.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}'
+  register: _flux_node_status
+  changed_when: false
+  check_mode: no
+
+- name: report each k3s label move
+  debug:
+    msg: "{{ item.label }}: {{ item.from }} -> {{ item.to }}"
+  loop: "{{ _flux_moves }}"
+  loop_control:
+    label: "{{ item.label }}"
+
+# The k3s plays come after this one, so a node can't join and take a label in one run.
+- name: refuse a move onto a node that isn't a ready k3s node
+  fail:
+    msg: >-
+      {{ item.label }}: {{ item.to }} is not a ready k3s node. Join it first with
+      `make run hosts={{ item.to }} tags=k3s`; nothing was moved.
+  loop: "{{ _flux_moves | rejectattr('to', 'in', _flux_ready_nodes) | list }}"
+  loop_control:
+    label: "{{ item.label }}"
+
+# A move cut off after its label moved isn't pending any more, but its apps are still stopped.
+- include_tasks: migrate_resume.yml
+  loop: >-
+    {{ _flux_stopped_labels | reject('in', _flux_moves | map(attribute='label') | list)
+       | map('community.general.dict_kv', 'label') | list }}
+  loop_control:
+    loop_var: move
+    label: "{{ move.label }}"
+  when: not ansible_check_mode
+
+- include_tasks: migrate_label.yml
+  loop: "{{ _flux_moves }}"
+  loop_control:
+    loop_var: move
+    label: "{{ move.label }}: {{ move.from }} -> {{ move.to }}"
+  when: not ansible_check_mode

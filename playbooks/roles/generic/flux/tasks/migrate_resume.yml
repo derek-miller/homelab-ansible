@@ -1,0 +1,62 @@
+---
+# Brings back the apps a move stopped; safe to run again, so it also finishes a move cut off part way.
+- name: "{{ move.label }} | bring its apps back"
+  environment:
+    KUBECONFIG: "{{ _flux_kubeconfig }}"
+  block:
+    # Before Flux resumes, which it does with the move's notes on the workloads.
+    - name: "{{ move.label }} | read its workloads and charts"
+      command: "k3s kubectl -n {{ move.label }} get {{ item }} -o json"
+      loop:
+        - deployments,statefulsets
+        - helmreleases.helm.toolkit.fluxcd.io
+      register: _flux_resume_reads
+      changed_when: false
+      no_log: true
+
+    - name: "{{ move.label }} | resume Flux"
+      command: flux resume kustomization apps -n flux-system --wait=false
+
+    # A pod whose claim is not back yet waits for it.
+    - name: "{{ move.label }} | put its workloads back"
+      command: "k3s kubectl -n {{ move.label }} scale {{ item.kind }} {{ item.name | quote }} --replicas={{ item.replicas }}"
+      loop: "{{ _flux_resume_workloads }}"
+      loop_control:
+        label: "{{ move.label }}"
+      no_log: true
+
+    # A chart renders a deleted claim again only on an upgrade, and one chart's pods may wait on another's.
+    - name: "{{ move.label }} | resume its charts and upgrade them together"
+      shell: |
+        rc=0
+        for hr in {{ _flux_resume_charts | map('quote') | join(' ') }}; do
+          { flux resume helmrelease "$hr" -n {{ move.label | quote }} --wait=false &&
+            flux reconcile helmrelease "$hr" -n {{ move.label | quote }} --force; } > /dev/null 2>&1 &
+        done
+        for job in $(jobs -p); do wait "$job" || rc=1; done
+        exit $rc
+      args:
+        executable: /bin/bash
+      when: _flux_resume_charts | length > 0
+      no_log: true
+
+    - name: "{{ move.label }} | clear the move's notes"
+      command: >-
+        k3s kubectl -n {{ move.label }} annotate {{ item.kind }} {{ item.name | quote }}
+        {{ _flux_replicas_annotation }}- --field-manager={{ _flux_mover_field_manager }}
+      loop: "{{ _flux_resume_workloads }}"
+      loop_control:
+        label: "{{ move.label }}"
+      no_log: true
+
+    - name: "{{ move.label }} | wait for its workloads"
+      command: "k3s kubectl -n {{ move.label }} rollout status {{ item.kind }} {{ item.name | quote }} --timeout=5m"
+      loop: "{{ _flux_resume_workloads }}"
+      loop_control:
+        label: "{{ move.label }}"
+      changed_when: false
+      no_log: true
+
+    - name: "{{ move.label }} | wait for Flux to be healthy"
+      command: "k3s kubectl -n flux-system wait kustomization/apps --for=condition=Ready --timeout={{ flux_apply_timeout }}"
+      changed_when: false
