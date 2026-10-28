@@ -31,7 +31,7 @@ rackvm[1:5]
 gianos-raspi1  smb_share_config=unas_over_ts smb_share_names='["Backups"]'
 mertins-raspi1 smb_share_config=unas_over_ts smb_share_names='["Backups"]'
 quinn-raspi1   smb_share_config=unas_over_ts smb_share_names='["Backups"]'
-rackvm1        smb_share_config=unas         smb_share_names='["Backups", "Container"]'
+rackvm1        smb_share_config=unas         smb_share_names='["Backups"]'
 rackvm2        smb_share_config=unas         smb_share_names='["Backups"]'
 rackvm3        smb_share_config=unas         smb_share_names='["Backups", "Public"]'
 rackvm[4:5]    smb_share_config=unas         smb_share_names='["Backups"]'
