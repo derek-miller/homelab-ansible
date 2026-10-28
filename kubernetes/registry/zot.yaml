@@ -75,7 +75,8 @@ spec:
                   "repositories": ["**"],
                   "deleteReferrers": true,
                   "deleteUntagged": true,
-                  "keepTags": [{ "mostRecentlyPushedCount": 3 }]
+                  "keepTags": [{ "mostRecentlyPushedCount": 3 }],
+                  "keepUntagged": { "pushedWithin": "720h", "pulledWithin": "720h" }
                 }
               ]
             }

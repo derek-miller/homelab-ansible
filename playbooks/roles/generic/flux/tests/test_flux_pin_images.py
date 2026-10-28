@@ -261,7 +261,7 @@ with tempfile.TemporaryDirectory() as root:
         with open(skipped, "w") as f:
             f.write("image: should-not-resolve:1\n")
 
-    pinned, images, errors = pin.pin_tree(root, fake)
+    pinned, images, errors, left = pin.pin_tree(root, fake)
     with open(os.path.join(root, "web", "app.yaml")) as f:
         out = f.read()
     with open(os.path.join(root, "web", "twice.yml")) as f:
@@ -295,10 +295,28 @@ with tempfile.TemporaryDirectory() as root:
             raise pin.ResolveError("HTTP 404")
         return DIGEST
 
-    pinned, images, errors = pin.pin_tree(root, failing)
+    pinned, images, errors, left = pin.pin_tree(root, failing)
     check("errors: name the file and line", errors, ["media.vault.yaml:4: could not resolve the image: HTTP 404"])
     check("errors: never name the image", any("secret-app" in e for e in errors), False)
     check("errors: still pin the images that resolved", pinned, 1)
+
+with tempfile.TemporaryDirectory() as root:
+    with open(os.path.join(root, "app.yaml"), "w") as f:
+        f.write("---\nspec:\n  containers:\n    - image: registry.homelab.local/app\n    - image: ok:1\n")
+
+    def registry_down(ref):
+        if ref.startswith("registry.homelab.local/"):
+            raise pin.ResolveError("URLError")
+        return DIGEST
+
+    pinned, images, errors, left = pin.pin_tree(root, registry_down, {"registry.homelab.local"})
+    with open(os.path.join(root, "app.yaml")) as f:
+        out = f.read()
+    check("lenient: an unreachable mirrored registry is not an error", errors, [])
+    check("lenient: its image keeps its tag", "    - image: registry.homelab.local/app\n" in out, True)
+    check("lenient: counts the images left on their tag", (pinned, left), (1, 1))
+    pinned, images, errors, left = pin.pin_tree(root, registry_down)
+    check("lenient: only for the registries named", len(errors), 1)
     check("main: a missing directory is a usage error",
           pin.main(["flux-pin-images.py", os.path.join(root, "missing")]), 2)
 

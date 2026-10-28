@@ -29,7 +29,7 @@
 
 - name: Note a registry login that failed
   set_fact:
-    docker_build_images_failed: "{{ docker_build_images_failed | default([]) + ['image registry (login)'] }}"
+    docker_build_images_push_failed: "{{ docker_build_images_push_failed | default([]) + ['every image (login)'] }}"
   when: _registry_login.failed_when_suppressed_exception is defined
 
 - name: Build requested docker images

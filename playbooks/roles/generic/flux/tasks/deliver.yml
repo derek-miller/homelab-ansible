@@ -63,8 +63,16 @@
         executable: python3
       environment:
         FLUX_PIN_MIRRORS: "{{ ({flux_image_registry.name: flux_image_registry.host} if flux_image_registry else {}) | to_json }}"
+      register: _flux_pin
       changed_when: false
       check_mode: no
+
+    - name: report the images left on their tag
+      debug:
+        msg: >-
+          {{ (_flux_pin.stdout | from_json).left }} image(s) from the cluster's own registry
+          kept their tag, since it could not resolve them; the next deploy tries again.
+      when: (_flux_pin.stdout | from_json).left | default(0) > 0
 
     - name: compare the apps with the last ones pushed
       command: >-
