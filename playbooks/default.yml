@@ -636,7 +636,7 @@
         {{ _local_builds.images
            | rejectattr('Id', 'in', _local_builds.containers | map(attribute='ImageID') | list) | list }}
       loop_control:
-        label: "{{ item.RepoTags | default([], true) | join(',') or item.Id }}"
+        label: "{{ item.RepoTags | default([], true) | reject('search', '/') | join(',') or item.Id }}"
       when: item.RepoTags | default([], true) | select('search', ':latest$') | list | length == 0
   tags:
     - docker
@@ -750,6 +750,13 @@
           {{ docker_build_images_failed | join(', ') }} kept the previous build;
           the error is further up.
       when: docker_build_images_failed | default([]) | length > 0
+
+    - name: fail if an image could not be pushed
+      fail:
+        msg: >-
+          {{ docker_build_images_push_failed | join(', ') }} did not reach the image
+          registry; as root on this host, docker login and docker push say why.
+      when: docker_build_images_push_failed | default([]) | length > 0
   tags:
     - docker
     - docker-build-images

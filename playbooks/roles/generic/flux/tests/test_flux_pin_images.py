@@ -164,6 +164,33 @@ def basic_only(method, url, auth):
 check("resolve: basic auth is refused, not guessed",
       run_error(basic_only, "reg.example/o/app:6"), "the registry asked for basic auth")
 
+
+def basic_with_auth(method, url, auth):
+    if auth == "Basic dXNlcjpwYXNz":
+        return Response(Docker_Content_Digest=DIGEST)
+    return http_error(url, 401, WWW_Authenticate='Basic realm="zot"')
+
+
+reg = Registry(basic_with_auth)
+check("resolve: a mirror's name is asked of its host, with that host's basic credentials",
+      pin.resolve("registry.homelab.local/app:latest", reg,
+                  mirrors={"registry.homelab.local": "registry.example"},
+                  auths={"registry.example": "dXNlcjpwYXNz"}), DIGEST)
+check("resolve: asks the mirror's host for the image",
+      [c[1] for c in reg.calls], ["https://registry.example/v2/app/manifests/latest"] * 2)
+try:
+    pin.resolve("reg.example/o/app:6b", Registry(basic_with_auth), auths={"registry.example": "dXNlcjpwYXNz"})
+    other_host = "resolved"
+except pin.ResolveError as e:
+    other_host = str(e)
+check("resolve: basic credentials for another host are not sent", other_host, "the registry asked for basic auth")
+
+with tempfile.TemporaryDirectory() as config:
+    with open(os.path.join(config, "config.json"), "w") as f:
+        json.dump({"auths": {"registry.example": {"auth": "dXNlcjpwYXNz"}, "10.43.0.5:5000": {}}}, f)
+    check("load_auths: keeps each host's basic credentials", pin.load_auths(config), {"registry.example": "dXNlcjpwYXNz"})
+    check("load_auths: a missing config is no credentials", pin.load_auths(os.path.join(config, "missing")), {})
+
 flaky_count = {"n": 0}
 
 
@@ -234,7 +261,7 @@ with tempfile.TemporaryDirectory() as root:
         with open(skipped, "w") as f:
             f.write("image: should-not-resolve:1\n")
 
-    pinned, images, errors = pin.pin_tree(root, fake)
+    pinned, images, errors, left = pin.pin_tree(root, fake)
     with open(os.path.join(root, "web", "app.yaml")) as f:
         out = f.read()
     with open(os.path.join(root, "web", "twice.yml")) as f:
@@ -268,10 +295,28 @@ with tempfile.TemporaryDirectory() as root:
             raise pin.ResolveError("HTTP 404")
         return DIGEST
 
-    pinned, images, errors = pin.pin_tree(root, failing)
+    pinned, images, errors, left = pin.pin_tree(root, failing)
     check("errors: name the file and line", errors, ["media.vault.yaml:4: could not resolve the image: HTTP 404"])
     check("errors: never name the image", any("secret-app" in e for e in errors), False)
     check("errors: still pin the images that resolved", pinned, 1)
+
+with tempfile.TemporaryDirectory() as root:
+    with open(os.path.join(root, "app.yaml"), "w") as f:
+        f.write("---\nspec:\n  containers:\n    - image: registry.homelab.local/app\n    - image: ok:1\n")
+
+    def registry_down(ref):
+        if ref.startswith("registry.homelab.local/"):
+            raise pin.ResolveError("URLError")
+        return DIGEST
+
+    pinned, images, errors, left = pin.pin_tree(root, registry_down, {"registry.homelab.local"})
+    with open(os.path.join(root, "app.yaml")) as f:
+        out = f.read()
+    check("lenient: an unreachable mirrored registry is not an error", errors, [])
+    check("lenient: its image keeps its tag", "    - image: registry.homelab.local/app\n" in out, True)
+    check("lenient: counts the images left on their tag", (pinned, left), (1, 1))
+    pinned, images, errors, left = pin.pin_tree(root, registry_down)
+    check("lenient: only for the registries named", len(errors), 1)
     check("main: a missing directory is a usage error",
           pin.main(["flux-pin-images.py", os.path.join(root, "missing")]), 2)
 

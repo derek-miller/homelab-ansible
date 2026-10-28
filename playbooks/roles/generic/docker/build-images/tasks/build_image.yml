@@ -186,6 +186,44 @@
     force_tag: yes
   when: _build_id not in ['', _latest_id]
 
+# Every run, so a registry that lost a build gets it back.
+- name: Push the {{ image_name }} build to the image registry
+  community.docker.docker_image:
+    name: "{{ image_config.image_name }}:{{ image_config.image_tag }}"
+    repository: "{{ docker_build_images_registry }}/{{ image_config.image_name }}:{{ item }}"
+    source: local
+    push: true
+    force_tag: true
+  loop:
+    - "{{ image_config.image_tag }}"
+    - latest
+  register: _registry_push
+  failed_when: false
+  no_log: true
+  when:
+    - _build_id != ''
+    - docker_build_images_registry | length > 0
+    - _registry_login.failed_when_suppressed_exception is not defined
+    - not ansible_check_mode
+
+# Left in place, the deploy log would print these tags, and with them the domain.
+- name: Drop the local registry tags of {{ image_name }}
+  community.docker.docker_image:
+    name: "{{ docker_build_images_registry }}/{{ image_config.image_name }}:{{ item }}"
+    state: absent
+  loop:
+    - "{{ image_config.image_tag }}"
+    - latest
+  changed_when: false
+  failed_when: false
+  no_log: true
+  when: _registry_push is not skipped
+
+- name: Note a {{ image_name }} build the registry did not take
+  set_fact:
+    docker_build_images_push_failed: "{{ docker_build_images_push_failed | default([]) + [image_name] }}"
+  when: _registry_push.results | default([]) | selectattr('failed_when_suppressed_exception', 'defined') | list | length > 0
+
 # Decided by what runs, not by this run's retag, so a restart that a run missed,
 # or that had no swarm manager to go through, is made by the next one.
 - name: Roll the swarm services still on an older {{ image_name }} build

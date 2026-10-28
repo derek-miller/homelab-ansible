@@ -27,3 +27,8 @@ flux_web_issuer_url: ""
 flux_web_client_id: ""
 flux_web_client_secret: ""
 flux_web_admin: ""
+
+# A registry whose images the deploy pins as well: {name, host, username,
+# password}, where name is how kubernetes/ refers to it and host is where it
+# answers. Empty pins only public registries.
+flux_image_registry: {}

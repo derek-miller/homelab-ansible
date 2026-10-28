@@ -51,7 +51,7 @@ make galaxy-install                   # Reinstall Galaxy roles/collections
 - Vault variables are referenced indirectly: `docker_stack_definition: "{{ vault_docker_stack_definition }}"`. Layering is role defaults → group_vars → host_vars.
 - The `project-files` role deploys from `playbooks/files/plaintext/{hostname}/` and `playbooks/files/vault/{hostname}/` to target paths, keyed by hostname.
 - Traefik labels on swarm services carry routing, OAuth middleware, and TLS.
-- Images the `generic/docker/build-images` role makes are tagged by a hash of their inputs (files, base image digest or source commit) and moved onto `<name>:latest`, which is what runs them. Nothing gets a version bump; a changed input rebuilds, and the next run with a swarm manager in it restarts the swarm services on it, unless the image sets `rollout: false` (gha-runner, where a restart would cancel jobs).
+- Images the `generic/docker/build-images` role makes are tagged by a hash of their inputs (files, base image digest or source commit) and moved onto `<name>:latest`, which is what runs them. Each build is also pushed to the cluster's image registry, where apps on k3s name it `registry.homelab.local/<name>`. Nothing gets a version bump; a changed input rebuilds, and the next run with a swarm manager in it restarts the swarm services on it, unless the image sets `rollout: false` (gha-runner, where a restart would cancel jobs).
 
 ## Runbook
 

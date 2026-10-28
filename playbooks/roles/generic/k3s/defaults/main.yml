@@ -33,3 +33,7 @@ k3s_kube_proxy_args:
 
 # Merged over the generated /etc/rancher/k3s/config.yaml.
 k3s_config_extra: {}
+
+# Written to /etc/rancher/k3s/registries.yaml when set: registry mirrors and
+# their credentials, in k3s's own format. k3s reads it only when it starts.
+k3s_registries: {}
