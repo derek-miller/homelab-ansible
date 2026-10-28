@@ -631,9 +631,6 @@
 - hosts: k3s_server
   roles:
     - role: generic/k3s
-    - role: generic/flux
-      tags:
-        - flux
     - role: generic/k3s-stats
       tags:
         - k3s-stats
@@ -649,6 +646,14 @@
         - k3s-stats
   tags:
     - k3s
+
+# After the agents, so a node that joins in this run has its labels before the apps go on.
+- hosts: k3s_server
+  roles:
+    - role: generic/flux
+  tags:
+    - k3s
+    - flux
 
 - hosts: control4-driver-scraper
   roles:
