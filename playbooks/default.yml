@@ -459,6 +459,20 @@
     - docker-compose
     - docker-build-images
 
+# Ahead of the swarm play, so a refused k3s move stops the run before Swarm moves anything.
+- hosts: k3s_server
+  any_errors_fatal: true
+  tasks:
+    - import_role:
+        name: generic/flux
+        tasks_from: migrate.yml
+      when: docker_migrate_labels | bool
+  tags:
+    - docker
+    - docker-swarm
+    - docker-migrate-labels
+    - k3s-migrate-labels
+
 - hosts: docker_swarm_manager:docker_swarm_worker
   roles:
     - role: generic/docker/swarm

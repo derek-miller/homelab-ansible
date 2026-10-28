@@ -1,0 +1,28 @@
+---
+- include_tasks: labels.yml
+
+- name: read which k3s nodes are ready
+  command: >-
+    k3s kubectl get nodes
+    -o 'jsonpath={range .items[*]}{.metadata.name}={.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}'
+  register: _flux_node_status
+  changed_when: false
+  check_mode: no
+
+# A node that joins in this run is only Ready once its own play has run, so
+# moving onto a new node takes a second run.
+- name: report each k3s label move
+  debug:
+    msg: >-
+      {{ item.label }}: {{ item.from }} -> {{ item.to }}{{ '' if item.to in _flux_ready_nodes
+      else ', waiting for ' ~ item.to ~ ' to be a ready k3s node; run again once it is' }}
+  loop: "{{ _flux_moves }}"
+  loop_control:
+    label: "{{ item.label }}"
+
+- include_tasks: migrate_label.yml
+  loop: "{{ _flux_moves | selectattr('to', 'in', _flux_ready_nodes) | list }}"
+  loop_control:
+    loop_var: move
+    label: "{{ move.label }}: {{ move.from }} -> {{ move.to }}"
+  when: not ansible_check_mode
