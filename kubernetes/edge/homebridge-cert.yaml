@@ -1,0 +1,80 @@
+---
+# Pushes Traefik's certificate to the Homebridge UI on rackmini1 every hour, where
+# homebridge-tls-install takes it. The target, the domain, the key and the
+# egress rule to rackmini1 are in homebridge-cert.vault.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homebridge-cert
+  namespace: edge
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: homebridge-cert
+  template:
+    metadata:
+      labels:
+        app: homebridge-cert
+    spec:
+      nodeSelector:
+        homelab.local/edge: "true"
+      containers:
+        - name: dumper
+          image: ldez/traefik-certs-dumper:latest
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              apk add --no-cache jq openssh-client > /dev/null
+              until [ -s /acme/acme.json ] && [ "$(jq '[.[].Certificates | length] | add' /acme/acme.json)" != 0 ]; do
+                sleep 5
+              done
+              (
+                while sleep 60; do
+                  cat "/certs/certs/$DOMAIN.crt" "/certs/private/$DOMAIN.key" |
+                    ssh -T -i /ssh/id_ed25519 -o UserKnownHostsFile=/ssh/known_hosts -o BatchMode=yes "$TARGET" ||
+                    echo "push to Homebridge failed"
+                  sleep 3540
+                done
+              ) &
+              exec traefik-certs-dumper file --version v2 --watch --source /acme/acme.json --dest /certs
+          env:
+            - name: DOMAIN
+              valueFrom:
+                secretKeyRef:
+                  name: homebridge-cert
+                  key: domain
+            - name: TARGET
+              valueFrom:
+                secretKeyRef:
+                  name: homebridge-cert
+                  key: target
+          volumeMounts:
+            - name: acme
+              mountPath: /acme
+              readOnly: true
+            - name: certs
+              mountPath: /certs
+            - name: ssh
+              mountPath: /ssh
+              readOnly: true
+      volumes:
+        - name: acme
+          persistentVolumeClaim:
+            claimName: traefik
+            readOnly: true
+        - name: certs
+          emptyDir: {}
+        - name: ssh
+          secret:
+            secretName: homebridge-cert
+            defaultMode: 0400
+            items:
+              - key: id_ed25519
+                path: id_ed25519
+              - key: known_hosts
+                path: known_hosts

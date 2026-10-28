@@ -69,9 +69,6 @@ project_files:
     dest: /etc/openclaw-webhook-proxy/
     owner: "1000"
     mode: "0400"
-  - src: "vault/{{ inventory_hostname }}/etc/traefik-certs-dumper/"
-    dest: /etc/traefik-certs-dumper/
-    mode: "0400"
 
 docker_stack_definition: "{{ vault_docker_stack_definition }}"
 
