@@ -23,21 +23,38 @@ metadata:
   name: flux-web
   namespace: flux-system
 spec:
-  type: NodePort
-  # Only the operator's node answers, and it keeps the client's address.
-  externalTrafficPolicy: Local
   selector:
     app.kubernetes.io/instance: flux-operator
     app.kubernetes.io/name: flux-operator
   ports:
     - port: 9080
       targetPort: 9080
-      nodePort: 30980
+---
+# A built-in Ingress, not a Traefik IngressRoute, so this applies before Flux has installed Traefik's CRDs.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flux-web
+  namespace: flux-system
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  rules:
+    - host: {{ flux_web_base_url | urlsplit('hostname') | to_json }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: flux-web
+                port:
+                  number: 9080
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-swarm-traefik
+  name: allow-edge-traefik
   namespace: flux-system
 spec:
   podSelector:
@@ -47,10 +64,13 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    # Swarm containers on the operator's node arrive from docker_gwbridge.
     - from:
-        - ipBlock:
-            cidr: 172.19.0.0/16
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: edge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
       ports:
         - protocol: TCP
           port: 9080
