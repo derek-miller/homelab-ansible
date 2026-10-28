@@ -83,7 +83,9 @@
 # If another subsystem (e.g. udisks2's GUI auto-mount) has the device
 # mounted at a different path, our fstab entry would be ignored until
 # the next reboot. Unmount the device from any stale location first so
-# the ansible.posix.mount below can land it at the canonical path.
+# the ansible.posix.mount below can land it at the canonical path. Only
+# mounts of the device's root count: a bind mount of one of its folders,
+# like the kubelet's for a local PersistentVolume, isn't a stale mount.
 - name: discover currently-mounted paths for managed devices
   shell: |
     set -eu
@@ -94,7 +96,8 @@
       *)       dev="$src" ;;
     esac
     [ -n "$dev" ] || exit 0
-    /bin/findmnt -n -o TARGET --source "$dev" 2>/dev/null || true
+    /bin/findmnt -l -n -o FSROOT,TARGET --source "$dev" 2>/dev/null \
+      | awk '$1 == "/" { sub(/^[^ ]+ +/, ""); print }' || true
   register: _disk_mount_current
   changed_when: false
   loop: "{{ disk_mounts }}"
