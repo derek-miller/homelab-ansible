@@ -241,6 +241,17 @@
       Run the move again with docker_migrate_labels=yes to finish it.
   when: _flux_stopped_labels | length > 0
 
+- include_tasks: swarm_copy_state.yml
+  when: swarm_volume_copies | length > 0
+
+- name: refuse to start an app on an empty folder
+  fail:
+    msg: >-
+      {{ _flux_copies_pending | map(attribute='label') | unique | join(', ') }} has Swarm
+      volumes its k3s folders don't have yet, so its apps would start empty. Copy them with
+      `make run ANSIBLE_FLAGS="-e swarm_copy_volumes=yes"`; nothing was deployed.
+  when: _flux_copies_pending | length > 0
+
 - include_tasks: place.yml
   vars:
     _flux_place_nodes: "{{ _flux_label_placement }}"
