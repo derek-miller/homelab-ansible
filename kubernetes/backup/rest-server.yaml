@@ -1,0 +1,103 @@
+---
+# The share, its credentials and the logins are in rest-server.vault.yaml.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: restic
+  namespace: backup
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ""
+  volumeName: backup-restic
+  resources:
+    requests:
+      storage: 1Ti
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rest-server
+  namespace: backup
+  annotations:
+    # The volume mounts with it, so a new NAS password needs a new pod.
+    secret.reloader.stakater.com/reload: smb-credentials
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rest-server
+  template:
+    metadata:
+      labels:
+        app: rest-server
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+      containers:
+        - name: rest-server
+          image: restic/rest-server:latest
+          command:
+            - rest-server
+          args:
+            - --path=/data
+            - --htpasswd-file=/etc/rest-server/htpasswd
+            - --private-repos
+          ports:
+            - name: http
+              containerPort: 8000
+          readinessProbe:
+            tcpSocket:
+              port: http
+          volumeMounts:
+            - name: repositories
+              mountPath: /data
+              subPath: Restic
+            - name: htpasswd
+              mountPath: /etc/rest-server
+              readOnly: true
+      volumes:
+        - name: repositories
+          persistentVolumeClaim:
+            claimName: restic
+        - name: htpasswd
+          secret:
+            secretName: rest-server-htpasswd
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rest-server
+  namespace: backup
+spec:
+  selector:
+    app: rest-server
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-k8up-jobs
+  namespace: backup
+spec:
+  podSelector:
+    matchLabels:
+      app: rest-server
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8upjob: "true"
+      ports:
+        - protocol: TCP
+          port: 8000
