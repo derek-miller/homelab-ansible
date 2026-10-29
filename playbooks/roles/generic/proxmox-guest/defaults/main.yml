@@ -8,7 +8,7 @@ proxmox_guest_scope: all
 #   - vmid: 201
 #     node: pve1
 #     name: rackvm1
-#     address: 192.168.1.21/24   # CIDR, feeds cloud-init ipconfig0
+#     address: 192.0.2.21/24   # CIDR, feeds cloud-init ipconfig0
 #     cores: 4
 #     memory: 20480
 #     balloon: 12288             # optional, default 0
