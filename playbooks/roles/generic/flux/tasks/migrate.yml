@@ -26,6 +26,25 @@
   loop_control:
     label: "{{ item.label }}"
 
+- name: read whether the platform is healthy
+  command: >-
+    k3s kubectl -n flux-system get kustomization platform --ignore-not-found
+    -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status}'
+  register: _flux_platform_ready
+  changed_when: false
+  check_mode: no
+  when: _flux_moves | length > 0
+
+# The apps wait for the platform, so a moved label's apps couldn't come back.
+- name: refuse a move while the platform is unhealthy
+  fail:
+    msg: >-
+      The platform isn't healthy, and the apps wait for it; `flux get kustomizations -A`
+      on {{ inventory_hostname }} says why. Nothing was moved.
+  when:
+    - _flux_moves | length > 0
+    - _flux_platform_ready.stdout not in ['', 'True']
+
 # A move cut off after its label moved isn't pending any more, but its apps are still stopped.
 - include_tasks: migrate_resume.yml
   loop: >-

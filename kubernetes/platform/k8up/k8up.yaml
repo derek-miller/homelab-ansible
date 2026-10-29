@@ -1,0 +1,53 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kube-apiserver
+  namespace: k8up
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # Policy sees the kubernetes Service after DNAT, as the server's port 6443.
+    - ports:
+        - protocol: TCP
+          port: 6443
+---
+# k8up publishes no OCI chart (k8up-io/k8up#1231).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: k8up
+  namespace: k8up
+spec:
+  interval: 1h
+  url: https://k8up-io.github.io/k8up
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: k8up
+  namespace: k8up
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: k8up
+      version: 4.x
+      sourceRef:
+        kind: HelmRepository
+        name: k8up
+  # The apps wait for the platform, so a failure here must heal by itself.
+  install:
+    crds: CreateReplace
+    strategy:
+      name: RetryOnFailure
+  upgrade:
+    crds: CreateReplace
+    strategy:
+      name: RetryOnFailure
+  values:
+    k8up:
+      timezone: UTC
+      skipSnapshotSync: true
