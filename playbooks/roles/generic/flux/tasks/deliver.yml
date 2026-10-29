@@ -98,6 +98,28 @@
       delay: 20
       when: _flux_diff.rc != 0 and not ansible_check_mode
 
+    # Flux only orders the two by revision when they share a source, so the
+    # deploy applies the platform first itself.
+    - name: apply the platform
+      command: >-
+        flux reconcile kustomization platform
+        --namespace=flux-system
+        --with-source
+        --timeout={{ flux_apply_timeout | quote }}
+      register: _flux_platform
+      until: _flux_platform.rc == 0
+      retries: 1
+      delay: 30
+      changed_when: false
+      failed_when: false
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: report a failed platform apply
+      fail:
+        msg: "Flux did not apply the platform; `flux get kustomizations -A` on {{ inventory_hostname }} says why."
+      when: _flux_platform.rc | default(0) != 0
+
     - name: apply the apps
       command: >-
         flux reconcile kustomization apps

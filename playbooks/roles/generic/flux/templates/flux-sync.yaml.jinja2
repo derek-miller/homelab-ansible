@@ -8,10 +8,11 @@ type: kubernetes.io/dockerconfigjson
 stringData:
   .dockerconfigjson: {{ {'auths': {_flux_registry_cluster_address: {'auth': _flux_registry_auth}}} | to_json | to_json }}
 ---
+# The add-ons in platform/, such as operators whose CRDs the apps use, apply first.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:
-  name: apps
+  name: platform
   namespace: flux-system
 spec:
   interval: 10m
@@ -25,10 +26,42 @@ spec:
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
+  name: platform
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: OCIRepository
+    name: platform
+  path: ./platform
+  prune: true
+  wait: true
+  timeout: {{ flux_apply_timeout | to_json }}
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
   name: apps
   namespace: flux-system
 spec:
   interval: 10m
+  url: oci://{{ _flux_registry_cluster_address }}/apps
+  ref:
+    tag: latest
+  ignore: /platform/
+  insecure: true
+  secretRef:
+    name: zot-credentials
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: platform
   sourceRef:
     kind: OCIRepository
     name: apps
