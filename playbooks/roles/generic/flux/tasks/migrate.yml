@@ -35,7 +35,6 @@
   check_mode: no
   when: _flux_moves | length > 0
 
-# The apps wait for the platform, so a moved label's apps couldn't come back.
 - name: refuse a move while the platform is unhealthy
   fail:
     msg: >-
