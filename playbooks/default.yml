@@ -676,6 +676,16 @@
     - k3s
     - flux
 
+- hosts: k3s_server
+  tasks:
+    - import_role:
+        name: generic/flux
+        tasks_from: restore.yml
+      when: not ansible_check_mode
+  tags:
+    - never
+    - k3s-restore
+
 - hosts: control4-driver-scraper
   roles:
     - role: generic/control4-driver-scraper

@@ -114,41 +114,13 @@
       fail:
         msg: >-
           {{ move.label }}: a backup, prune, check or restore is running there; move it
-          once it has finished. Nothing was changed.
+          once it has finished. A restore cut off part way leaves its pod running until
+          the restore runs again. Nothing was changed.
       when: _flux_move_backups.stdout != ''
 
     - name: "{{ move.label }} | stop it, copy its volumes and move it to {{ move.to }}"
       block:
-        - name: "{{ move.label }} | pause Flux"
-          command: flux suspend kustomization apps -n flux-system
-
-        - name: "{{ move.label }} | pause its charts"
-          command: "flux suspend helmrelease {{ item | quote }} -n {{ move.label }}"
-          loop: "{{ _flux_move_charts }}"
-          loop_control:
-            label: "{{ move.label }}"
-          no_log: true
-
-        - name: "{{ move.label }} | note its workloads' replicas on them"
-          command: >-
-            k3s kubectl -n {{ move.label }} annotate {{ item.kind }} {{ item.name | quote }}
-            {{ _flux_replicas_annotation }}={{ item.replicas }} --overwrite --field-manager={{ _flux_mover_field_manager }}
-          loop: "{{ _flux_move_workloads }}"
-          loop_control:
-            label: "{{ move.label }}"
-          no_log: true
-
-        # A backup started during the move would claim a volume on the old node; Flux puts them back when it resumes.
-        - name: "{{ move.label }} | pause its backups"
-          command: "k3s kubectl -n {{ move.label }} delete schedules.k8up.io --all --timeout=2m"
-
-        # A pod started before the label moves would claim a volume on the old node.
-        - name: "{{ move.label }} | scale its workloads to zero"
-          command: "k3s kubectl -n {{ move.label }} scale {{ item.kind }} {{ item.name | quote }} --replicas=0"
-          loop: "{{ _flux_move_workloads }}"
-          loop_control:
-            label: "{{ move.label }}"
-          no_log: true
+        - include_tasks: migrate_stop.yml
 
         - name: "{{ move.label }} | delete its volume claims"
           command: "k3s kubectl -n {{ move.label }} delete persistentvolumeclaim {{ item | quote }} --ignore-not-found --wait=false"

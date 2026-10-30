@@ -1,0 +1,188 @@
+---
+- name: check a label to restore is named
+  assert:
+    that: k3s_restore_label | length > 0
+    fail_msg: >-
+      Name the label to restore: make run tags=k3s-restore ANSIBLE_FLAGS="-e k3s_restore_label=<label>".
+    quiet: yes
+
+- include_tasks: labels.yml
+
+- name: "{{ k3s_restore_label }} | check it is a label"
+  assert:
+    that: k3s_restore_label in _flux_inventory_nodes
+    fail_msg: "{{ k3s_restore_label }} is not in [docker_labels]; nothing was changed."
+    quiet: yes
+
+# Before any refusal, since a move of the label refuses while it runs.
+- name: "{{ k3s_restore_label }} | remove a restore pod an earlier run left"
+  command: "k3s kubectl -n {{ k3s_restore_label }} delete pod {{ _flux_restore_pod }} --ignore-not-found --timeout=2m"
+  register: _flux_restore_leftover
+  changed_when: _flux_restore_leftover.stdout != ''
+
+- name: "{{ k3s_restore_label }} | refuse to restore while a label waits to move"
+  fail:
+    msg: >-
+      {{ _flux_moves | map(attribute='label') | join(', ') }} waits to move; finish the move first.
+      Nothing was changed.
+  when: _flux_moves | length > 0
+
+# Bringing this label back resumes Flux, which would bring theirs back half moved or half restored.
+- name: "{{ k3s_restore_label }} | refuse to restore it while another label is left stopped"
+  fail:
+    msg: >-
+      {{ _flux_stopped_labels | reject('eq', k3s_restore_label) | join(', ') }} was left stopped by a move or
+      restore; finish that first. Nothing was changed.
+  when: _flux_stopped_labels | reject('eq', k3s_restore_label) | list | length > 0
+
+- name: "{{ k3s_restore_label }} | restore its volumes"
+  environment:
+    KUBECONFIG: "{{ _flux_kubeconfig }}"
+  vars:
+    move:
+      label: "{{ k3s_restore_label }}"
+  block:
+    - name: "{{ move.label }} | read whether a backup is running there"
+      command: >-
+        k3s kubectl -n {{ move.label }} get pods -l k8upjob=true
+        --field-selector=status.phase!=Succeeded,status.phase!=Failed -o name
+      register: _flux_restore_backups
+      changed_when: false
+
+    - name: "{{ move.label }} | refuse to restore it while a backup is running"
+      fail:
+        msg: >-
+          {{ move.label }}: a backup, prune or check is running there; restore it once it has
+          finished. Nothing was changed.
+      when: _flux_restore_backups.stdout != ''
+
+    - name: "{{ move.label }} | read its claims, charts and workloads, its backup Secret and the backup image"
+      command: "k3s kubectl {{ item }}"
+      loop:
+        - "-n {{ move.label }} get persistentvolumeclaims -o json"
+        - "-n {{ move.label }} get helmreleases.helm.toolkit.fluxcd.io -o json"
+        - "-n {{ move.label }} get deployments,statefulsets -o json"
+        - >-
+          -n k8up get deployment k8up
+          -o 'jsonpath={.spec.template.spec.containers[0].env[?(@.name=="BACKUP_IMAGE")].value}'
+        - "-n {{ move.label }} get secret backup --ignore-not-found -o name"
+        - "-n flux-system get kustomization apps -o jsonpath={.spec.suspend}"
+      register: _flux_restore_reads
+      changed_when: false
+
+    # Bringing it back resumes Flux before its apps, which may have written to the restored volumes since.
+    - name: "{{ move.label }} | refuse to restore it again while it is half brought back"
+      fail:
+        msg: >-
+          {{ move.label }} is still stopped but Flux is running, so a restore or move was cut off while bringing
+          it back. Finish that with make run tags=k3s-migrate-labels ANSIBLE_FLAGS="-e docker_migrate_labels=yes".
+          Nothing was changed.
+      when:
+        - move.label in _flux_stopped_labels
+        - _flux_restore_reads.results[5].stdout != 'true'
+
+    - name: "{{ move.label }} | keep what it read"
+      set_fact:
+        _flux_move_hr_json: "{{ _flux_restore_reads.results[1] }}"
+        _flux_move_workload_json: "{{ _flux_restore_reads.results[2] }}"
+        # Left stopped means an earlier run had begun restoring it.
+        _flux_restore_started: "{{ move.label in _flux_stopped_labels }}"
+        _flux_restore_done: false
+
+    - name: "{{ move.label }} | check it has a backup Secret"
+      assert:
+        that: _flux_restore_reads.results[4].stdout != ''
+        fail_msg: "{{ move.label }} has no backup Secret, so it has no backups; nothing was changed."
+        quiet: yes
+
+    - name: "{{ move.label }} | check the claims to restore are its own"
+      assert:
+        that:
+          - _flux_restore_claims | length > 0
+          - _flux_restore_claims | reject('in', _flux_restore_namespace_claims) | list | length == 0
+        fail_msg: >-
+          {{ move.label }} has no claim{{ ' ' ~ (_flux_restore_claims | reject('in', _flux_restore_namespace_claims)
+          | join(', ')) if _flux_restore_claims else 's' }}; nothing was changed.
+        quiet: yes
+
+    - name: "{{ move.label }} | start a pod with restic and the claims on {{ _flux_held_nodes[move.label] }}"
+      command: k3s kubectl apply -f -
+      args:
+        stdin: "{{ lookup('template', 'restore-pod.yaml.jinja2') }}"
+
+    - name: "{{ move.label }} | wait for it"
+      command: "k3s kubectl -n {{ move.label }} wait pod/{{ _flux_restore_pod }} --for=condition=Ready --timeout=5m"
+      changed_when: false
+
+    # The other nodes refuse a new pod for its first few seconds.
+    - name: "{{ move.label }} | list its snapshots"
+      command: "k3s kubectl -n {{ move.label }} exec {{ _flux_restore_pod }} -- restic snapshots --json --host {{ move.label }}"
+      register: _flux_restore_list
+      until: _flux_restore_list.rc == 0
+      retries: 6
+      delay: 10
+      changed_when: false
+
+    - name: "{{ move.label }} | refuse a claim it has no snapshot of"
+      fail:
+        msg: >-
+          {{ move.label }} has no snapshot of {{ _flux_restore_missing | join(', ') }}
+          {{- ' from before ' ~ k3s_restore_before if k3s_restore_before else '' }}; nothing was changed.
+      when: >-
+        _flux_restore_picks | length == 0
+        or (k3s_restore_claims | length > 0 and _flux_restore_missing | length > 0)
+
+    - name: "{{ move.label }} | report the snapshots it restores"
+      debug:
+        msg: >-
+          {{ move.label }}: restoring {% for pick in _flux_restore_picks %}{{ pick.claim }} from {{ pick.time }}
+          {%- if not loop.last %}, {% endif %}{% endfor %} UTC
+          {%- if _flux_restore_missing %}; {{ _flux_restore_missing | join(', ') }} has no snapshot and is left as it is{% endif %}.
+
+    - name: "{{ move.label }} | stop it and restore its volumes"
+      block:
+        - include_tasks: migrate_stop.yml
+
+        - name: "{{ move.label }} | stop its other pods"
+          command: >-
+            k3s kubectl -n {{ move.label }} delete pods
+            --field-selector=metadata.name!={{ _flux_restore_pod }} --wait=true --timeout=5m
+
+        - name: "{{ move.label }} | note the restore"
+          set_fact:
+            _flux_restore_started: true
+
+        - name: "{{ move.label }} | restore each volume, removing what the snapshot doesn't have"
+          command: >-
+            k3s kubectl -n {{ move.label }} exec {{ _flux_restore_pod }} --
+            restic restore {{ item.id }}:/data --target /restore/{{ item.claim }} --delete --verify
+          loop: "{{ _flux_restore_picks }}"
+          loop_control:
+            label: "{{ item.claim }}"
+
+        - name: "{{ move.label }} | note its volumes are restored"
+          set_fact:
+            _flux_restore_done: true
+
+        - include_tasks: migrate_resume.yml
+      rescue:
+        - include_tasks:
+            file: migrate_resume.yml
+            apply:
+              ignore_errors: true
+          when: not _flux_restore_started or _flux_restore_done
+
+        - name: "{{ move.label }} | report the failed restore"
+          fail:
+            msg: >-
+              {{ (move.label ~ "'s volumes were restored, but it did not come up healthy; `flux get all -A` on "
+                  ~ inventory_hostname ~ ' says why.') if _flux_restore_done
+                 else (move.label ~ ': a volume did not restore, so its apps stay stopped and every deploy refuses to'
+                       ~ ' run. Run the same command again to finish the restore; any run with docker_migrate_labels=yes,'
+                       ~ ' the Swarm move included, gives it up and starts the apps on what their folders hold.') if _flux_restore_started
+                 else (move.label ~ ' could not be stopped for the restore; its apps are back with their data as it was.') }}
+  always:
+    - name: "{{ k3s_restore_label }} | remove the restore pod"
+      command: "k3s kubectl -n {{ k3s_restore_label }} delete pod {{ _flux_restore_pod }} --ignore-not-found --wait=false"
+      register: _flux_restore_removed
+      changed_when: _flux_restore_removed.stdout != ''

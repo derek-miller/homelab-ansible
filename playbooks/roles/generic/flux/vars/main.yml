@@ -154,6 +154,26 @@ _flux_resume_workloads: >-
 _flux_resume_charts: "{{ (_flux_resume_reads.results[1].stdout | from_json)['items'] | map(attribute='metadata.name') | list }}"
 _flux_stopped_labels: "{{ _flux_stopped_workloads.stdout | default('') | split | unique | sort }}"
 
+_flux_restore_pod: restore
+_flux_restore_namespace_claims: "{{ (_flux_restore_reads.results[0].stdout | from_json)['items'] | map(attribute='metadata.name') | list }}"
+_flux_restore_claims: "{{ k3s_restore_claims.split(',') | map('trim') | select | list or _flux_restore_namespace_claims }}"
+_flux_restore_image: "{{ _flux_restore_reads.results[3].stdout }}"
+# Each claim's newest snapshot, or its newest from before k3s_restore_before; restic's times are UTC.
+_flux_restore_picks: >-
+  {%- set out = [] -%}
+  {%- for claim in _flux_restore_claims | sort -%}
+  {%- set found = _flux_restore_list.stdout | from_json | selectattr('paths', 'eq', ['/data/' ~ claim]) | list -%}
+  {%- if k3s_restore_before -%}
+  {%- set found = found | selectattr('time', 'lt', k3s_restore_before | string | replace(' ', 'T') | regex_replace('Z$', '')) | list -%}
+  {%- endif -%}
+  {%- if found -%}
+  {%- set newest = found | sort(attribute='time') | last -%}
+  {%- set _ = out.append({'claim': claim, 'id': newest.id, 'time': newest.time[:16] | replace('T', ' ')}) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ out }}
+_flux_restore_missing: "{{ _flux_restore_claims | reject('in', _flux_restore_picks | map(attribute='claim')) | list }}"
+
 _flux_stack_name: "{{ hostvars[groups['docker_swarm_manager'][0]].docker_stack_name }}"
 _flux_copy_labels: "{{ swarm_volume_copies | map(attribute='label') | unique | sort }}"
 _flux_copy_moving: "{{ _flux_moves | map(attribute='label') | select('in', _flux_copy_labels) | list }}"

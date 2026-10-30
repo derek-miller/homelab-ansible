@@ -4,6 +4,12 @@
   environment:
     KUBECONFIG: "{{ _flux_kubeconfig }}"
   block:
+    # A restore cut off part way leaves restic running in it.
+    - name: "{{ move.label }} | stop a restore left running"
+      command: "k3s kubectl -n {{ move.label }} delete pod {{ _flux_restore_pod }} --ignore-not-found --timeout=2m"
+      register: _flux_resume_restore
+      changed_when: _flux_resume_restore.stdout != ''
+
     # Before Flux resumes, which it does with the move's notes on the workloads.
     - name: "{{ move.label }} | read its workloads and charts"
       command: "k3s kubectl -n {{ move.label }} get {{ item }} -o json"
