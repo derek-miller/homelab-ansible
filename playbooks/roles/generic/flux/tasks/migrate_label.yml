@@ -103,6 +103,20 @@
         - not _flux_move_overwrite
         - _flux_move_targets.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list | length > 0
 
+    - name: "{{ move.label }} | read whether a backup is running there"
+      command: >-
+        k3s kubectl -n {{ move.label }} get pods -l k8upjob=true
+        --field-selector=status.phase!=Succeeded,status.phase!=Failed -o name
+      register: _flux_move_backups
+      changed_when: false
+
+    - name: "{{ move.label }} | refuse to move it while a backup is running"
+      fail:
+        msg: >-
+          {{ move.label }}: a backup, prune, check or restore is running there; move it
+          once it has finished. Nothing was changed.
+      when: _flux_move_backups.stdout != ''
+
     - name: "{{ move.label }} | stop it, copy its volumes and move it to {{ move.to }}"
       block:
         - name: "{{ move.label }} | pause Flux"
@@ -123,6 +137,10 @@
           loop_control:
             label: "{{ move.label }}"
           no_log: true
+
+        # A backup started during the move would claim a volume on the old node; Flux puts them back when it resumes.
+        - name: "{{ move.label }} | pause its backups"
+          command: "k3s kubectl -n {{ move.label }} delete schedules.k8up.io --all --timeout=2m"
 
         # A pod started before the label moves would claim a volume on the old node.
         - name: "{{ move.label }} | scale its workloads to zero"

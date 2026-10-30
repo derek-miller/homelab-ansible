@@ -51,3 +51,7 @@ spec:
     k8up:
       timezone: UTC
       skipSnapshotSync: true
+      envVars:
+        # Nothing collects pushed metrics, and the default address logs an error on every backup.
+        - name: BACKUP_PROMURL
+          value: ""
