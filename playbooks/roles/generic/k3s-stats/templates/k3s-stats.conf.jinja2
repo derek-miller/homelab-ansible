@@ -17,3 +17,16 @@
   name_override = "kubernetes_pod_container_status"
   [inputs.kube_inventory.tagdrop]
     condition = ["*"]
+{% if k3s_role == 'server' %}
+
+# Read once, on the server. Its absence means the API is down.
+[[inputs.kube_inventory]]
+  url = "https://{{ k3s_server_address }}:6443"
+  bearer_token = "{{ k3s_stats_token_path }}"
+  tls_ca = "{{ k3s_stats_ca_path }}"
+  resource_include = ["nodes", "deployments", "statefulsets", "daemonsets"]
+  # Every namespace, rather than only default.
+  namespace = ""
+  # inputs.kubernetes already writes kubernetes_node.
+  name_suffix = "_status"
+{% endif %}
