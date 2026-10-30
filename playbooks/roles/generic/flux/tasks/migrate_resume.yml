@@ -72,7 +72,7 @@
         {.status.conditions[?(@.type=="Ready")].reason} {.status.conditions[?(@.type=="Healthy")].observedGeneration}
         {.status.conditions[?(@.type=="Healthy")].status}'
       register: _flux_resume_applied
-      until: _flux_resume_verdict != ''
+      until: _flux_resume_verdict == 'applied'
       retries: "{{ (flux_apply_timeout | community.general.to_seconds / 10) | int + 6 }}"
       delay: 10
       changed_when: false

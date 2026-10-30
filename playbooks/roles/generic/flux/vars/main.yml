@@ -154,14 +154,13 @@ _flux_resume_workloads: >-
   {%- endfor -%}
   {{ out }}
 _flux_resume_charts: "{{ (_flux_resume_reads.results[1].stdout | from_json)['items'] | map(attribute='metadata.name') | list }}"
-# Of Flux's reconcile of the apps since they resumed: 'applied', 'failed', or '' while it runs.
+# 'applied' once Flux has applied the apps since they resumed. Other reasons, such as a dependency
+# or source not ready yet, pass, so a failure shows only when the wait runs out.
 _flux_resume_verdict: >-
   {%- set f = (_flux_resume_applied.stdout | default('')).split(' ') + [''] * 6 -%}
   {%- if f[0] and ((f[1] == f[0] and f[3] in ['ReconciliationSucceeded', 'HealthCheckFailed', 'HealthCheckCanceled'])
                    or (f[4] == f[0] and f[5] == 'Unknown')) -%}
   applied
-  {%- elif f[0] and f[1] == f[0] and f[2] == 'False' -%}
-  failed
   {%- endif -%}
 _flux_stopped_labels: "{{ _flux_stopped_workloads.stdout | default('') | split | unique | sort }}"
 
