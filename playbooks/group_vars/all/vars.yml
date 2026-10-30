@@ -18,6 +18,8 @@ docker_swarm_delegate_manager: >-
      else (groups['docker_swarm_manager'] | first) }}
 
 docker_volume_backup_root: /mnt/Backups/Volumes
+# The k3s restic server's repositories, one per namespace, as the hosts mount the Backups drive.
+k3s_backup_root: /mnt/Backups/Restic
 docker_migrate_transit_dir: /mnt/Backups/migrate
 # A label whose host changed in [docker_labels] moves only with docker_migrate_labels.
 docker_migrate_labels: false

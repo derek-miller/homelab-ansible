@@ -4,8 +4,8 @@
     quiet: yes
 
 - assert:
-    that: volume_backup_stats_root|length > 0
-    fail_msg: Set volume_backup_stats_root to the directory the backup services write to.
+    that: volume_backup_stats_root|length > 0 or volume_backup_stats_restic_root|length > 0
+    fail_msg: Set volume_backup_stats_root or volume_backup_stats_restic_root to the directory the backups are written to.
     quiet: yes
   when: volume_backup_stats_state == 'present'
 
