@@ -32,3 +32,4 @@
       command: k3s kubectl -n kube-system delete addon --ignore-not-found telegraf-rbac
       register: _k3s_stats_addon
       changed_when: "'deleted' in _k3s_stats_addon.stdout"
+      when: k3s_state | default('present') == 'present'

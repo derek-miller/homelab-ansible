@@ -37,9 +37,9 @@ proxmox_guest:
     3234306562396465620a323463653436356465363130653561373633326661626637613662643135
     3363
   cores: 4
-  # 18 GiB not 22: shares pve1 with another guest.
-  memory: 18432
-  balloon: 12288
+  # Small and fixed so HA can start it on pve2, beside rackvm2 and vm:100, when pve1 fails.
+  memory: 8192
+  balloon: 8192
   disks:
     - iface: scsi0
       size: 100G

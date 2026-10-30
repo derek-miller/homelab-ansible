@@ -38,7 +38,8 @@ proxmox_guest:
     6631
   cores: 8
   memory: 22528
-  balloon: 16384
+  # Lets pve2 reclaim enough to take rackvm1 and vm:100 when pve1 fails.
+  balloon: 12288
   disks:
     - iface: scsi0
       size: 100G
