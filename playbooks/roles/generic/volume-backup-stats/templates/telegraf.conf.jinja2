@@ -1,3 +1,4 @@
+{% if volume_backup_stats_root %}
 # Reports one series per backup target directory so a single stalled backup is
 # visible. Globbing the children (rather than pointing at the root with
 # `recursive = true`) is load bearing: filecount emits one series per entry in
@@ -9,3 +10,13 @@
   name = "{{ volume_backup_stats_archive_glob }}"
   recursive = false
   interval = "{{ volume_backup_stats_interval_s|int }}s"
+{% endif %}
+{% if volume_backup_stats_restic_root %}
+
+# One series per namespace's restic repository: each snapshot is a file in its snapshots folder.
+[[inputs.filecount]]
+  name_override = "{{ volume_backup_stats_metric_name }}"
+  directories = ["{{ volume_backup_stats_restic_root }}/*/snapshots"]
+  recursive = false
+  interval = "{{ volume_backup_stats_interval_s|int }}s"
+{% endif %}
