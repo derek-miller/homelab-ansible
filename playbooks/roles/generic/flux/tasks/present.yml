@@ -237,8 +237,8 @@
 - name: refuse to deploy while a label move is unfinished
   fail:
     msg: >-
-      A label move stopped part way, leaving {{ _flux_stopped_labels | join(', ') }} scaled down.
-      Run the move again with docker_migrate_labels=yes to finish it.
+      A label move or restore stopped part way, leaving {{ _flux_stopped_labels | join(', ') }} scaled
+      down. Run the same move or restore command again to finish it.
   when: _flux_stopped_labels | length > 0
 
 - include_tasks: swarm_copy_state.yml

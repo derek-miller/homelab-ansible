@@ -27,6 +27,11 @@ docker_migrate_keep_transit: false
 # the volume, the label its services run under, and the claim of the app replacing them.
 swarm_volume_copies: []
 swarm_copy_volumes: false
+# The namespace whose k3s claims tags=k3s-restore puts back: all of them, or those listed with commas,
+# each from its newest snapshot, or its newest from before a UTC time such as 2026-10-29T12:00.
+k3s_restore_namespace: ""
+k3s_restore_claims: ""
+k3s_restore_before: ""
 # Recipient for offen's AGE_PUBLIC_KEYS. Its private half is
 # playbooks/files/vault/docker-volume-backup-age.key.
 docker_volume_backup_age_public_key: age1nzyr0mk08nwy7x0w2wjw462kvnyq6lwhmgufzyzl4xq57gtdv40qe8lnqg

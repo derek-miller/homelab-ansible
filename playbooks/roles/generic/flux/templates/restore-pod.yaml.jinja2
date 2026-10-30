@@ -1,0 +1,57 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ _flux_restore_pod }}
+  namespace: {{ k3s_restore_namespace | to_json }}
+  labels:
+    # Lets it reach the restic server, as a k8up job does, and keeps a move off the label meanwhile.
+    k8upjob: "true"
+spec:
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+{% if _flux_restore_mounts %}
+  # The first pod to use a claim made anew decides the node its volume is made on.
+  nodeSelector:
+    kubernetes.io/hostname: {{ _flux_restore_to | to_json }}
+{% endif %}
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+  containers:
+    - name: restic
+      image: {{ _flux_restore_image }}
+      command: [sleep, "86400"]
+      env:
+        - name: USER
+          valueFrom:
+            secretKeyRef:
+              name: backup
+              key: username
+        - name: PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: backup
+              key: password
+        - name: RESTIC_REPOSITORY
+          value: rest:http://$(USER):$(PASSWORD)@rest-server.backup.svc.cluster.local:8000/{{ k3s_restore_namespace }}/
+        - name: RESTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: backup
+              key: repository-password
+{% if _flux_restore_mounts %}
+      # restic sets the owner and mode of what it restores into its target, not of the target itself,
+      # so each claim is restored as a folder inside one.
+      volumeMounts:
+{% for pick in _flux_restore_picks %}
+        - name: claim-{{ loop.index }}
+          mountPath: /restore/{{ pick.claim }}/{{ pick.claim }}
+{% endfor %}
+  volumes:
+{% for pick in _flux_restore_picks %}
+    - name: claim-{{ loop.index }}
+      persistentVolumeClaim:
+        claimName: {{ pick.claim | to_json }}
+{% endfor %}
+{% endif %}

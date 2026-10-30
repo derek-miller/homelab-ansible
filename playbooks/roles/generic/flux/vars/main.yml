@@ -39,11 +39,12 @@ _flux_inventory_nodes: >-
   {%- endfor -%}
   {%- endfor -%}
   {{ out }}
+# A volume on a deleted node keeps its label there until a restore has moved the label's volumes off it.
 _flux_volume_label_nodes: >-
   {%- set out = {} -%}
   {%- for line in _flux_volume_nodes.stdout_lines | default([]) -%}
   {%- set label, _, node = line.partition('=') -%}
-  {%- if label and node and label not in out -%}
+  {%- if label and node and (label not in out or node not in _flux_nodes) -%}
   {%- set _ = out.update({label: node}) -%}
   {%- endif -%}
   {%- endfor -%}
@@ -113,6 +114,7 @@ _flux_moves: >-
   {%- endif -%}
   {%- endfor -%}
   {{ out }}
+_flux_nodes: "{{ _flux_node_status.stdout_lines | default([]) | map('regex_replace', '=.*$', '') | list }}"
 _flux_ready_nodes: "{{ _flux_node_status.stdout_lines | select('match', '^[^=]+=True$') | map('regex_replace', '=True$', '') | list }}"
 _flux_move_pvs: >-
   {%- set out = [] -%}
@@ -152,7 +154,71 @@ _flux_resume_workloads: >-
   {%- endfor -%}
   {{ out }}
 _flux_resume_charts: "{{ (_flux_resume_reads.results[1].stdout | from_json)['items'] | map(attribute='metadata.name') | list }}"
+# 'applied' once Flux has applied the apps since they resumed. Other reasons, such as a dependency
+# or source not ready yet, pass, so a failure shows only when the wait runs out.
+_flux_resume_verdict: >-
+  {%- set f = (_flux_resume_applied.stdout | default('')).split(' ') + [''] * 6 -%}
+  {%- if f[0] and ((f[1] == f[0] and f[3] in ['ReconciliationSucceeded', 'HealthCheckFailed', 'HealthCheckCanceled'])
+                   or (f[4] == f[0] and f[5] == 'Unknown')) -%}
+  applied
+  {%- endif -%}
 _flux_stopped_labels: "{{ _flux_stopped_workloads.stdout | default('') | split | unique | sort }}"
+
+_flux_restore_pod: restore
+_flux_restore_from: "{{ _flux_held_nodes[k3s_restore_namespace] }}"
+_flux_restore_to: "{{ _flux_inventory_nodes[k3s_restore_namespace] }}"
+_flux_restore_lost: "{{ _flux_restore_from not in _flux_nodes }}"
+_flux_restore_has_backups: "{{ _flux_restore_reads.results[4].stdout != '' }}"
+_flux_restore_namespace_claims: "{{ (_flux_restore_reads.results[0].stdout | from_json)['items'] | map(attribute='metadata.name') | list }}"
+_flux_restore_bound: >-
+  {%- set out = {} -%}
+  {%- for pvc in (_flux_restore_reads.results[0].stdout | from_json)['items'] -%}
+  {%- set _ = out.update({pvc.metadata.name: pvc.spec.volumeName | default('')}) -%}
+  {%- endfor -%}
+  {{ out }}
+# A claim on a volume that isn't on a node's disk, such as a NAS share, is restored only when named.
+_flux_restore_local_claims: >-
+  {{ _flux_restore_bound | dict2items | selectattr('value', 'in', _flux_move_pvs | selectattr('node') | map(attribute='name'))
+     | map(attribute='key') | sort }}
+_flux_restore_gone_pvs: "{{ _flux_move_pvs | selectattr('node') | rejectattr('node', 'in', _flux_nodes) | list }}"
+_flux_restore_annotation: homelab.local/restore
+# The volumes on the deleted node it moves: those a claim is still bound to, and those it noted before
+# deleting their claims, so a run cut off in between makes the claim again. A removed app's stays behind.
+_flux_restore_moving: >-
+  {%- set gone = _flux_restore_gone_pvs | map(attribute='name') | list -%}
+  {%- set out = [] -%}
+  {%- for pv in (_flux_move_pv_json.stdout | from_json)['items'] if pv.metadata.name in gone and pv.spec.claimRef.name | default('') -%}
+  {%- set claim = pv.spec.claimRef.name -%}
+  {%- if _flux_restore_bound.get(claim) == pv.metadata.name or _flux_restore_annotation in pv.metadata.annotations | default({}) -%}
+  {%- set _ = out.append({'name': pv.metadata.name, 'claim': claim,
+        'remake': _flux_restore_bound.get(claim, pv.metadata.name) == pv.metadata.name,
+        'pvc': {'apiVersion': 'v1', 'kind': 'PersistentVolumeClaim',
+                'metadata': {'name': claim, 'namespace': move.label},
+                'spec': {'storageClassName': pv.spec.storageClassName, 'accessModes': pv.spec.accessModes,
+                         'volumeMode': pv.spec.volumeMode | default('Filesystem'),
+                         'resources': {'requests': {'storage': pv.spec.capacity.storage}}}}}) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ out }}
+_flux_restore_claims: >-
+  {{ (_flux_restore_moving | map(attribute='claim') | unique | sort) if _flux_restore_lost
+     else (k3s_restore_claims.split(',') | map('trim') | select | list or _flux_restore_local_claims) }}
+_flux_restore_image: "{{ _flux_restore_reads.results[3].stdout }}"
+# Each claim's newest snapshot, or its newest from before k3s_restore_before; restic's times are UTC.
+_flux_restore_picks: >-
+  {%- set out = [] -%}
+  {%- for claim in _flux_restore_claims | sort -%}
+  {%- set found = (_flux_restore_list.stdout | default('[]', true) if _flux_restore_list.rc | default(0) == 0 else '[]') | from_json | selectattr('paths', 'eq', ['/data/' ~ claim]) | list -%}
+  {%- if k3s_restore_before -%}
+  {%- set found = found | selectattr('time', 'lt', k3s_restore_before | string | replace(' ', 'T') | regex_replace('Z$', '')) | list -%}
+  {%- endif -%}
+  {%- if found -%}
+  {%- set newest = found | sort(attribute='time') | last -%}
+  {%- set _ = out.append({'claim': claim, 'id': newest.id, 'time': newest.time[:16] | replace('T', ' ')}) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ out }}
+_flux_restore_missing: "{{ _flux_restore_claims | reject('in', _flux_restore_picks | map(attribute='claim')) | list }}"
 
 _flux_stack_name: "{{ hostvars[groups['docker_swarm_manager'][0]].docker_stack_name }}"
 _flux_copy_labels: "{{ swarm_volume_copies | map(attribute='label') | unique | sort }}"
