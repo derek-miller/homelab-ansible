@@ -27,7 +27,7 @@ rules:
       - nodes/pods
     verbs:
       - get
-  # The server's Telegraf lists these through the API for whether each node is ready and each workload has its replicas.
+  # Only the server's Telegraf lists these.
   - apiGroups:
       - ""
     resources:

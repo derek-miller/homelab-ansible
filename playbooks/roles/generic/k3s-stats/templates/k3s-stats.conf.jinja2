@@ -19,8 +19,7 @@
     condition = ["*"]
 {% if k3s_role == 'server' %}
 
-# The cluster's own view, read once, from the API: whether each node is ready and each workload has
-# its replicas. Its absence means the API is down.
+# Read once, on the server. Its absence means the API is down.
 [[inputs.kube_inventory]]
   url = "https://{{ k3s_server_address }}:6443"
   bearer_token = "{{ k3s_stats_token_path }}"
