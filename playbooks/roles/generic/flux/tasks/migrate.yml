@@ -1,14 +1,6 @@
 ---
 - include_tasks: labels.yml
 
-- name: read which k3s nodes are ready
-  command: >-
-    k3s kubectl get nodes
-    -o 'jsonpath={range .items[*]}{.metadata.name}={.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}'
-  register: _flux_node_status
-  changed_when: false
-  check_mode: no
-
 - name: report each k3s label move
   debug:
     msg: "{{ item.label }}: {{ item.from }} -> {{ item.to }}"
@@ -53,6 +45,16 @@
     loop_var: move
     label: "{{ move.label }}"
   when: not ansible_check_mode
+
+- name: refuse a move off a node that is gone
+  fail:
+    msg: >-
+      {{ item.label }}: {{ item.from }} is gone, so there is nothing to copy. Restore it onto {{ item.to }} with
+      `make run hosts={{ inventory_hostname }},{{ item.to }} tags=k3s-restore ANSIBLE_FLAGS="-e k3s_restore_namespace={{ item.label }}"`;
+      nothing was moved.
+  loop: "{{ _flux_moves | rejectattr('from', 'in', _flux_nodes) | list }}"
+  loop_control:
+    label: "{{ item.label }}"
 
 - include_tasks: migrate_label.yml
   loop: "{{ _flux_moves }}"

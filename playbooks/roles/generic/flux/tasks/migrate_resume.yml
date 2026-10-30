@@ -63,6 +63,17 @@
       changed_when: false
       no_log: true
 
-    - name: "{{ move.label }} | wait for Flux to be healthy"
-      command: "k3s kubectl -n flux-system wait kustomization/apps --for=condition=Ready --timeout={{ flux_apply_timeout }}"
+    # Another suite, such as one waiting on a deleted node, can keep Flux unhealthy, so this suite's
+    # health is the waits above and Flux only has to have applied it, which it has once its health checks start.
+    - name: "{{ move.label }} | wait for Flux to apply it"
+      command: >-
+        k3s kubectl -n flux-system get kustomization apps -o 'jsonpath={.metadata.generation}
+        {.status.conditions[?(@.type=="Ready")].observedGeneration} {.status.conditions[?(@.type=="Ready")].status}
+        {.status.conditions[?(@.type=="Ready")].reason} {.status.conditions[?(@.type=="Healthy")].observedGeneration}
+        {.status.conditions[?(@.type=="Healthy")].status}'
+      register: _flux_resume_applied
+      until: _flux_resume_verdict != ''
+      retries: "{{ (flux_apply_timeout | community.general.to_seconds / 10) | int + 6 }}"
+      delay: 10
       changed_when: false
+      failed_when: _flux_resume_verdict != 'applied'
