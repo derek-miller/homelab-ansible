@@ -542,6 +542,13 @@ Each drill loads the dump from the volume into a scratch Postgres (production's 
 
 **The signing key** in the `signing-key` Secret signs every index the app publishes, and drivers in the field check it against the public key they ship with. Besides `firmware.vault.yaml`, keep a copy in the password manager. Changing it takes a driver release first: ship a driver that accepts both keys, switch the Secret once that driver is out, and drop the old key in a later driver. If it leaks, switch the daily run off on the Runs page until the two-key driver ships.
 
+**Backups.** `backup.yaml` backs the suite up daily like any other (see Backups under [Apps on k3s](#apps-on-k3s)). Besides the claim's files, k8up runs `python -m firmware_index dump` in the pod, as the Deployment's `k8up.io/backupcommand` annotation asks, and saves its consistent copy of the database as a snapshot of its own, at the path `/firmware-firmware.sqlite3`. It reaches the pod through the API server, which `allow-kube-apiserver` lets the namespace's k8up jobs do. The claim's own copy of the database can be caught mid-write, so if one restored with `k3s-restore` won't open, put the dump in its place:
+
+1. `sudo kubectl -n firmware scale deploy/firmware --replicas=0` on rackvm1.
+2. Start a pod in `firmware` labelled `k8upjob: "true"`, from the image a backup job uses, with the `backup` Secret's `username`, `password` and `repository-password` in its environment, and in it run `restic -r rest:http://<username>:<password>@rest-server.backup.svc.cluster.local:8000/firmware/ dump --path /firmware-firmware.sqlite3 latest /firmware-firmware.sqlite3`, with the output going to a file. Without `--path`, `latest` is the claim's snapshot, which has no such file.
+3. On the `firmware` node, put that file at `/mnt/data/volumes/firmware/data/data/index.sqlite3`, owned by 10001, and delete `index.sqlite3-wal` and `index.sqlite3-shm` beside it.
+4. Scale the Deployment back to 1.
+
 **Cloudflare, once, by hand.** In the Finite Labs Cloudflare account, which holds `finitelabs.com` and is not the homelab's:
 
 1. R2 Object Storage: add the R2 subscription if the account has none, then Create bucket `zigbee-firmware-index`, location Automatic, Standard storage class.
