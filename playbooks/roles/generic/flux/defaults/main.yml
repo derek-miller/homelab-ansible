@@ -1,5 +1,5 @@
 ---
-flux_state: present
+flux_state: "{{ k3s_state | default('present') }}"
 
 # The manifest tree Flux applies. Files that are vault-encrypted are
 # decrypted on the way; every image is pinned to its tag's current digest.

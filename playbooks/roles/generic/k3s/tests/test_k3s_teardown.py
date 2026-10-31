@@ -307,6 +307,30 @@ def test_links_and_netns():
     )
 
 
+def test_a_veth_gone_before_its_delete_is_not_an_error():
+    mod, calls = harness(
+        out={
+            "ip -o link show master cni0": (
+                "7: vethaaaa1111@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0\n"
+                "9: vethbbbb2222@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0\n"
+            ),
+        },
+        rc={
+            "ip link delete vethaaaa1111": 1,
+            "ip link show vethaaaa1111": 1,
+            "ip link delete vethbbbb2222": 2,
+            "ip link show cni0": 1,
+            "ip link show flannel.1": 1,
+            "ip link show flannel-v6.1": 1,
+            "ip link show flannel-wg": 1,
+            "ip link show flannel-wg-v6": 1,
+            "ip link show kube-ipvs0": 1,
+        },
+    )
+    mod.remove_links()
+    check("only the veth still there is an error", [e.split(":")[0] for e in mod.errors], ["ip link delete vethbbbb2222"])
+
+
 def test_ipsets_and_nft_tables():
     mod, calls = harness(
         out={
@@ -364,6 +388,7 @@ for fn in (
     test_ip6tables_is_cleaned_the_same_way,
     test_failed_commands_are_reported,
     test_links_and_netns,
+    test_a_veth_gone_before_its_delete_is_not_an_error,
     test_ipsets_and_nft_tables,
     test_never_runs_the_stock_scripts_or_touches_tailscale,
     test_absent_removes_what_present_installs,
