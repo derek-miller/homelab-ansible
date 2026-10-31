@@ -1,9 +1,7 @@
 ---
 - name: require site config
   assert:
-    that:
-      - vars[item] is defined
-      - vars[item] not in [None, ""]
+    that: lookup('vars', item, default='') not in [None, ""]
     fail_msg: "{{ item }} must be set — see group_vars/proxmox"
     quiet: yes
   loop:

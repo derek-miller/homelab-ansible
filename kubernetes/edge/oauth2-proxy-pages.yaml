@@ -1,0 +1,128 @@
+---
+# Each sign-in's error page, mounted as its --custom-templates-dir.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth2-proxy-pages
+  namespace: edge
+data:
+  error.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>{{.StatusCode}} {{.Title}}</title>
+    <style>
+      :root { --page: radial-gradient(120% 90% at 50% 30%, #f7f8fa, #e3e7ec 80%); --text: #1d2128; --muted: #5f6b7a; --card: #fff; --border: #d5dae1; --shadow: 0 1px 3px rgba(13, 11, 16, .08); --line: #c4cad3; --code: #c76f1a; }
+      @media (prefers-color-scheme: dark) { :root { --page: radial-gradient(120% 90% at 50% 30%, #22252c, #0d0b10 75%); --text: #e8eaed; --muted: #9aa3ae; --card: rgba(24, 27, 33, .92); --border: #2c323c; --shadow: none; --line: #3a414c; --code: #f6b34b; } }
+      * { box-sizing: border-box; margin: 0; }
+      body { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 24px 16px; background: var(--page); background-attachment: fixed; color: var(--text); font: 400 15px/1.5 Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .mark { width: 56px; height: 56px; }
+      main { width: 100%; max-width: 400px; padding: 32px 28px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); }
+      .code { font-size: 48px; font-weight: 300; line-height: 1; color: var(--code); }
+      h1 { margin: 8px 0 6px; font-size: 24px; font-weight: 700; }
+      p { color: var(--muted); overflow-wrap: anywhere; }
+      .actions { display: grid; gap: 10px; margin-top: 24px; }
+      .button { display: block; width: 100%; padding: 11px 16px; border-radius: 6px; font: inherit; font-weight: 500; text-align: center; text-decoration: none; cursor: pointer; color: #1f1405; background: linear-gradient(#f6b34b, #e5892b); border: 1px solid #d9822a; }
+      .button:hover, .button:focus-visible { background: linear-gradient(#efa43d, #d97b22); }
+      .button.secondary { color: var(--text); background: transparent; border-color: var(--line); }
+      .button.secondary:hover, .button.secondary:focus-visible { border-color: var(--muted); }
+      .button:focus-visible { outline: 2px solid #e5892b; outline-offset: 2px; }
+      .request { margin-top: 20px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+      footer { font-size: 12px; color: var(--muted); }
+    </style>
+    </head>
+    <body>
+    <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
+      <defs>
+        <radialGradient id="disc" cx="50%" cy="40%" r="60%"><stop offset="0" stop-color="#22252C"/><stop offset="1" stop-color="#0D0B10"/></radialGradient>
+        <linearGradient id="rail" x1="0" x2="1"><stop offset="0" stop-color="#4A5260"/><stop offset=".5" stop-color="#363D48"/><stop offset="1" stop-color="#21252D"/></linearGradient>
+        <linearGradient id="blade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6B34B"/><stop offset="1" stop-color="#E5892B"/></linearGradient>
+      </defs>
+      <circle cx="256" cy="256" r="248" fill="url(#disc)"/>
+      <rect x="128" y="104" width="64" height="304" rx="10" fill="url(#rail)"/>
+      <rect x="320" y="104" width="64" height="304" rx="10" fill="url(#rail)"/>
+      <g fill="#0D0B10" opacity=".75"><rect x="152" y="128" width="16" height="16" rx="3"/><rect x="152" y="176" width="16" height="16" rx="3"/><rect x="152" y="320" width="16" height="16" rx="3"/><rect x="152" y="368" width="16" height="16" rx="3"/><rect x="344" y="128" width="16" height="16" rx="3"/><rect x="344" y="176" width="16" height="16" rx="3"/><rect x="344" y="320" width="16" height="16" rx="3"/><rect x="344" y="368" width="16" height="16" rx="3"/></g>
+      <rect x="112" y="220" width="288" height="72" rx="10" fill="url(#blade)"/>
+      <circle cx="150" cy="256" r="11" fill="#34D399"/>
+      <g stroke="#9A5512" stroke-width="7" stroke-linecap="round" opacity=".55"><path d="M270 240v32M292 240v32M314 240v32M336 240v32M358 240v32"/></g>
+    </svg>
+    <main>
+      <div class="code">{{.StatusCode}}</div>
+      <h1>{{.Title}}</h1>
+      {{if .Message}}<p>{{.Message}}</p>{{end}}
+      {{if .Redirect}}
+      <div class="actions">
+        <form method="GET" action="{{.ProxyPrefix}}/sign_in">
+          <input type="hidden" name="rd" value="{{.Redirect}}">
+          <button type="submit" class="button">Sign in</button>
+        </form>
+        <a class="button secondary" href="{{.Redirect}}">Go back</a>
+      </div>
+      {{end}}
+      {{if .RequestID}}<p class="request">Request ID {{.RequestID}}</p>{{end}}
+    </main>
+    {{if and .Footer (ne .Footer "-")}}<footer>{{.Footer}}</footer>{{end}}
+    </body>
+    </html>
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth2-proxy-finitelabs-pages
+  namespace: edge
+data:
+  error.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>{{.StatusCode}} {{.Title}}</title>
+    <style>
+      :root { --page: radial-gradient(60% 55% at 60% 62%, rgba(236, 120, 170, .28), transparent 70%), radial-gradient(70% 60% at 30% 30%, rgba(140, 120, 230, .3), transparent 70%), #f8f9fa; --text: #212529; --muted: #6c757d; --card: rgba(255, 255, 255, .65); --border: rgba(0, 0, 0, .1); --line: rgba(0, 0, 0, .2); --button: #212529; --button-text: #f8f9fa; --button-hover: #404040; }
+      @media (prefers-color-scheme: dark) { :root { --page: radial-gradient(60% 55% at 55% 58%, rgba(214, 40, 120, .55), transparent 70%), radial-gradient(70% 60% at 30% 35%, rgba(88, 60, 190, .55), transparent 70%), radial-gradient(90% 80% at 80% 90%, rgba(70, 40, 140, .5), transparent 75%), #050308; --text: #f8f9fa; --muted: #a7a9ac; --card: rgba(10, 10, 15, .7); --border: rgba(255, 255, 255, .1); --line: rgba(255, 255, 255, .22); --button: #f8f9fa; --button-text: #050308; --button-hover: #d0d0d0; } }
+      * { box-sizing: border-box; margin: 0; }
+      body { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 24px 16px; background: var(--page); background-attachment: fixed; color: var(--text); font: 400 15px/1.5 Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .logo { width: 220px; max-width: 70%; height: auto; fill: currentColor; }
+      main { width: 100%; max-width: 400px; padding: 32px 28px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+      .code { font-size: 48px; font-weight: 300; line-height: 1; color: var(--muted); }
+      h1 { margin: 8px 0 6px; font-size: 24px; font-weight: 700; letter-spacing: -.3px; }
+      p { color: var(--muted); font-weight: 300; overflow-wrap: anywhere; }
+      .actions { display: grid; gap: 10px; margin-top: 24px; }
+      .button { display: block; width: 100%; padding: 11px 16px; border-radius: 30px; font: inherit; font-weight: 500; text-align: center; text-decoration: none; cursor: pointer; color: var(--button-text); background: var(--button); border: 1px solid var(--button); }
+      .button:hover, .button:focus-visible { background: var(--button-hover); border-color: var(--button-hover); }
+      .button.secondary { color: var(--text); background: transparent; border-color: var(--line); }
+      .button.secondary:hover, .button.secondary:focus-visible { background: transparent; border-color: var(--text); }
+      .button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+      .request { margin-top: 20px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+      footer { font-size: 12px; color: var(--muted); }
+    </style>
+    </head>
+    <body>
+    <svg class="logo" viewBox="0 0 1921 456" role="img" aria-label="Finite Labs">
+      <polygon points="0 306.5 0 394.3 0 396.2 1.4 395.2 94.7 455.2 94.7 341 261.1 243.8 261.1 135.3 0 287.7"/>
+      <polygon points="0 152.2 0 260.9 261.1 108.5 261.1 0"/>
+      <path transform="translate(425.2215, 168.0875)" d="M0,1.83 L78.98,1.83 L78.98,22.57 L25.66,22.57 L25.66,55.34 L66.51,55.34 L66.51,75.73 L25.66,75.73 L25.66,129.77 L0,129.77 Z M146.29,1.83 L171.95,1.83 L171.95,129.77 L146.29,129.77 Z M355.78,1.65 L355.78,129.77 L330.13,129.77 L272.07,41.98 L272.07,129.77 L246.41,129.77 L246.41,1.65 L272.07,1.65 L330.13,89.63 L330.13,1.65 Z M430.25,1.83 L455.9,1.83 L455.9,129.77 L430.25,129.77 Z M523.57,1.83 L617.43,1.83 L617.43,22.57 L583.33,22.57 L583.33,129.77 L557.68,129.77 L557.68,22.57 L523.57,22.57 Z M759.48,22.57 L710.94,22.57 L710.94,54.63 L753.98,54.63 L753.98,74.97 L710.94,74.97 L710.94,108.9 L759.48,108.9 L759.48,129.77 L685.28,129.77 L685.28,1.65 L759.48,1.65 Z M950.38,1.83 L950.38,109.43 L992.53,109.43 L992.53,129.77 L924.72,129.77 L924.72,1.83 Z M1144.85,129.77 L1136.4,105.41 L1085.49,105.41 L1077.05,129.77 L1050.09,129.77 L1096.09,1.65 L1125.99,1.65 L1171.98,129.77 Z M1092.42,84.89 L1129.48,84.89 L1110.97,31.34 Z M1310.94,64.15 C1318.15,65.49 1324.08,69.1 1328.73,74.97 C1333.35,80.84 1335.66,87.56 1335.66,95.13 C1335.66,101.98 1333.99,108 1330.65,113.19 C1327.29,118.37 1322.43,122.44 1316.08,125.39 C1309.71,128.31 1302.18,129.77 1293.51,129.77 L1238.36,129.77 L1238.36,1.83 L1291.14,1.83 C1299.81,1.83 1307.29,3.25 1313.58,6.08 C1319.87,8.88 1324.63,12.78 1327.88,17.79 C1331.13,22.8 1332.75,28.48 1332.75,34.82 C1332.75,42.27 1330.76,48.5 1326.77,53.51 C1322.8,58.55 1317.53,62.09 1310.94,64.15 Z M1264.01,22.57 L1264.01,54.63 L1287.48,54.63 C1293.59,54.63 1298.29,53.26 1301.6,50.51 C1304.88,47.77 1306.52,43.82 1306.52,38.67 C1306.52,33.54 1304.88,29.58 1301.6,26.78 C1298.29,23.98 1293.59,22.57 1287.48,22.57 Z M1289.85,108.9 C1296.07,108.9 1300.93,107.42 1304.42,104.47 C1307.9,101.55 1309.65,97.39 1309.65,92 C1309.65,86.51 1307.81,82.21 1304.15,79.08 C1300.48,75.98 1295.54,74.43 1289.31,74.43 L1264.01,74.43 L1264.01,108.9 Z M1449.55,131.07 C1440.61,131.07 1432.56,129.53 1425.41,126.46 C1418.29,123.42 1412.64,119.03 1408.47,113.28 C1404.33,107.52 1402.2,100.74 1402.08,92.94 L1429.57,92.94 C1429.92,98.18 1431.79,102.34 1435.15,105.41 C1438.52,108.45 1443.12,109.97 1448.96,109.97 C1454.95,109.97 1459.66,108.54 1463.09,105.68 C1466.52,102.82 1468.23,99.06 1468.23,94.41 C1468.23,90.63 1467.07,87.51 1464.74,85.07 C1462.42,82.63 1459.51,80.69 1456.03,79.26 C1452.54,77.86 1447.74,76.31 1441.63,74.61 C1433.35,72.17 1426.6,69.75 1421.39,67.37 C1416.2,64.98 1411.75,61.38 1408.02,56.55 C1404.3,51.72 1402.44,45.28 1402.44,37.24 C1402.44,29.64 1404.33,23.04 1408.11,17.43 C1411.9,11.8 1417.22,7.5 1424.07,4.51 C1430.89,1.5 1438.71,0 1447.53,0 C1460.71,0 1471.42,3.2 1479.67,9.61 C1487.93,16.05 1492.48,25 1493.35,36.48 L1465.1,36.48 C1464.86,32.1 1463,28.46 1459.51,25.57 C1456.03,22.71 1451.42,21.28 1445.7,21.28 C1440.67,21.28 1436.66,22.56 1433.68,25.12 C1430.7,27.69 1429.21,31.41 1429.21,36.3 C1429.21,39.73 1430.33,42.57 1432.56,44.84 C1434.83,47.1 1437.64,48.93 1441.01,50.34 C1444.38,51.74 1449.11,53.35 1455.22,55.16 C1463.54,57.61 1470.31,60.05 1475.56,62.49 C1480.8,64.94 1485.32,68.6 1489.1,73.49 C1492.89,78.38 1494.78,84.8 1494.78,92.76 C1494.78,99.58 1493.01,105.93 1489.46,111.8 C1485.94,117.67 1480.76,122.35 1473.91,125.84 C1467.05,129.32 1458.93,131.07 1449.55,131.07 Z"/>
+    </svg>
+    <main>
+      <div class="code">{{.StatusCode}}</div>
+      <h1>{{.Title}}</h1>
+      {{if .Message}}<p>{{.Message}}</p>{{end}}
+      {{if .Redirect}}
+      <div class="actions">
+        <form method="GET" action="{{.ProxyPrefix}}/sign_in">
+          <input type="hidden" name="rd" value="{{.Redirect}}">
+          <button type="submit" class="button">Sign in</button>
+        </form>
+        <a class="button secondary" href="{{.Redirect}}">Go back</a>
+      </div>
+      {{end}}
+      {{if .RequestID}}<p class="request">Request ID {{.RequestID}}</p>{{end}}
+    </main>
+    {{if and .Footer (ne .Footer "-")}}<footer>{{.Footer}}</footer>{{end}}
+    </body>
+    </html>
