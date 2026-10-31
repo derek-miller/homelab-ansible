@@ -1,40 +1,35 @@
 ---
-- name: check if influxdata GPG key exists
-  stat:
-    path: /usr/share/keyrings/influxdata-archive.gpg
-  register: _influxdata_gpg_key
-
-- name: download influxdata GPG key
-  get_url:
-    url: https://repos.influxdata.com/influxdata-archive.key
-    dest: /tmp/influxdata-archive.key
-    mode: '0644'
-  when: not _influxdata_gpg_key.stat.exists
-
-- name: install gnupg for key dearmoring
+# Its postinst adds a second influxdata source, influxdata.list.
+- name: remove influxdata-archive-keyring
   apt:
-    name: gnupg
-    state: present
-  when: not _influxdata_gpg_key.stat.exists
+    name: influxdata-archive-keyring
+    state: absent
+    purge: yes
 
-- name: dearmor and install influxdata GPG key
-  shell: cat /tmp/influxdata-archive.key | gpg --yes --dearmor -o /usr/share/keyrings/influxdata-archive.gpg
-  when: not _influxdata_gpg_key.stat.exists
-
-- name: remove conflicting influxdata source files
+- name: remove old influxdata source files
   file:
     path: "{{ item }}"
     state: absent
   loop:
-    - /etc/apt/sources.list.d/influxdata.sources
+    - /etc/apt/sources.list.d/influxdata.list
+    - /usr/share/keyrings/influxdata-archive.gpg
     - /etc/apt/keyrings/influxdata-archive.gpg
 
-- name: add influxdb repository
-  apt_repository:
-    repo: 'deb [signed-by=/usr/share/keyrings/influxdata-archive.gpg] https://repos.influxdata.com/debian stable main'
-    filename: influxdata
-    state: present
+- name: add influxdata repository
+  deb822_repository:
+    name: influxdata
+    types: deb
+    uris: https://repos.influxdata.com/debian
+    suites: stable
+    components: main
+    signed_by: https://repos.influxdata.com/influxdata-archive.key
+    install_python_debian: yes
+  register: _influxdata_repo
+
+- name: update apt cache
+  apt:
     update_cache: yes
+  when: _influxdata_repo is changed
 
 - name: install telegraf dependencies
   apt:
@@ -42,8 +37,10 @@
     state: latest
   notify: restart telegraf
 
+# telegraf recommends influxdata-archive-keyring, removed above.
 - name: install telegraf
   apt:
     name: telegraf
     state: latest
+    install_recommends: no
   notify: restart telegraf
