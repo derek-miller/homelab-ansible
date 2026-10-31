@@ -209,7 +209,7 @@ A move refuses a label while a backup, prune, check or restore is running in its
    make run ANSIBLE_FLAGS="-e swarm_copy_volumes=yes"
    ```
 
-   For a suite that takes pushes from outside, such as webhooks, run `make run tags=docker-stack,flux ANSIBLE_FLAGS="-e swarm_copy_volumes=yes"` instead. It does only the copy, the stack deploy and Flux, in 3 minutes rather than 15, and GitHub doesn't retry a delivery that fails in between.
+   For a suite that takes pushes from outside, such as webhooks or youtrack, which GitHub sends commits to, run `make run tags=docker-stack,flux ANSIBLE_FLAGS="-e swarm_copy_volumes=yes"` instead. It does only the copy, the stack deploy and Flux, in 3 minutes rather than 15, and GitHub doesn't retry a delivery that fails in between.
 
 3. Start the suite's first backup by hand (see Backups), resume deploys, and in the next change take the suite's entries out of `swarm_volume_copies`.
 
@@ -336,7 +336,7 @@ What none of this catches: a backup target directory being **deleted** disappear
 
 Nor does it catch a *partial* archive. `offen` builds the archive under `/tmp` inside the container and then byte-copies it onto the share under its final name, and it does not unlink the destination if that copy dies partway (`internal/storage/local/local.go`: `os.Create` then `io.Copy`, no rename anywhere in the tree). A copy interrupted by a dropped mount leaves a truncated `backup-<ts>.tar.gz` carrying a current mtime, which reads as fresh. Freshness here means an archive arrived, not that it is complete or restorable.
 
-YouTrack writes its own scheduled backups into its `backups` claim (Database Backup settings: location `/opt/youtrack/backups`, TAR.GZ, keep 2), and k8up backs that claim up with the rest. Telegraf watches only the Backups share, so `backup-freshness` in `youtrack` watches the claim instead: its readiness probe fails whenever no `*.tar.gz` there is newer than 26 h, so a stopped schedule shows as **Container Unhealthy (k3s)** for `youtrack/backup-freshness`, then **Workload Unavailable (k3s)**, and both clear once a backup lands.
+YouTrack writes its own scheduled backups into its `backups` claim (Database Backup settings: location `/opt/youtrack/backups`, TAR.GZ, keep 2), and k8up backs that claim up with the rest. Telegraf watches only the Backups share, so the hourly CronJob `backup-freshness` in `youtrack` watches the claim instead: it fails whenever no `*.tar.gz` there is newer than 26 h and retries in the same pod, so a stopped schedule shows as **Container Crash Loop (k3s)** for `youtrack/backup-freshness`, once an hour until a backup lands.
 
 ## Bringing up a new host
 

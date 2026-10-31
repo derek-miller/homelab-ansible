@@ -148,42 +148,37 @@ spec:
         - protocol: TCP
           port: 8080
 ---
-# Unready, so Container Unhealthy (k3s), while YouTrack's newest backup is over 26 hours old.
-apiVersion: apps/v1
-kind: Deployment
+# Fails and retries in its pod, so Container Crash Loop (k3s), while YouTrack's newest backup is over 26 hours old.
+apiVersion: batch/v1
+kind: CronJob
 metadata:
   name: backup-freshness
   namespace: youtrack
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: backup-freshness
-  template:
-    metadata:
-      labels:
-        app: backup-freshness
+  schedule: "@hourly"
+  concurrencyPolicy: Forbid
+  jobTemplate:
     spec:
-      nodeSelector:
-        homelab.local/youtrack: "true"
-      securityContext:
-        runAsUser: 13001
-        runAsGroup: 13001
-        runAsNonRoot: true
-      containers:
-        - name: backup-freshness
-          image: alpine:3
-          command: ["sleep", "infinity"]
-          readinessProbe:
-            exec:
+      backoffLimit: 6
+      template:
+        spec:
+          restartPolicy: OnFailure
+          nodeSelector:
+            homelab.local/youtrack: "true"
+          securityContext:
+            runAsUser: 13001
+            runAsGroup: 13001
+            runAsNonRoot: true
+          containers:
+            - name: backup-freshness
+              image: alpine:3
               command: ["sh", "-c", "find /backups -name '*.tar.gz' -mmin -1560 | grep -q ."]
-            periodSeconds: 60
-          volumeMounts:
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+                  readOnly: true
+          volumes:
             - name: backups
-              mountPath: /backups
-              readOnly: true
-      volumes:
-        - name: backups
-          persistentVolumeClaim:
-            claimName: backups
-            readOnly: true
+              persistentVolumeClaim:
+                claimName: backups
+                readOnly: true
