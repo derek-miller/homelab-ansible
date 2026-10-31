@@ -18,6 +18,7 @@
   deb822_repository:
     name: influxdata
     state: absent
+    install_python_debian: yes
   register: _influxdata_repo
 
 - name: remove old influxdata source files

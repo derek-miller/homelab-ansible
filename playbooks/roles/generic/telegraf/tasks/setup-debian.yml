@@ -23,6 +23,7 @@
     suites: stable
     components: main
     signed_by: https://repos.influxdata.com/influxdata-archive.key
+    install_python_debian: yes
   register: _influxdata_repo
 
 - name: update apt cache
