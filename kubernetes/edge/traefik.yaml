@@ -159,6 +159,19 @@ spec:
                     - 10.0.0.0/8
                     - 172.16.0.0/12
                     - 192.168.0.0/16
+              strip-auth-request:
+                headers:
+                  customRequestHeaders:
+                    X-Auth-Request-Email: ""
+                    X-Auth-Request-User: ""
+                    X-Auth-Request-Preferred-Username: ""
+                    X-Auth-Request-Groups: ""
+                    X-Auth-Request-Access-Token: ""
+              oauth-verify:
+                forwardAuth:
+                  # Its root, unlike /oauth2/auth, sends a signed-out browser on to Keycloak.
+                  address: http://oauth2-proxy.edge.svc.cluster.local/
+                  authResponseHeadersRegex: ^X-Auth-Request-
             routers:
               swarm:
                 rule: PathPrefix(`/`)
