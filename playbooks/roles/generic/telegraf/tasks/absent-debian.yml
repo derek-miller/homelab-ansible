@@ -8,21 +8,32 @@
 
 - name: uninstall telegraf
   apt:
-    name: telegraf
+    name:
+      - telegraf
+      - influxdata-archive-keyring
     state: absent
     purge: yes
 
-- name: remove influxdb apt repository
-  apt_repository:
-    repo: 'deb [signed-by=/usr/share/keyrings/influxdata-archive.gpg] https://repos.influxdata.com/debian stable main'
-    filename: influxdata
+- name: remove influxdata repository
+  deb822_repository:
+    name: influxdata
     state: absent
-    update_cache: yes
+  register: _influxdata_repo
 
-- name: remove influxdata GPG key
+- name: remove old influxdata source files
   file:
-    path: /usr/share/keyrings/influxdata-archive.gpg
+    path: "{{ item }}"
     state: absent
+  loop:
+    - /etc/apt/sources.list.d/influxdata.list
+    - /usr/share/keyrings/influxdata-archive.gpg
+    - /etc/apt/keyrings/influxdata-archive.gpg
+  register: _influxdata_old_repo
+
+- name: update apt cache
+  apt:
+    update_cache: yes
+  when: _influxdata_repo is changed or _influxdata_old_repo is changed
 
 - name: remove telegraf conf directory
   file:
