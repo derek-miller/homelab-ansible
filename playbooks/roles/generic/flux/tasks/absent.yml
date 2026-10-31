@@ -19,6 +19,7 @@
   register: _flux_crds
   changed_when: false
   check_mode: no
+  when: k3s_state | default('present') == 'present'
 
 - name: delete the Flux Operator's CRDs
   command: "k3s kubectl delete --ignore-not-found {{ item | quote }}"
@@ -28,6 +29,7 @@
   command: k3s kubectl delete namespace --ignore-not-found --wait --timeout=5m flux-system
   register: _flux_namespaces
   changed_when: "'deleted' in _flux_namespaces.stdout"
+  when: k3s_state | default('present') == 'present'
 
 - name: remove the manifests
   file:
@@ -40,6 +42,7 @@
   command: "k3s kubectl -n kube-system delete addon --ignore-not-found {{ _flux_manifests | map('quote') | join(' ') }}"
   register: _flux_addons
   changed_when: "'deleted' in _flux_addons.stdout"
+  when: k3s_state | default('present') == 'present'
 
 - name: remove the registry's volume
   file:

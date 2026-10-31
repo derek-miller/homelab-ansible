@@ -39,3 +39,40 @@ spec:
       create: false
     windows:
       enabled: false
+  # A node's plugin replaced while the old pod still runs, as when an agent rejoins, can lose its
+  # registration socket to the old pod's cleanup. This is the registrar probe of the chart's next
+  # release; drop it once 1.x renders one.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: DaemonSet
+              name: csi-smb-node
+            patch: |
+              apiVersion: apps/v1
+              kind: DaemonSet
+              metadata:
+                name: csi-smb-node
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: node-driver-registrar
+                        args:
+                          - --csi-address=$(ADDRESS)
+                          - --kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)
+                          - --http-endpoint=localhost:29641
+                          - --v=2
+                        ports:
+                          - name: healthz
+                            containerPort: 29641
+                            protocol: TCP
+                        livenessProbe:
+                          httpGet:
+                            host: localhost
+                            path: /healthz
+                            port: healthz
+                          initialDelaySeconds: 20
+                          timeoutSeconds: 10
+                          periodSeconds: 20
+                          failureThreshold: 2

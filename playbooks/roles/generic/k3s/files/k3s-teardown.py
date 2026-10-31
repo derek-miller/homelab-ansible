@@ -105,13 +105,22 @@ def remove_netns():
             must('ip', 'netns', 'delete', name)
 
 
+def delete_link(name):
+    global changed
+    result = run('ip', 'link', 'delete', name)
+    if result.returncode == 0:
+        changed = True
+    # A pod's veth goes with its network namespace, which can finish after the list was read.
+    elif run('ip', 'link', 'show', name).returncode == 0:
+        errors.append(f"ip link delete {name}: {result.stderr.strip()}")
+
+
 def remove_links():
     for line in run('ip', '-o', 'link', 'show', 'master', 'cni0').stdout.splitlines():
-        name = line.split(':')[1].strip().split('@')[0]
-        must('ip', 'link', 'delete', name)
+        delete_link(line.split(':')[1].strip().split('@')[0])
     for name in LINKS:
         if run('ip', 'link', 'show', name).returncode == 0:
-            must('ip', 'link', 'delete', name)
+            delete_link(name)
 
 
 def remove_iptables(binary):
