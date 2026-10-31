@@ -9,7 +9,7 @@ Ansible-managed homelab. Docker Swarm (rackvm1-3 managers, rackvm4-5 workers, am
 - **Service config lives in Ansible Vault, not in the tree you can grep.** The entire Docker Swarm stack (services, volumes, networks) is the `vault_docker_stack_definition` variable inside `playbooks/host_vars/rackvm1/vault.yml`, and per-host Compose stacks are `docker_compose_definition` in each host's `vault.yml`. Deployed config files live under `playbooks/files/vault/{hostname}/...`. A plain grep reads these as opaque AES blobs and reports them absent — decrypt (`make vault-decrypt`) before concluding anything is undeclared.
 - **Kubernetes apps live in `kubernetes/`, applied by Flux, not Ansible.** A `*.vault.yaml` file there is vault-encrypted whole, like the stack definition. Hidden apps must not be named by any file name, plain file, comment or deploy output; the repo and its Actions logs are public. Every namespace in `kubernetes/` carries the default-deny baseline copied from `kubernetes/portainer/namespace.yaml` (RUNBOOK.md, Apps on k3s).
 - **Run `make vault-encrypt` before committing.** `hooks/pre-commit` runs `make vault-check` and rejects the commit otherwise. The Makefile hard-errors unless `VIRTUAL_ENV` is set, so commit from inside `.venv`.
-- **The swarm stack is named `rackvms` and every volume is `rackvms_*`.** Renaming the stack points all 44 services at new, empty volumes; the data stays under the old prefix until each volume's `_data` directory is moved across.
+- **The swarm stack is named `rackvms` and every volume is `rackvms_*`.** Renaming the stack points every service at new, empty volumes; the data stays under the old prefix until each volume's `_data` directory is moved across.
 
 ## Commands
 

@@ -71,6 +71,7 @@ project_files:
     mode: "0400"
 
 docker_stack_definition: "{{ vault_docker_stack_definition }}"
+swarm_volume_copies: "{{ vault_swarm_volume_copies }}"
 
 k3s_cluster_token: !vault |
   $ANSIBLE_VAULT;1.1;AES256

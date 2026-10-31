@@ -1,0 +1,61 @@
+---
+# Posts new Control4 Composer and Jailbreak releases; the webhooks are in c4-release-notifier.vault.yaml.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data
+  namespace: notifier
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 64Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: c4-release-notifier
+  namespace: notifier
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: c4-release-notifier
+  template:
+    metadata:
+      labels:
+        app: c4-release-notifier
+    spec:
+      nodeSelector:
+        homelab.local/notifier: "true"
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+      containers:
+        - name: c4-release-notifier
+          image: registry.homelab.local/c4-release-notifier
+          env:
+            - name: TZ
+              value: America/Chicago
+            - name: COMPOSER_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: c4-release-notifier
+                  key: composer-webhook-url
+            - name: JAILBREAK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: c4-release-notifier
+                  key: jailbreak-webhook-url
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: data
