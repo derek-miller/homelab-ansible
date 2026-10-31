@@ -531,3 +531,33 @@ Each drill loads the dump from the volume into a scratch Postgres (production's 
 **Updating the runner.** Nothing to bump. The image builds from `actions-runner:latest` and is tagged by a hash of its inputs, the base image's digest included, so each deploy builds a new runner release by itself and moves `gha-runner:latest`, which the stack runs. The service isn't restarted, so no job is cancelled; each task takes the new build when it starts. Older builds are pruned once no task uses them.
 
 **If `edge` moves**, the runner goes the other way: it starts on the old edge node and leaves the new one. Move `gha-runner` in `docker_images_to_build` to match, `docker rmi gha-runner:latest` on the node it left, and check the node it lands on can spare 4 CPUs and 8G.
+
+## Zigbee firmware index
+
+`kubernetes/firmware/` runs the Zigbee firmware index ([finitelabs/zigbee-firmware-index](https://github.com/finitelabs/zigbee-firmware-index)) on the `firmware` label's node. One pod serves the admin page at `https://ota-admin.finitelabs.com`, behind the Finite Labs sign-in (see [Apps on k3s](#apps-on-k3s)), and publishes the index to the R2 bucket `zigbee-firmware-index`, which Cloudflare serves at `https://ota.finitelabs.com`. Anyone in the `finitelabs` realm can sign in, but only the addresses in the `admin` Secret may use the page. The pod keeps its SQLite database and uploads on the claim `data`; the published files live only in R2.
+
+**Runs.** The app publishes once a day at the UTC time set on its Runs page, 04:00 unless changed, and catches up a run missed while it was down; the setting lives in its database, not in the repo. A failed run, a run the 5% brake held back, and a vendor source failing or recovering post to Discord through the app's own webhook, in the `alerts` Secret. A check in the app's own repository fetches `https://ota.finitelabs.com/latest.json` every 6 hours from outside and posts to Discord if it is over 48 hours old or its signature fails. **Workload Unavailable (k3s)** and **Container Crash Loop (k3s)** cover the pod, which refuses to start with any setting missing.
+
+**The image** is `ghcr.io/finitelabs/zigbee-firmware-index:1`, public, and each deploy pins it to that tag's digest, so a release within the major arrives with the next deploy. A new major means changing the tag.
+
+**The signing key** in the `signing-key` Secret signs every index the app publishes, and drivers in the field check it against the public key they ship with. Besides `firmware.vault.yaml`, keep a copy in the password manager. Changing it takes a driver release first: ship a driver that accepts both keys, switch the Secret once that driver is out, and drop the old key in a later driver. If it leaks, switch the daily run off on the Runs page until the two-key driver ships.
+
+**Backups.** `backup.yaml` backs the suite up daily like any other (see Backups under [Apps on k3s](#apps-on-k3s)). Besides the claim's files, k8up runs `python -m firmware_index dump` in the pod, as the Deployment's `k8up.io/backupcommand` annotation asks, and saves its consistent copy of the database as a snapshot of its own, at the path `/firmware-firmware.sqlite3`. It reaches the pod through the API server, which `allow-kube-apiserver` lets the namespace's k8up jobs do. The claim's own copy of the database can be caught mid-write, so if one restored with `k3s-restore` won't open, put the dump in its place:
+
+1. `sudo kubectl -n firmware scale deploy/firmware --replicas=0` on rackvm1.
+2. Start a pod in `firmware` labelled `k8upjob: "true"`, from the image a backup job uses, with the `backup` Secret's `username`, `password` and `repository-password` in its environment, and in it run `restic -r rest:http://<username>:<password>@rest-server.backup.svc.cluster.local:8000/firmware/ dump --path /firmware-firmware.sqlite3 latest /firmware-firmware.sqlite3`, with the output going to a file. Without `--path`, `latest` is the claim's snapshot, which has no such file.
+3. On the `firmware` node, put that file at `/mnt/data/volumes/firmware/data/data/index.sqlite3`, owned by 10001, and delete `index.sqlite3-wal` and `index.sqlite3-shm` beside it.
+4. Scale the Deployment back to 1.
+
+**Cloudflare, once, by hand.** In the Finite Labs Cloudflare account, which holds `finitelabs.com` and is not the homelab's:
+
+1. R2 Object Storage: add the R2 subscription if the account has none, then Create bucket `zigbee-firmware-index`, location Automatic, Standard storage class.
+2. The bucket's Settings > Custom Domains > Add: `ota.finitelabs.com`. Leave its Public Development URL off.
+3. R2 Object Storage > API Tokens > Create Account API token: Object Read & Write, Apply to specific buckets only, `zigbee-firmware-index`, TTL Forever. It shows the Access Key ID and Secret Access Key once; they go in the `r2` Secret as `access-key-id` and `secret-access-key`, beside `bucket` and `endpoint`, `https://<account id>.r2.cloudflarestorage.com`, the account ID being the one in the dashboard's URL.
+4. The two DNS records under [Apps on k3s](#apps-on-k3s), Finite Labs sign-in.
+
+To try a release against something other than the real bucket, `zigbee-firmware-index-test` is kept empty for it. Make a token scoped to it as in step 3, and point `r2` at both; the first start publishes. Before pointing the app back, remove the claim's folder: the database remembers what it uploaded, and would skip those files in the real bucket.
+
+**Keycloak.** The admin page's callback, `https://ota-admin.finitelabs.com/oauth2/callback`, is in the `finitelabs` realm's `oauth2-proxy` client. The `admin` Secret lists realm users by their email, which is what the sign-in passes to the app.
+
+**The outside check.** Once `https://ota.finitelabs.com/latest.json` serves, set the app repository's secret `DISCORD_WEBHOOK_URL` to the app's webhook, its variable `SIGNING_KEY_PUB` to the public key as hex, as `https://ota.finitelabs.com/signing-key.pub` serves it, and its variable `OTA_CHECK_ENABLED`, which turns the check on. GitHub switches a schedule off after 60 days with no activity in the repository; its Actions page then shows the workflow disabled.

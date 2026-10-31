@@ -66,7 +66,7 @@ rackvm[4:5]
 [docker_labels]
 rackvm1  docker_labels=identity,edge,webhooks
 rackvm2  docker_labels=home,mqtt,youtrack,registry
-rackvm3  docker_labels=media,notifier
+rackvm3  docker_labels=media,notifier,firmware
 rackvm4  docker_labels=grafana,metrics
 rackvm5  docker_labels=sourcebot
 
