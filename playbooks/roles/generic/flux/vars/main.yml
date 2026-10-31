@@ -205,16 +205,21 @@ _flux_restore_claims: >-
      else (k3s_restore_claims.split(',') | map('trim') | select | list or _flux_restore_local_claims) }}
 _flux_restore_image: "{{ _flux_restore_reads.results[3].stdout }}"
 # Each claim's newest snapshot, or its newest from before k3s_restore_before; restic's times are UTC.
+# A tar the claim's namesake container streamed to k8up wins over a copy of its files.
 _flux_restore_picks: >-
   {%- set out = [] -%}
+  {%- set snapshots = (_flux_restore_list.stdout | default('[]', true) if _flux_restore_list.rc | default(0) == 0 else '[]') | from_json -%}
   {%- for claim in _flux_restore_claims | sort -%}
-  {%- set found = (_flux_restore_list.stdout | default('[]', true) if _flux_restore_list.rc | default(0) == 0 else '[]') | from_json | selectattr('paths', 'eq', ['/data/' ~ claim]) | list -%}
+  {%- set tar = '/' ~ k3s_restore_namespace ~ '-' ~ claim ~ '.tar' -%}
+  {%- set found = snapshots | selectattr('paths', 'in', [['/data/' ~ claim], [tar]]) | list -%}
   {%- if k3s_restore_before -%}
   {%- set found = found | selectattr('time', 'lt', k3s_restore_before | string | replace(' ', 'T') | regex_replace('Z$', '')) | list -%}
   {%- endif -%}
+  {%- set found = found | selectattr('paths', 'eq', [tar]) | list or found -%}
   {%- if found -%}
   {%- set newest = found | sort(attribute='time') | last -%}
-  {%- set _ = out.append({'claim': claim, 'id': newest.id, 'time': newest.time[:16] | replace('T', ' ')}) -%}
+  {%- set _ = out.append({'claim': claim, 'id': newest.id, 'time': newest.time[:16] | replace('T', ' '),
+        'tar': tar if newest.paths == [tar] else ''}) -%}
   {%- endif -%}
   {%- endfor -%}
   {{ out }}

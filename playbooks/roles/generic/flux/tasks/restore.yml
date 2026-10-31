@@ -234,7 +234,7 @@
           {%- if _flux_restore_lost %} {{ _flux_restore_from }} is gone, so it moves to {{ _flux_restore_to }}
           {%- if _flux_restore_picks %},{% endif %}{% endif %}
           {%- if _flux_restore_picks %} restoring {% for pick in _flux_restore_picks %}{{ pick.claim }} from {{ pick.time }}
-          {%- if not loop.last %}, {% endif %}{% endfor %} UTC{% endif %}
+          {%- if pick.tar %} (its tar){% endif %}{%- if not loop.last %}, {% endif %}{% endfor %} UTC{% endif %}
           {%- if _flux_restore_missing %}; {{ _flux_restore_missing | join(', ') }} has no snapshot and
           {{- ' comes back empty' if _flux_restore_lost else ' is left as it is' }}{% endif %}
           {%- if not (_flux_restore_lost or _flux_restore_picks or _flux_restore_missing) %} nothing to restore, so it is only brought back{% endif %}.
@@ -300,7 +300,17 @@
               command: >-
                 k3s kubectl -n {{ move.label }} exec {{ _flux_restore_pod }} --
                 restic restore {{ item.id }}:/data --target /restore/{{ item.claim }} --delete --verify
-              loop: "{{ _flux_restore_picks }}"
+              loop: "{{ _flux_restore_picks | rejectattr('tar') | list }}"
+              loop_control:
+                label: "{{ item.claim }}"
+
+            # The tar holds the folder's contents, not the folder itself, so the app sets its owner and mode.
+            - name: "{{ move.label }} | empty each volume restored from a tar and unpack it there"
+              command: >-
+                k3s kubectl -n {{ move.label }} exec {{ _flux_restore_pod }} -- sh -c
+                {{ ('set -o pipefail; cd /restore/' ~ item.claim ~ '/' ~ item.claim ~ ' && find . -mindepth 1 -delete && restic dump '
+                    ~ item.id ~ ' ' ~ item.tar ~ ' | tar -x --numeric-owner') | quote }}
+              loop: "{{ _flux_restore_picks | selectattr('tar') | list }}"
               loop_control:
                 label: "{{ item.claim }}"
 
