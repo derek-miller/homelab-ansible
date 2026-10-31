@@ -4,6 +4,9 @@ name: Deploy
 on:
   push:
     branches: [master]
+  # Weekly, so floating images and the CI runner never fall more than a week behind.
+  schedule:
+    - cron: "0 14 * * 1"
   workflow_dispatch:
     inputs:
       hosts:

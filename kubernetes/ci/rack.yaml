@@ -55,6 +55,10 @@ spec:
           - name: runner
             image: registry.homelab.local/gha-runner
             command: ["/home/runner/run.sh"]
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
             # A job sizes its workers by the CPU limit, and the catalogue's 4 peak near 7 GiB.
             resources:
               requests:
