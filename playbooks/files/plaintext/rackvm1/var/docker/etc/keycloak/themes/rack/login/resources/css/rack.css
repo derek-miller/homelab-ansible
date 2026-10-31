@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap");
-
 :root.login-pf {
   --rk-font: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --rk-page: radial-gradient(120% 90% at 50% 30%, #f7f8fa, #e3e7ec 80%);
