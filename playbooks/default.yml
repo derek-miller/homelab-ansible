@@ -619,8 +619,8 @@
         images_filters:
           dangling: "false"
           # Local builds can't be pulled back, and one may be unused right now:
-          # a one-shot job between runs, a runner between jobs, or a rebuild
-          # whose service hasn't restarted yet. They're pruned below instead.
+          # a one-shot job between runs, or a rebuild whose service hasn't
+          # restarted yet. They're pruned below instead.
           "label!": homelab.local-build
         networks: yes
         volumes: yes

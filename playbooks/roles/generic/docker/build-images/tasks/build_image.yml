@@ -229,7 +229,6 @@
 - name: Roll the swarm services still on an older {{ image_name }} build
   when:
     - _build_id != ''
-    - image_config.rollout | default(true)
     - groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | length > 0
   block:
     - name: List the swarm services

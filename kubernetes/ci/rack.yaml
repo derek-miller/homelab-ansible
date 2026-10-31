@@ -1,0 +1,69 @@
+---
+# The runners finitelabs/control4-zigbee3 asks for with `runs-on: rack`; the token is in rack.vault.yaml.
+# The chart's minor must match the controller's in kubernetes/platform/arc/.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: gha-runner-scale-set
+  namespace: ci
+spec:
+  interval: 1h
+  url: oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
+  ref:
+    semver: 0.15.x
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: rack
+  namespace: ci
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: gha-runner-scale-set
+  values:
+    githubConfigUrl: https://github.com/finitelabs/control4-zigbee3
+    githubConfigSecret: rack-github
+    runnerScaleSetName: rack
+    minRunners: 0
+    maxRunners: 4
+    controllerServiceAccount:
+      namespace: arc
+      name: arc-controller
+    template:
+      spec:
+        automountServiceAccountToken: false
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: node-role.kubernetes.io/control-plane
+                      operator: DoesNotExist
+          # One per node, as each takes half of an 8-core rackvm.
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchLabels:
+                    actions.github.com/scale-set-name: rack
+                topologyKey: kubernetes.io/hostname
+        containers:
+          - name: runner
+            image: registry.homelab.local/gha-runner
+            command: ["/home/runner/run.sh"]
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+            # A job sizes its workers by the CPU limit, and the catalogue's 4 peak near 7 GiB.
+            resources:
+              requests:
+                cpu: "1"
+                memory: 2Gi
+              limits:
+                cpu: "4"
+                memory: 8Gi

@@ -39,12 +39,7 @@ available_docker_images:
     image_name: c4-release-notifier
   gha-runner:
     dockerfile: gha-runner/Dockerfile
-    build_files:
-      - gha-runner/start.sh
     image_name: gha-runner
-    # Each task takes the newest build when it starts; restarting the service
-    # would cancel jobs in flight.
-    rollout: false
   control4-driver-scraper:
     repo: git@github.com:derek-miller/control4-driver-scraper.git
     version: master
