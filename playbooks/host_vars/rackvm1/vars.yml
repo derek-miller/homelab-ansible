@@ -104,7 +104,7 @@ flux_registry_htpasswd: !vault |
   32346632353134333464
 
 flux_web_base_url: "https://flux.{{ cloudflare_zone }}"
-flux_web_issuer_url: "https://keycloak.{{ cloudflare_zone }}/realms/{{ cloudflare_zone }}"
+flux_web_issuer_url: "https://auth.{{ cloudflare_zone }}/realms/{{ cloudflare_zone }}"
 flux_web_client_id: oauth2-proxy
 flux_web_client_secret: !vault |
           $ANSIBLE_VAULT;1.1;AES256
