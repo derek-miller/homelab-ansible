@@ -81,7 +81,7 @@ It takes rackvm5 first and the managers last, and stops at the first failure. Fo
 
 A node with nothing to upgrade and a matching `daemon.json` is skipped without being drained, so a stopped run can be run again. If it stopped with a node still drained, make that node active from a manager first, with `docker node update --availability active <node>`. A `hosts=` limit has to include a manager other than the node being upgraded. `make dry-run tags=docker-upgrade` reports what each node needs and stops before draining anything.
 
-While a node is drained, the services pinned to it are down: a few minutes each, longer for influxdb3 and YouTrack. Everything behind Traefik is down while rackvm1 is drained, and containers started outside the stack are stopped with Docker. Run it outside the 01:00–05:30 UTC backup window. A service that cannot stay up anyway, such as zigbee2mqtt with its coordinator unplugged, fails step 5 and stops the run; leave it out with `ANSIBLE_FLAGS="-e '{\"docker_upgrade_ignore_services\":[\"zigbee2mqtt\"]}'"`.
+While a node is drained, the services pinned to it are down: a few minutes each, longer for influxdb3. Everything behind Traefik is down while rackvm1 is drained, and containers started outside the stack are stopped with Docker. Run it outside the 01:00–05:30 UTC backup window. A service that cannot stay up anyway, such as zigbee2mqtt with its coordinator unplugged, fails step 5 and stops the run; leave it out with `ANSIBLE_FLAGS="-e '{\"docker_upgrade_ignore_services\":[\"zigbee2mqtt\"]}'"`.
 
 The play writes `daemon.json` from the checkout it runs from. A deploy writes it from master and, whenever the two differ, restarts Docker on every node at once. So a `daemon.json` change goes in through this play: pause deploys, merge it, run the play from an up-to-date master, then resume deploys and run Deploy, which finds `daemon.json` already in place and restarts nothing.
 
@@ -211,7 +211,7 @@ A move refuses a label while a backup, prune, check or restore is running in its
    make run ANSIBLE_FLAGS="-e swarm_copy_volumes=yes"
    ```
 
-   For a suite that takes pushes from outside, such as webhooks, run `make run tags=docker-stack,flux ANSIBLE_FLAGS="-e swarm_copy_volumes=yes"` instead. It does only the copy, the stack deploy and Flux, in 3 minutes rather than 15, and GitHub doesn't retry a delivery that fails in between.
+   For a suite that takes pushes from outside, such as webhooks or youtrack, which GitHub sends commits to, run `make run tags=docker-stack,flux ANSIBLE_FLAGS="-e swarm_copy_volumes=yes"` instead. It does only the copy, the stack deploy and Flux, in 3 minutes rather than 15, and GitHub doesn't retry a delivery that fails in between.
 
 3. Start the suite's first backup by hand (see Backups), resume deploys, and in the next change take the suite's entries out of `swarm_volume_copies` and its routes out of `external-rules.yaml`. If the suite had a `backup_<label>`, move its archives out of the monitored root within two days of the copy, whose final backup is their newest, before Volume Backup Stale fires for them (see [Volume backup freshness monitoring](#volume-backup-freshness-monitoring)):
 
@@ -344,7 +344,7 @@ What none of this catches: a backup target directory being **deleted** disappear
 
 Nor does it catch a *partial* archive. `offen` builds the archive under `/tmp` inside the container and then byte-copies it onto the share under its final name, and it does not unlink the destination if that copy dies partway (`internal/storage/local/local.go`: `os.Create` then `io.Copy`, no rename anywhere in the tree). A copy interrupted by a dropped mount leaves a truncated `backup-<ts>.tar.gz` carrying a current mtime, which reads as fresh. Freshness here means an archive arrived, not that it is complete or restorable.
 
-YouTrack writes its own scheduled backups into the `youtrack-backups` volume (Database Backup settings: location `/opt/youtrack/backups`, TAR.GZ, keep 2), and `backup_youtrack` archives that volume with the rest. Telegraf cannot read inside node-local volumes, so `youtrack-backup-check` watches it instead: it exits after 60 s whenever no `*.tar.gz` there is newer than 26 h, and a stopped schedule therefore shows as **Container Crash Loop (Swarm)** for that service.
+YouTrack writes its own scheduled backups into its `backups` claim (Database Backup settings: location `/opt/youtrack/backups`, TAR.GZ, keep 2), and k8up backs that claim up with the rest. Telegraf watches only the Backups share, so the hourly CronJob `backup-freshness` in `youtrack` watches the claim instead: it fails whenever no `*.tar.gz` there is newer than 26 h and retries in the same pod, so a stopped schedule shows as **Container Crash Loop (k3s)** for `youtrack/backup-freshness`, once an hour until a backup lands.
 
 ## Bringing up a new host
 
