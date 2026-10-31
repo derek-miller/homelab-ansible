@@ -211,7 +211,7 @@ A move refuses a label while a backup, prune, check or restore is running in its
 
    For a suite that takes pushes from outside, such as webhooks, run `make run tags=docker-stack,flux ANSIBLE_FLAGS="-e swarm_copy_volumes=yes"` instead. It does only the copy, the stack deploy and Flux, in 3 minutes rather than 15, and GitHub doesn't retry a delivery that fails in between.
 
-3. Start the suite's first backup by hand (see Backups), resume deploys, and in the next change take the suite's entries out of `swarm_volume_copies` and its routes out of `external-rules.yaml`. If the suite had a `backup_<label>`, move its archives out of the monitored root within two days of the copy, before Volume Backup Stale fires for them (see [Volume backup freshness monitoring](#volume-backup-freshness-monitoring)):
+3. Start the suite's first backup by hand (see Backups), resume deploys, and in the next change take the suite's entries out of `swarm_volume_copies` and its routes out of `external-rules.yaml`. If the suite had a `backup_<label>`, move its archives out of the monitored root within two days of the copy, whose final backup is their newest, before Volume Backup Stale fires for them (see [Volume backup freshness monitoring](#volume-backup-freshness-monitoring)):
 
    ```bash
    sudo mkdir -p /mnt/Backups/RetiredVolumes && sudo mv /mnt/Backups/Volumes/<label> /mnt/Backups/RetiredVolumes/
