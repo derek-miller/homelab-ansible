@@ -44,6 +44,7 @@ homebridge_ui_port: 443
 nodenv_versions:
   - 24.21.0
 
+# The webhook proxy keeps its own copies in kubernetes/webhooks/openclaw-webhook-proxy.vault.yaml; change both.
 openclaw_hooks_token: "{{ vault_openclaw_hooks_token }}"
 openclaw_hooks_timeout_seconds: 3600
 

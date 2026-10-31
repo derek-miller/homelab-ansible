@@ -1,0 +1,119 @@
+---
+# Queues GitHub and YouTrack webhooks for OpenClaw on rackmini1. Its routes, settings, rules, SSH key and egress rule
+# to rackmini1 are in openclaw-webhook-proxy.vault.yaml.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data
+  namespace: webhooks
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openclaw-webhook-proxy
+  namespace: webhooks
+spec:
+  replicas: 1
+  # Two at once would send the same turns twice.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: openclaw-webhook-proxy
+  template:
+    metadata:
+      labels:
+        app: openclaw-webhook-proxy
+    spec:
+      nodeSelector:
+        homelab.local/webhooks: "true"
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        runAsNonRoot: true
+      containers:
+        - name: openclaw-webhook-proxy
+          image: registry.homelab.local/openclaw-webhook-proxy
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: openclaw-webhook-proxy
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: ssh
+              mountPath: /app/ssh
+              readOnly: true
+            # A directory, not a subPath, so a changed rules file reaches the next turn.
+            - name: guardrails
+              mountPath: /app/guardrails
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: data
+        - name: ssh
+          secret:
+            secretName: openclaw-webhook-proxy-ssh
+            defaultMode: 0440
+        - name: guardrails
+          secret:
+            secretName: openclaw-webhook-proxy-guardrails
+            defaultMode: 0440
+            items:
+              - key: derek-miller.md
+                path: derek-miller/github-guardrails.md
+              - key: finitelabs.md
+                path: finitelabs/github-guardrails.md
+              - key: youtrack.md
+                path: youtrack/youtrack-guardrails.md
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openclaw-webhook-proxy
+  namespace: webhooks
+spec:
+  selector:
+    app: openclaw-webhook-proxy
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-edge-traefik
+  namespace: webhooks
+spec:
+  podSelector:
+    matchLabels:
+      app: openclaw-webhook-proxy
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: edge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 3000
