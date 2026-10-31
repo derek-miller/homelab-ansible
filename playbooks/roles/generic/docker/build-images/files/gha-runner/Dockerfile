@@ -6,9 +6,4 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential python3 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY start.sh /home/runner/start.sh
-RUN chmod 755 /home/runner/start.sh
-
 USER runner
-
-ENTRYPOINT ["/home/runner/start.sh"]

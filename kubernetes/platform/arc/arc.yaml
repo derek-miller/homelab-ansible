@@ -1,0 +1,56 @@
+---
+# GitHub's Actions Runner Controller. Its runner sets, in kubernetes/ci/, use a chart of the same minor:
+# a controller of another minor deletes them.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kube-apiserver
+  namespace: arc
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # Policy sees the kubernetes Service after DNAT, as the server's port 6443.
+    - ports:
+        - protocol: TCP
+          port: 6443
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: gha-runner-scale-set-controller
+  namespace: arc
+spec:
+  interval: 1h
+  url: oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller
+  ref:
+    semver: 0.15.x
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: arc
+  namespace: arc
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: gha-runner-scale-set-controller
+  # The apps wait for the platform, so a failure here must heal by itself.
+  install:
+    crds: CreateReplace
+    strategy:
+      name: RetryOnFailure
+  upgrade:
+    crds: CreateReplace
+    strategy:
+      name: RetryOnFailure
+  values:
+    serviceAccount:
+      name: arc-controller
+    flags:
+      logLevel: info
