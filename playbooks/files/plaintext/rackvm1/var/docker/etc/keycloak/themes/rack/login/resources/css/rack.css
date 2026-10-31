@@ -1,0 +1,140 @@
+@import url("https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap");
+
+:root.login-pf {
+  --rk-font: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --rk-page: radial-gradient(120% 90% at 50% 30%, #f7f8fa, #e3e7ec 80%);
+  --rk-text: #1d2128;
+  --rk-muted: #5f6b7a;
+  --rk-link: #a85a12;
+  --rk-card: #ffffff;
+  --rk-border: #d5dae1;
+  --rk-shadow: 0 1px 3px rgba(13, 11, 16, 0.08);
+  --rk-field: #ffffff;
+  --rk-field-border: #c4cad3;
+  --rk-amber: linear-gradient(#f6b34b, #e5892b);
+  --rk-amber-hover: linear-gradient(#efa43d, #d97b22);
+  --rk-amber-edge: #d9822a;
+  --rk-amber-text: #1f1405;
+
+  --pf-v5-global--FontFamily--text: var(--rk-font);
+  --pf-v5-global--FontFamily--text--vf: var(--rk-font);
+  --pf-v5-global--FontFamily--heading: var(--rk-font);
+  --pf-v5-global--FontFamily--heading--vf: var(--rk-font);
+  --pf-v5-global--Color--100: var(--rk-text);
+  --pf-v5-global--Color--200: var(--rk-muted);
+  --pf-v5-global--primary-color--100: #e5892b;
+  --pf-v5-global--primary-color--200: #d97b22;
+  --pf-v5-global--link--Color: var(--rk-link);
+  --pf-v5-global--link--Color--hover: var(--rk-text);
+}
+
+:root.login-pf.pf-v5-theme-dark {
+  --rk-page: radial-gradient(120% 90% at 50% 30%, #22252c, #0d0b10 75%);
+  --rk-text: #e8eaed;
+  --rk-muted: #9aa3ae;
+  --rk-link: #f6b34b;
+  --rk-card: rgba(24, 27, 33, 0.92);
+  --rk-border: #2c323c;
+  --rk-shadow: none;
+  --rk-field: #12151a;
+  --rk-field-border: #3a414c;
+}
+
+.login-pf body {
+  background: var(--rk-page);
+  background-attachment: fixed;
+  min-height: 100vh;
+  font-family: var(--rk-font);
+}
+
+#kc-header {
+  margin-bottom: 28px;
+}
+
+#kc-header-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-family: var(--rk-font);
+  font-size: 30px;
+  font-weight: 900;
+  text-transform: none;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  color: var(--rk-text) !important;
+}
+
+#kc-header-wrapper::before {
+  content: "";
+  flex: none;
+  width: 44px;
+  height: 44px;
+  background: url("../img/rack.svg") center / contain no-repeat;
+}
+
+.login-pf .pf-v5-c-login__main {
+  --pf-v5-c-login__main--BackgroundColor: var(--rk-card);
+  --pf-v5-c-login__main--BoxShadow: var(--rk-shadow);
+  border: 1px solid var(--rk-border);
+  border-radius: 8px;
+}
+
+.login-pf .pf-v5-c-login__main-header {
+  border-top: 0;
+}
+
+.login-pf #kc-page-title {
+  font-weight: 700;
+}
+
+.login-pf .pf-v5-c-login__main a:not(.pf-v5-c-button) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.login-pf .pf-v5-c-button:is(.pf-m-primary, .pf-m-secondary, .pf-m-tertiary) {
+  --pf-v5-c-button--BorderRadius: 6px;
+  --pf-v5-c-button--after--BorderRadius: 6px;
+  --pf-v5-c-button--FontWeight: 500;
+  --pf-v5-c-button--PaddingTop: 0.625rem;
+  --pf-v5-c-button--PaddingBottom: 0.625rem;
+}
+
+.login-pf .pf-v5-c-button.pf-m-primary {
+  --pf-v5-c-button--m-primary--Color: var(--rk-amber-text);
+  --pf-v5-c-button--m-primary--hover--Color: var(--rk-amber-text);
+  --pf-v5-c-button--m-primary--focus--Color: var(--rk-amber-text);
+  --pf-v5-c-button--m-primary--active--Color: var(--rk-amber-text);
+  background: var(--rk-amber);
+  border: 1px solid var(--rk-amber-edge);
+}
+
+.login-pf .pf-v5-c-button.pf-m-primary:is(:hover, :focus, :active) {
+  background: var(--rk-amber-hover);
+}
+
+.login-pf .pf-v5-c-button:is(.pf-m-secondary, .pf-m-tertiary) {
+  --pf-v5-c-button--m-secondary--Color: var(--rk-text);
+  --pf-v5-c-button--m-secondary--hover--Color: var(--rk-text);
+  --pf-v5-c-button--m-secondary--focus--Color: var(--rk-text);
+  --pf-v5-c-button--m-secondary--active--Color: var(--rk-text);
+  --pf-v5-c-button--m-secondary--after--BorderColor: var(--rk-field-border);
+  --pf-v5-c-button--m-secondary--hover--after--BorderColor: var(--rk-muted);
+  --pf-v5-c-button--m-secondary--focus--after--BorderColor: var(--rk-muted);
+  --pf-v5-c-button--m-secondary--active--after--BorderColor: var(--rk-muted);
+  --pf-v5-c-button--m-tertiary--Color: var(--rk-text);
+  --pf-v5-c-button--m-tertiary--after--BorderColor: var(--rk-field-border);
+  --pf-v5-c-button--m-tertiary--hover--Color: var(--rk-text);
+  --pf-v5-c-button--m-tertiary--hover--after--BorderColor: var(--rk-muted);
+}
+
+.login-pf .pf-v5-c-form-control {
+  --pf-v5-c-form-control--BackgroundColor: var(--rk-field);
+  --pf-v5-c-form-control--before--BorderTopColor: var(--rk-field-border);
+  --pf-v5-c-form-control--before--BorderRightColor: var(--rk-field-border);
+  --pf-v5-c-form-control--before--BorderLeftColor: var(--rk-field-border);
+  --pf-v5-c-form-control--after--BorderBottomColor: var(--rk-field-border);
+  --pf-v5-c-form-control--hover--after--BorderBottomColor: #e5892b;
+  --pf-v5-c-form-control--focus--after--BorderBottomColor: #e5892b;
+}
