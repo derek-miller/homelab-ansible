@@ -63,6 +63,8 @@ docker_daemon_options:
   default-stop-timeout: 60
 
 project_files:
+  - src: "plaintext/{{ inventory_hostname }}/var/docker/"
+    dest: /var/docker/
   - src: "vault/{{ inventory_hostname }}/var/docker/"
     dest: /var/docker/
 
