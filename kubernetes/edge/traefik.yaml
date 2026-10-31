@@ -94,6 +94,29 @@ spec:
         - protocol: TCP
           port: 5000
 ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-firmware
+  namespace: edge
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: firmware
+          podSelector:
+            matchLabels:
+              app: firmware
+      ports:
+        - protocol: TCP
+          port: 8080
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

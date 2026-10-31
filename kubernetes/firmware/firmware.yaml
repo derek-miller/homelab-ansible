@@ -1,0 +1,139 @@
+---
+# The Zigbee firmware index (github.com/finitelabs/zigbee-firmware-index): its
+# admin page, behind the Finite Labs sign-in, and its daily publish to R2. The
+# Ingress, the keys and the admin list are in firmware.vault.yaml.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data
+  namespace: firmware
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-retain
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: firmware
+  namespace: firmware
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: firmware
+  template:
+    metadata:
+      labels:
+        app: firmware
+      annotations:
+        # k8up's daily backup also saves this consistent copy of the database, beside the claim's files.
+        k8up.io/backupcommand: python -m firmware_index dump
+        k8up.io/file-extension: .sqlite3
+    spec:
+      nodeSelector:
+        homelab.local/firmware: "true"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: firmware
+          image: ghcr.io/finitelabs/zigbee-firmware-index:1
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: SIGNING_KEY_PATH
+              value: /secrets/signing-key/ed25519.pem
+            - name: R2_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: r2
+                  key: endpoint
+            - name: R2_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: r2
+                  key: bucket
+            - name: R2_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: r2
+                  key: access-key-id
+            - name: R2_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: r2
+                  key: secret-access-key
+            - name: DISCORD_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: alerts
+                  key: discord-webhook-url
+            - name: ADMIN_EMAILS
+              valueFrom:
+                secretKeyRef:
+                  name: admin
+                  key: emails
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: signing-key
+              mountPath: /secrets/signing-key
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: data
+        - name: signing-key
+          secret:
+            secretName: signing-key
+            # Group-readable: fsGroup gives the file to the app's group, root keeps the owner.
+            defaultMode: 0440
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: firmware
+  namespace: firmware
+spec:
+  selector:
+    app: firmware
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-traefik
+  namespace: firmware
+spec:
+  podSelector:
+    matchLabels:
+      app: firmware
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: edge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080
