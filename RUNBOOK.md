@@ -202,7 +202,7 @@ It checks the new node's data disk is mounted and its folders for those volumes 
 
 A move refuses a label while a backup, prune, check or restore is running in its namespace, and a backup due during the move is skipped until its next time. A failure before step 4 leaves the label where it was, so the apps come back where their data still is. A move cut off part way, by Ctrl-C or a lost connection, leaves the label's workloads scaled down, and every deploy refuses to run until the same move command runs again and finishes it, overwriting its own partial copy. Cut off after the label moved, it also leaves the old folders unrenamed and its `k3s-<label>-<n>.tar` archives in the transit folder, for you to remove. A move onto a node that isn't yet a Ready k3s node stops the run before anything moves, Swarm included; join it first with `make run hosts=<node> tags=k3s`. `edge` moves only with the full command, never `tags=k3s-migrate-labels`, since the k3s Traefik passes what it doesn't route to the Swarm Traefik on its own node; it also needs the UDM's forwards pointed at the new node.
 
-**Moving a suite off Swarm.** Move one suite at a time. Its change takes the suite's services and its `backup_<label>` out of the stack definition, leaving any route of theirs in `external-rules.yaml`, which a failed copy still needs, and adds its app to `kubernetes/`, with its `backup.yaml`, `backup.vault.yaml` and login line (see Backups) so it is backed up from its first day on k3s. For each of its Swarm volumes it adds an entry to `swarm_volume_copies`: the stack's name for the volume, the label, and the app's claim. Set the list in `host_vars/rackvm1/vars.yml` from `vault.yml`, since it names apps. Then:
+**Moving a suite off Swarm.** Move one suite at a time. Its change takes the suite's services and its `backup_<label>` out of the stack definition, leaving any route of theirs in `external-rules.yaml`, which a failed copy still needs, and adds its app to `kubernetes/`, with its `backup.yaml`, `backup.vault.yaml` and login line (see Backups) so it is backed up from its first day on k3s. For each of its Swarm volumes it adds an entry to `swarm_volume_copies`: the stack's name for the volume, the label, and the app's claim. A folder on the label's node that a service binds, such as sourcebot's driver sources, is listed with its absolute path as `path:` in place of `volume:`. Set the list in `host_vars/rackvm1/vars.yml` from `vault.yml`, since it names apps. Then:
 
 1. [Pause deploys](#pausing-deploys), merge the change, and wait for any Deploy already running to finish. Until the copy has run, every deploy refuses, `tags=flux` and `tags=docker-stack` included, so an app never starts on an empty folder.
 2. From an up-to-date master, run:
@@ -221,9 +221,9 @@ A move refuses a label while a backup, prune, check or restore is running in its
 
 Ahead of the stack deploy that removes the services, on the label's node, the copy:
 
-1. stops the Swarm services using each volume, noting their replicas on them;
-2. has the label's backup service take a final backup;
-3. copies each volume with `tar --numeric-owner` into `data.copy` beside `/mnt/data/volumes/<label>/<claim>/data`;
+1. stops the Swarm services with a mount in each volume or folder, noting their replicas on them;
+2. has the label's backup service take a final backup, then waits until no container, Swarm's or not, has a mount in one;
+3. copies each with `tar --numeric-owner` into `data.copy` beside `/mnt/data/volumes/<label>/<claim>/data`;
 4. compares the two copies' files, owners and modes, then renames the copy to `data`.
 
 The provisioner then gives the app's claim that folder. A failure removes the copies and starts the Swarm services again. A run cut off part way leaves the services stopped and the folder empty, so deploys keep refusing until the same command runs again. A copy refuses while the stack still has services using the volume, or while Swarm and k3s have the label on different nodes, and a label with listed volumes doesn't move.
@@ -244,6 +244,8 @@ The Swarm volume is left as it was, as the way back while the label stays on its
 - `https://<host>/oauth2/callback` in the Valid redirect URIs of the realm's `oauth2-proxy` client in Keycloak. Until then, sign-in stops at Keycloak's "Invalid parameter: redirect_uri".
 
 oauth2-proxy uses the Swarm one's client and cookie secret, from the same vault values, so a new client secret goes in both, and a browser signed in to a host on Swarm stays signed in when that host moves to k3s. A guarded app, like any app that trusts these headers, is reached only through Traefik: its policy admits only edge's Traefik.
+
+**Header-matched routes.** An Ingress matches only host and path, so a route that also matches a header is a Traefik `IngressRoute` instead, with a `priority` above the app's Ingress. Sourcebot's API route is one: a request to `/api` that names an API key skips sign-in, since sourcebot checks the key itself. Its Middleware renames `X-Api-Key` to the header sourcebot reads with the htransformation plugin, which the k3s Traefik loads as the Swarm one does.
 
 **Finite Labs sign-in.** Apps at `*.finitelabs.com` sign in against Keycloak's `finitelabs` realm instead, through a second oauth2-proxy, `oauth2-proxy-finitelabs`, beside the first. Such a route names `strip-auth-request@file,oauth-verify-finitelabs@file`, its `/oauth2/` rule goes in the Ingress `oauth2-proxy-finitelabs`, and its callback in the `finitelabs` realm's `oauth2-proxy` client, a copy of the homelab realm's. That proxy has its own client and cookie secrets, in `oauth2-proxy.vault.yaml`, and requires the realm's default role, `default-roles-finitelabs.com`. The names are set up in the Finite Labs Cloudflare account, which is not the homelab's:
 
@@ -433,9 +435,9 @@ Run `docker service scale` on a manager and the rest on the node that holds the 
 
 ## Restoring a Postgres database from its dump
 
-`keycloak-pg-dump` and `sourcebot-pg-dump` dump their database every hour at :15 into their own volume, as `keycloak.sql.gz` and `sourcebot.sql.gz` (plain SQL, gzip). `backup_identity` and `backup_sourcebot` archive those volumes nightly, so the last hour comes from the volume and an earlier night from the archive.
+`keycloak-pg-dump` dumps its database every hour at :15 into its own volume, as `keycloak.sql.gz` (plain SQL, gzip). `backup_identity` archives that volume nightly, so the last hour comes from the volume and an earlier night from the archive. Sourcebot's database is on k3s, backed up and restored with its suite (see Databases and Restoring in [Apps on k3s](#apps-on-k3s)).
 
-A dump service waits up to 5 min for its database when it starts. On any failure it exits after 60 s, which shows as **Container Crash Loop (Swarm)**, and `docker service logs rackvms_<db>-pg-dump` says which: `pg_dump failed`, `postgres not ready after 5 min`, or `dump shrank from <old> to <new> bytes, previous dump kept`. A dump under half the previous size is refused, so a real shrink (expired Keycloak events or sessions, repos removed from Sourcebot) loops until you accept it. On the node with that label, move the old dump aside and delete it once a new one is in place:
+A dump service waits up to 5 min for its database when it starts. On any failure it exits after 60 s, which shows as **Container Crash Loop (Swarm)**, and `docker service logs rackvms_<db>-pg-dump` says which: `pg_dump failed`, `postgres not ready after 5 min`, or `dump shrank from <old> to <new> bytes, previous dump kept`. A dump under half the previous size is refused, so a real shrink (expired Keycloak events or sessions) loops until you accept it. On the node with that label, move the old dump aside and delete it once a new one is in place:
 
 ```bash
 mv /mnt/data/docker/volumes/rackvms_<db>-pg-dump/_data/<db>.sql.gz /root/<db>.sql.gz.pre-shrink
@@ -474,7 +476,6 @@ Once the load succeeds, scale both back up on a manager with `docker service sca
 docker exec $C psql -U keycloak -d postgres -c 'DROP DATABASE IF EXISTS keycloak_pre_restore' -c 'DROP DATABASE IF EXISTS keycloak_failed_restore'
 ```
 
-Sourcebot is the same with `sourcebot` in place of `keycloak`, on the node with the `sourcebot` label.
 
 ### Loading an earlier night's dump
 
@@ -486,7 +487,7 @@ make run hosts=rackvm1 tags=docker-restore-volumes ANSIBLE_FLAGS="-e docker_rest
 
 That takes the newest archive, which is last night's. For an earlier one, also pass `-e '{\"docker_restore_volumes_archive_patterns\":[\"backup-<ts>.tar.gz.age\"]}'` with the file name from `/mnt/Backups/Volumes/identity`, and check the `Restoring from:` line.
 
-The run drains every host in `hosts=`. rackvm1 also carries `edge`, so everything behind Traefik is down while it runs. Sourcebot's node is a worker, so its run needs a manager in `hosts=` as well, with label `sourcebot` and `[\"sourcebot-pg-dump\"]`. That manager is drained too and is left with its own `rackvms_sourcebot-pg-dump`; remove it there afterwards with `docker volume rm rackvms_sourcebot-pg-dump`.
+The run drains every host in `hosts=`. rackvm1 also carries `edge`, so everything behind Traefik is down while it runs.
 
 ### Drills
 

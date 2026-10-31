@@ -240,14 +240,22 @@ _flux_copies_missing: >-
      | map(attribute='item.label') | unique | sort }}
 _flux_copy_node: "{{ _flux_held_nodes[copy_label] }}"
 _flux_copy_entries: "{{ _flux_copies_pending | selectattr('label', 'eq', copy_label) | list }}"
-_flux_copy_filters: >-
-  {% for entry in _flux_copy_entries %}--filter volume={{ (_flux_stack_name ~ '_' ~ entry.volume) | quote }} {% endfor %}
+# Reads lines of a name and a container's mount sources, tab-separated, and prints the name of each
+# container with a mount at or under a source being copied. Docker's own volume filter matches a bind
+# only by its exact path.
+_flux_copy_using: >-
+  awk -F '\t' '{ for (i = 2; i <= NF; i++) if ({% for entry in _flux_copy_entries %}{{ ' || ' if not loop.first }}$i == "{{ entry.source }}" || index($i, "{{ entry.source }}/") == 1{% endfor %}) { print $1; next } }'
 _flux_copy_stack_users: >-
-  {%- set volumes = _flux_copies_pending | map(attribute='volume') | list -%}
+  {%- set volumes = _flux_copies_pending | selectattr('volume', 'defined') | map(attribute='volume') | list -%}
+  {%- set paths = _flux_copies_pending | selectattr('path', 'defined') | map(attribute='path') | list -%}
   {%- set out = [] -%}
   {%- for name, service in (hostvars[groups['docker_swarm_manager'][0]].docker_stack_definition.services | default({})) | dictsort -%}
   {%- for volume in service.volumes | default([]) -%}
-  {%- if (volume.source | default('') if volume is mapping else volume.split(':')[0]) in volumes -%}
+  {%- set source = volume.source | default('') if volume is mapping else volume.split(':')[0] -%}
+  {%- for path in paths if source == path or source.startswith(path ~ '/') -%}
+  {%- set _ = out.append(name) -%}
+  {%- endfor -%}
+  {%- if source in volumes -%}
   {%- set _ = out.append(name) -%}
   {%- endif -%}
   {%- endfor -%}

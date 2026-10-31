@@ -1,0 +1,63 @@
+---
+# Refreshes the Control4 driver sources sourcebot indexes (github.com/derek-miller/control4-driver-scraper).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: drivers
+  namespace: sourcebot
+  annotations:
+    # Downloaded drivers, kept so a run skips those already current; the next run fetches any lost.
+    k8up.io/backup: "false"
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 32Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: control4-driver-scraper
+  namespace: sourcebot
+spec:
+  schedule: "15 5 * * *"
+  timeZone: Etc/UTC
+  # A full scrape can run for hours.
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: control4-driver-scraper
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            homelab.local/sourcebot: "true"
+          containers:
+            - name: control4-driver-scraper
+              image: registry.homelab.local/control4-driver-scraper
+              args:
+                - --drivers-dir
+                - /drivers
+                - --sources-dir
+                - /sources
+              env:
+                # GitHub owners whose repos are scanned for committed drivers.
+                - name: C4_GITHUB_OWNERS
+                  value: ckunakdot
+              volumeMounts:
+                - name: drivers
+                  mountPath: /drivers
+                - name: source
+                  mountPath: /sources
+          volumes:
+            - name: drivers
+              persistentVolumeClaim:
+                claimName: drivers
+            - name: source
+              persistentVolumeClaim:
+                claimName: source

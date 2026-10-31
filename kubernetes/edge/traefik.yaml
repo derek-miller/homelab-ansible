@@ -120,6 +120,29 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: allow-sourcebot
+  namespace: edge
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: sourcebot
+          podSelector:
+            matchLabels:
+              app: sourcebot
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: allow-firmware
   namespace: edge
 spec:
@@ -188,6 +211,12 @@ spec:
   values:
     ingressClass:
       enabled: false
+    experimental:
+      plugins:
+        # Renames a caller's X-Api-Key to the header an app reads, such as sourcebot's.
+        htransformation:
+          moduleName: github.com/tomMoulard/htransformation
+          version: v0.4.1
     providers:
       kubernetesCRD:
         safeNaming: true

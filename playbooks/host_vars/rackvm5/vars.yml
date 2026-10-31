@@ -61,9 +61,5 @@ docker_daemon_options:
   data-root: /mnt/data/docker
   default-stop-timeout: 60
 
-project_files:
-  - src: "plaintext/{{ inventory_hostname }}/var/docker/sourcebot/data/config.json"
-    dest: /var/docker/sourcebot/data/config.json
-
-control4_driver_scraper_github_owners:
-  - ckunakdot
+# kubernetes/sourcebot/ runs the scraper as a CronJob.
+control4_driver_scraper_state: absent

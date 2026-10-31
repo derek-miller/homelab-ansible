@@ -1,13 +1,16 @@
 ---
-- name: check each Swarm volume copy names a label, a volume and a claim
+- name: check each Swarm volume copy names a label, a volume or folder, and a claim
   assert:
     that:
       - swarm_volume_copies | map(attribute='label') | reject('in', _flux_inventory_nodes) | list | length == 0
-      - swarm_volume_copies | map(attribute='volume') | reject('match', '^[A-Za-z0-9][A-Za-z0-9_.-]*$') | list | length == 0
+      - swarm_volume_copies | map('dict2items') | map('selectattr', 'key', 'in', ['volume', 'path']) | map('list') | map('length') | reject('eq', 1) | list | length == 0
+      - swarm_volume_copies | selectattr('volume', 'defined') | map(attribute='volume') | reject('match', '^[A-Za-z0-9][A-Za-z0-9_.-]*$') | list | length == 0
+      - swarm_volume_copies | selectattr('path', 'defined') | map(attribute='path') | reject('match', '^(/[A-Za-z0-9_-][A-Za-z0-9_.-]*)+$') | list | length == 0
       - swarm_volume_copies | map(attribute='claim') | reject('match', '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$') | list | length == 0
     fail_msg: >-
-      Each swarm_volume_copies entry needs a [docker_labels] word as its label, the stack's
-      name for the volume and a claim name of lowercase letters, digits and hyphens.
+      Each swarm_volume_copies entry needs a [docker_labels] word as its label, either the stack's
+      name for a volume or the absolute path of a folder on the label's node, and a claim name of
+      lowercase letters, digits and hyphens.
     quiet: yes
 
 - name: check the node of each label with Swarm volumes to copy is in the run
@@ -41,18 +44,23 @@
     label: "{{ item.item }}"
   when: item.stdout_lines != [_flux_held_nodes[item.item]]
 
-# Prints nothing once a volume is copied or empty, "missing" for a volume not on the node
-# whose folder is empty, and otherwise the volume's path.
+# Prints nothing once a volume or folder is copied or empty, "missing" for one not on the node
+# whose claim's folder is empty, and otherwise its path.
 - name: read which Swarm volumes wait to be copied
   shell: >-
     set -eo pipefail;
-    vol={{ (_flux_stack_name ~ '_' ~ item.volume) | quote }};
     dst={{ (k3s_local_storage_path ~ '/' ~ item.label ~ '/' ~ item.claim ~ '/data') | quote }};
     copied() { [ -d "$dst" ] && [ -n "$(find "$dst" -mindepth 1 -print -quit)" ]; };
+    {% if item.path is defined %}
+    src={{ item.path | quote }};
+    if [ ! -d "$src" ]; then copied || echo missing; exit 0; fi;
+    {% else %}
+    vol={{ (_flux_stack_name ~ '_' ~ item.volume) | quote }};
     vols=$(docker volume ls -q);
     if ! grep -qxF -- "$vol" <<< "$vols"; then copied || echo missing; exit 0; fi;
     src=$(docker volume inspect --format '{% raw %}{{.Mountpoint}}{% endraw %}' "$vol");
     [ -d "$src" ];
+    {% endif %}
     [ -n "$(find "$src" -mindepth 1 -print -quit)" ] || exit 0;
     copied || echo "$src"
   args:
@@ -70,6 +78,6 @@
 - name: refuse a listed Swarm volume that isn't on its label's node
   fail:
     msg: >-
-      {{ _flux_copies_missing | join(', ') }}: a volume in swarm_volume_copies isn't on the
-      label's node, and its k3s folder is empty; nothing was changed.
+      {{ _flux_copies_missing | join(', ') }}: a volume or folder in swarm_volume_copies isn't on
+      the label's node, and its k3s folder is empty; nothing was changed.
   when: _flux_copies_missing | length > 0
