@@ -209,7 +209,7 @@ A move refuses a label while a backup, prune, check or restore is running in its
    make run ANSIBLE_FLAGS="-e swarm_copy_volumes=yes"
    ```
 
-3. Resume deploys, and in the next change take the suite's entries out of `swarm_volume_copies`.
+3. Start the suite's first backup by hand (see Backups), resume deploys, and in the next change take the suite's entries out of `swarm_volume_copies`.
 
 Ahead of the stack deploy that removes the services, on the label's node, the copy:
 
