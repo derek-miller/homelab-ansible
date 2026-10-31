@@ -37,8 +37,9 @@ proxmox_guest:
     3865633436373263330a643364633538653236333135316161663565336531636232363136383865
     6631
   cores: 8
-  memory: 22528
-  balloon: 16384
+  # Leaves pve2 room to take rackvm1 and vm:100 at once when pve1 fails.
+  memory: 16384
+  balloon: 12288
   disks:
     - iface: scsi0
       size: 100G

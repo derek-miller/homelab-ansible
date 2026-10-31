@@ -109,16 +109,22 @@ That stops k3s, kills its pods, and removes its mounts, network namespaces, inte
 
 Never run k3s's own `k3s-uninstall.sh` or `k3s-killall.sh` here. Besides removing k3s they clear the node's Tailscale advertised routes, which withdraws the NAS route rackvm1-5 carry, and pipe all of iptables through `iptables-restore` underneath Docker.
 
-**Rebuilding the server.** The cluster's identity and state live in rackvm1's `/mnt/data/k3s/server`: the SQLite datastore, the cluster CA and the service-account keys. The token, `k3s_cluster_token` in `host_vars/rackvm1/vars.yml`, unlocks that state but cannot recreate it.
+**Rebuilding the server.** The cluster lives in rackvm1's `/mnt/data/k3s/server`, on its data disk: the SQLite datastore, which also holds the cluster CA, the service-account keys and the key Secrets are encrypted with, sealed with the token in `k3s_cluster_token` (`host_vars/rackvm1/vars.yml`). A copy of that datastore plus the token brings back the same cluster; the token alone cannot. Proxmox copies rackvm1 (vm:201) to pve2 every 15 minutes and backs it up nightly, and it is an HA resource kept to pve1 and pve2, like vm:100. It and rackvm2 are sized, in their `host_vars`, so pve2 can take it and vm:100 at once when pve1 fails. HA keeps it on pve1 whenever pve1 is up and refuses `ha-manager migrate vm:201 pve2`; to move it by hand, make the rule's priorities equal with `ha-manager rules set node-affinity vm201-nodes --nodes pve1,pve2`, and `make run-proxmox tags=proxmox-cluster` puts them back, after which HA moves it back to pve1 itself. In order of preference:
 
-- *rackvm1 restored from its replica or a vzdump.* Start it; k3s comes back as of the copy. A restored datastore rewinds the resource version, and a client watching from a later one can miss changes, so restart every agent and CoreDNS once the server answers:
+- *pve1 fails.* HA starts rackvm1 on pve2 from its copy, at most 15 minutes old unless replication had stalled (`pvesr status` shows the last sync), and moves it back once pve1 returns. Then treat it as a restored copy, below.
+- *rackvm1 restored from its replica or a vzdump.* To restore a vzdump, take it out of HA's hands with `ha-manager set vm:201 --state disabled`, run `qmrestore <newest vzdump-qemu-201 archive> 201 --force` on its node, then `ha-manager set vm:201 --state started`. k3s comes back as of the copy. A restored datastore rewinds the resource version, and a client watching from a later one can miss changes, so restart every agent and CoreDNS once the server answers:
 
   ```bash
   sudo kubectl -n kube-system rollout restart deploy/coredns
   ```
 
-  and `sudo systemctl restart k3s-agent` on each agent.
-- *No usable copy.* Run `make run hosts=rackvm1 tags=k3s` for a fresh server with the same token, then `make run tags=k3s` for the agents. An agent that will not rejoin is removed with `k3s_state=absent` and installed again. Everything the cluster ran is then redeployed from the repo; data on the nodes' disks is untouched.
+  and `sudo systemctl restart k3s-agent` on each agent. A label moved since the copy was taken has its volumes on the old node again in the copy, and the move renamed their folders there to `data.moved-*`: rename them back to `data` before the suite starts, or it starts empty.
+- *No usable copy.* Pause deploys, then:
+  1. Bring rackvm1 up as in [Bringing up a new host](#bringing-up-a-new-host), after taking its old node out of the swarm on rackvm2 with `docker node demote` and `docker node rm --force`, and restore its Swarm volumes from their archives. webhooks has none; only the vzdump holds it.
+  2. Check `docker network inspect docker_gwbridge` shows 172.19.0.0/16, the range edge's Traefik is allowed to reach the Swarm Traefik through. A fresh Docker may pick another.
+  3. `make run hosts=rackvm1 tags=k3s ANSIBLE_FLAGS="--skip-tags=flux"` makes a new server with the same token but a new CA. The agents keep trusting the old one until `sudo systemctl restart k3s-agent` runs on each.
+  4. `make run tags=k3s` then brings back everything the cluster ran from the repo. Volumes on rackvm2-5 are reused where they are; check `sudo k3s kubectl get csinode` lists `smb.csi.k8s.io` on every node.
+  5. Suites whose volumes were on rackvm1 start empty. Restore each, with `-e k3s_restore_before=<time of the loss>`, before its next backup would save the empty one.
 
 **Rotating the token.** On rackvm1, `sudo k3s token rotate --data-dir /mnt/data/k3s --token <old> --new-token <new>`, then put the new token in `k3s_cluster_token` and run `make run tags=k3s` straight away, which restarts every node with it, the server first. An agent that restarts in between can't rejoin. A copy of rackvm1 from before the rotation unlocks only with the old token.
 

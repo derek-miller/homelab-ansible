@@ -214,6 +214,11 @@ proxmox_ha_resources:
     state: started
     max_restart: 2
     max_relocate: 1
+  # rackvm1, the k3s server and the public ingress.
+  - sid: vm:201
+    state: started
+    max_restart: 2
+    max_relocate: 1
 # strict: only nodes holding a replica. Unrestricted, HA would try a node with
 # no copy of the disks and the failover would fail.
 # converge string-compares `nodes` against `ha-manager rules config`, and PVE
@@ -222,6 +227,11 @@ proxmox_ha_rules:
   - rule: vm100-nodes
     type: node-affinity
     resources: vm:100
+    nodes: pve1:2,pve2:1
+    strict: 1
+  - rule: vm201-nodes
+    type: node-affinity
+    resources: vm:201
     nodes: pve1:2,pve2:1
     strict: 1
 
