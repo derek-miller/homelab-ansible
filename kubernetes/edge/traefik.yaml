@@ -171,6 +171,12 @@ spec:
                 forwardAuth:
                   # Its root, unlike /oauth2/auth, sends a signed-out browser on to Keycloak.
                   address: http://oauth2-proxy.edge.svc.cluster.local/
+                  trustForwardHeader: false
+                  authResponseHeadersRegex: ^X-Auth-Request-
+              oauth-verify-finitelabs:
+                forwardAuth:
+                  address: http://oauth2-proxy-finitelabs.edge.svc.cluster.local/
+                  trustForwardHeader: false
                   authResponseHeadersRegex: ^X-Auth-Request-
             routers:
               swarm:

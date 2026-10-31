@@ -1,6 +1,6 @@
 ---
-# The house sign-in, behind the oauth-verify middleware in traefik.yaml. The
-# Keycloak client, the domain and the /oauth2/ route on each guarded host are
+# The house sign-ins, one per Keycloak realm, behind the oauth-verify
+# middlewares in traefik.yaml. Each one's client, domain and /oauth2/ routes are
 # in oauth2-proxy.vault.yaml.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
@@ -42,6 +42,38 @@ spec:
       cookie-expire: 168h0m0s
       cookie-refresh: 1h0m0s
       cookie-samesite: strict
+      cookie-secure: true
+      reverse-proxy: true
+      set-xauthrequest: true
+      skip-provider-button: true
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: oauth2-proxy-finitelabs
+  namespace: edge
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: oauth2-proxy
+  valuesFrom:
+    - kind: Secret
+      name: oauth2-proxy-finitelabs-values
+  values:
+    nodeSelector:
+      homelab.local/edge: "true"
+    config:
+      existingSecret: oauth2-proxy-finitelabs
+      upstreams:
+        - static://202
+    extraArgs:
+      provider: keycloak-oidc
+      code-challenge-method: S256
+      cookie-expire: 168h0m0s
+      cookie-refresh: 1h0m0s
+      # Keycloak is on another site, so its redirect back would leave a strict CSRF cookie behind.
+      cookie-samesite: lax
       cookie-secure: true
       reverse-proxy: true
       set-xauthrequest: true
