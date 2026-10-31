@@ -156,10 +156,10 @@ metadata:
   namespace: youtrack
 spec:
   schedule: "@hourly"
-  concurrencyPolicy: Forbid
   jobTemplate:
     spec:
       backoffLimit: 6
+      activeDeadlineSeconds: 3600
       template:
         spec:
           restartPolicy: OnFailure
