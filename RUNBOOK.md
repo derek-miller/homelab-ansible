@@ -209,6 +209,8 @@ A move refuses a label while a backup, prune, check or restore is running in its
    make run ANSIBLE_FLAGS="-e swarm_copy_volumes=yes"
    ```
 
+   For a suite that takes pushes from outside, such as webhooks, run `make run tags=docker-stack,flux ANSIBLE_FLAGS="-e swarm_copy_volumes=yes"` instead. It does only the copy, the stack deploy and Flux, in 3 minutes rather than 15, and GitHub doesn't retry a delivery that fails in between.
+
 3. Start the suite's first backup by hand (see Backups), resume deploys, and in the next change take the suite's entries out of `swarm_volume_copies`.
 
 Ahead of the stack deploy that removes the services, on the label's node, the copy:
