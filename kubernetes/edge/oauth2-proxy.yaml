@@ -30,10 +30,10 @@ spec:
     - kind: Secret
       name: oauth2-proxy-values
   values:
+    nodeSelector:
+      homelab.local/edge: "true"
     config:
       existingSecret: oauth2-proxy
-      emailDomains:
-        - "*"
       upstreams:
         - static://202
     extraArgs:
