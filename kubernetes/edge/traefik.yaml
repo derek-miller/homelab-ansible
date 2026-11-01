@@ -212,7 +212,7 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-mqtt
+  name: allow-logs
   namespace: edge
 spec:
   podSelector:
@@ -224,33 +224,13 @@ spec:
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: mqtt
+              kubernetes.io/metadata.name: logs
           podSelector:
             matchLabels:
-              app: zigbee2mqtt
+              app.kubernetes.io/instance: victoria-logs
       ports:
         - protocol: TCP
-          port: 8080
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: mqtt
-          podSelector:
-            matchLabels:
-              app: node-red
-      ports:
-        - protocol: TCP
-          port: 1880
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: mqtt
-          podSelector:
-            matchLabels:
-              app: mqtt-explorer
-      ports:
-        - protocol: TCP
-          port: 4000
+          port: 9428
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -397,3 +377,46 @@ spec:
         svccontroller.k3s.cattle.io/lbpool: edge
       spec:
         externalTrafficPolicy: Local
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-mqtt
+  namespace: edge
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mqtt
+          podSelector:
+            matchLabels:
+              app: zigbee2mqtt
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mqtt
+          podSelector:
+            matchLabels:
+              app: node-red
+      ports:
+        - protocol: TCP
+          port: 1880
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mqtt
+          podSelector:
+            matchLabels:
+              app: mqtt-explorer
+      ports:
+        - protocol: TCP
+          port: 4000
