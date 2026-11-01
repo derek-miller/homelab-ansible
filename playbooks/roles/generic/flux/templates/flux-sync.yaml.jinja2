@@ -69,3 +69,10 @@ spec:
   prune: true
   wait: true
   timeout: {{ flux_apply_timeout | to_json }}
+  healthCheckExprs:
+    # local-retain binds a claim only once a pod is placed on it, so a claim only a CronJob uses waits for its first run.
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      current: >-
+        status.phase == 'Bound' || (status.phase == 'Pending' && !has(spec.volumeName)
+        && !(has(metadata.annotations) && 'volume.kubernetes.io/selected-node' in metadata.annotations))
