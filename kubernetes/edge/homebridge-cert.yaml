@@ -23,7 +23,7 @@ spec:
         homelab.local/edge: "true"
       containers:
         - name: dumper
-          image: ldez/traefik-certs-dumper:latest
+          image: ldez/traefik-certs-dumper
           command:
             - sh
             - -c
