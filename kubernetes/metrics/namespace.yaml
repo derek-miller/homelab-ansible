@@ -4,6 +4,7 @@ kind: Namespace
 metadata:
   name: metrics
   labels:
+    # A hostNetwork pod would bypass every NetworkPolicy below.
     pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: networking.k8s.io/v1
