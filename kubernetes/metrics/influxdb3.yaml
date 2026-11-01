@@ -1,0 +1,227 @@
+---
+# InfluxDB 3 Enterprise. Its secrets and routes are in metrics.vault.yaml.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: influxdb3
+  namespace: metrics
+  annotations:
+    # The backup command below saves InfluxDB's own consistent backup, which the restore unpacks into this claim.
+    k8up.io/backup: "false"
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 60Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: plugins
+  namespace: metrics
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: influxdb3-backup
+  namespace: metrics
+data:
+  backup.sh: |
+    #!/bin/sh
+    set -e
+    influxdb3 create backup --name nightly --force >/dev/null
+    while :; do
+      sleep 10
+      s=$(curl -s -H "Authorization: Bearer $INFLUXDB3_AUTH_TOKEN" http://127.0.0.1:8181/api/v3/enterprise/backup | tr '{' '\n' | grep '"name":"nightly"')
+      case "$s" in
+        *'"status":"completed"'*) break ;;
+        *'"status":"in_progress"'*) ;;
+        *) echo "influxdb3 backup failed: $s" >&2; exit 1 ;;
+      esac
+    done
+    exec tar -C /var/lib/influxdb3 -cf - homelab/backups/nightly homelab/trial_or_home_license
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: influxdb3
+  namespace: metrics
+spec:
+  serviceName: influxdb3
+  replicas: 1
+  selector:
+    matchLabels:
+      app: influxdb3
+  template:
+    metadata:
+      labels:
+        app: influxdb3
+      annotations:
+        k8up.io/backupcommand: sh /etc/influxdb3-backup/backup.sh
+        k8up.io/file-extension: .tar
+    spec:
+      nodeSelector:
+        homelab.local/metrics: "true"
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: influxdb3
+          image: influxdb:3-enterprise
+          args:
+            - influxdb3
+            - serve
+            - --node-id=metrics
+            - --cluster-id=homelab
+            - --object-store=file
+            - --data-dir=/var/lib/influxdb3
+            - --log-filter=info,iox_query::query_log=off,influxdb3_query_executor::enterprise=off
+            - --l1-consolidation-target-size=10mb
+            - --l1-hot-tail-target-size=10mb
+          env:
+            - name: TZ
+              value: America/Chicago
+            - name: INFLUXDB3_DISABLE_AUTHZ
+              value: health
+            # Used only when the store has no tokens, as after a restore, so it comes up with the same operator token.
+            - name: INFLUXDB3_ADMIN_TOKEN_FILE
+              value: /etc/influxdb3/admin-token.json
+          envFrom:
+            - secretRef:
+                name: influxdb3
+          ports:
+            - name: http
+              containerPort: 8181
+          resources:
+            requests:
+              cpu: "1"
+              memory: 6Gi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 180
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/influxdb3
+            - name: plugins
+              mountPath: /plugins
+            - name: admin-token
+              mountPath: /etc/influxdb3
+              readOnly: true
+            - name: backup
+              mountPath: /etc/influxdb3-backup
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: influxdb3
+        - name: plugins
+          persistentVolumeClaim:
+            claimName: plugins
+        - name: admin-token
+          secret:
+            secretName: influxdb3-admin-token
+        - name: backup
+          configMap:
+            name: influxdb3-backup
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: influxdb3
+  namespace: metrics
+  labels:
+    svccontroller.k3s.cattle.io/lbpool: metrics
+spec:
+  selector:
+    app: influxdb3
+  ports:
+    - name: http
+      port: 8181
+      targetPort: http
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-servicelb
+  namespace: metrics
+spec:
+  podSelector:
+    matchLabels:
+      app: influxdb3
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              svccontroller.k3s.cattle.io/svcname: influxdb3
+              svccontroller.k3s.cattle.io/svcnamespace: metrics
+      ports:
+        - protocol: TCP
+          port: 8181
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-grafana
+  namespace: metrics
+spec:
+  podSelector:
+    matchLabels:
+      app: influxdb3
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: grafana
+          podSelector:
+            matchLabels:
+              app: grafana
+      ports:
+        - protocol: TCP
+          port: 8181
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-edge-traefik
+  namespace: metrics
+spec:
+  podSelector:
+    matchLabels:
+      app: influxdb3
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: edge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8181

@@ -1,0 +1,30 @@
+---
+# Polls the UDM and writes to InfluxDB. Its address and keys are in metrics.vault.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unifi-collector
+  namespace: metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unifi-collector
+  template:
+    metadata:
+      labels:
+        app: unifi-collector
+    spec:
+      containers:
+        - name: unifi-collector
+          image: registry.homelab.local/unifi-collector
+          env:
+            - name: TZ
+              value: America/Chicago
+            - name: INFLUX_URL
+              value: http://influxdb3:8181
+            - name: INFLUX_DB
+              value: unifi
+          envFrom:
+            - secretRef:
+                name: unifi-collector
