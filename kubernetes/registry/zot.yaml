@@ -1,5 +1,5 @@
 ---
-# Images the build hosts make, served through the edge Traefik; the Ingress and the accounts are in zot.vault.yaml.
+# Images the build hosts make, served through the edge Traefik; the routes and the accounts are in zot.vault.yaml.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -91,11 +91,15 @@ spec:
                 "**": {
                   "policies": [
                     { "users": ["builder"], "actions": ["read", "create", "update", "delete"] },
-                    { "users": ["k3s"], "actions": ["read"] }
+                    { "users": ["k3s", "ui"], "actions": ["read"] }
                   ]
                 }
               }
             }
+          },
+          "extensions": {
+            "search": { "enable": true },
+            "ui": { "enable": true }
           },
           "log": { "level": "info" }
         }
