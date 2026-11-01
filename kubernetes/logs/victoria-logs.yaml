@@ -1,0 +1,102 @@
+---
+# The cluster's logs, which vlagent in kubernetes/vlagent sends. Its login is in victoria-logs.vault.yaml.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: victoria-logs
+  namespace: logs
+  annotations:
+    # Logs age out in 30 days, so a lost node brings the store back empty rather than from a backup.
+    k8up.io/backup: "false"
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: victoria-logs-single
+  namespace: logs
+spec:
+  interval: 1h
+  url: oci://ghcr.io/victoriametrics/helm-charts/victoria-logs-single
+  ref:
+    semver: 0.x
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: victoria-logs
+  namespace: logs
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: victoria-logs-single
+  values:
+    server:
+      mode: deployment
+      # Names the Service victoria-logs, which vlagent's remoteWrite url depends on.
+      fullnameOverride: victoria-logs
+      retentionPeriod: 30d
+      retentionDiskSpaceUsage: 8
+      persistentVolume:
+        existingClaim: victoria-logs
+      nodeSelector:
+        homelab.local/logs: "true"
+      env:
+        - name: VM_httpAuth_username
+          valueFrom:
+            secretKeyRef:
+              name: victoria-logs-auth
+              key: username
+        - name: VM_httpAuth_password
+          valueFrom:
+            secretKeyRef:
+              name: victoria-logs-auth
+              key: password
+---
+# The chart's own Service is headless, which a LoadBalancer can't be.
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoria-logs-lb
+  namespace: logs
+  labels:
+    svccontroller.k3s.cattle.io/lbpool: logs
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/instance: victoria-logs
+  ports:
+    - name: http
+      port: 9428
+      targetPort: 9428
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-vlagent
+  namespace: logs
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: victoria-logs
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vlagent
+      ports:
+        - protocol: TCP
+          port: 9428

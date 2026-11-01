@@ -1,0 +1,94 @@
+---
+# Ships every container's log on every node to the store in kubernetes/logs. Its login is in vlagent.vault.yaml.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: victoria-logs-collector
+  namespace: vlagent
+spec:
+  interval: 1h
+  url: oci://ghcr.io/victoriametrics/helm-charts/victoria-logs-collector
+  ref:
+    semver: 0.x
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: vlagent
+  namespace: vlagent
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: victoria-logs-collector
+  values:
+    fullnameOverride: vlagent
+    # k3s's containerd writes each container's log under /var/log/pods, and /var/log/containers links into it.
+    defaultVolumes:
+      - name: pods
+        hostPath:
+          path: /var/log/pods
+      - name: containers
+        hostPath:
+          path: /var/log/containers
+    defaultVolumeMounts:
+      - name: pods
+        mountPath: /var/log/pods
+        readOnly: true
+      - name: containers
+        mountPath: /var/log/containers
+        readOnly: true
+    remoteWrite:
+      # Buffers on the node's disk while the store is away.
+      - url: http://victoria-logs.logs.svc.cluster.local:9428
+        maxDiskUsagePerURL: 1GiB
+    env:
+      - name: VL_remoteWrite_basicAuth_username
+        valueFrom:
+          secretKeyRef:
+            name: vlagent-auth
+            key: username
+      - name: VL_remoteWrite_basicAuth_password
+        valueFrom:
+          secretKeyRef:
+            name: vlagent-auth
+            key: password
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kube-apiserver
+  namespace: vlagent
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # vlagent reads pod metadata from the API. Policy sees the kubernetes Service after DNAT, as the server's port 6443.
+    - ports:
+        - protocol: TCP
+          port: 6443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-logs
+  namespace: vlagent
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: logs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: victoria-logs
+      ports:
+        - protocol: TCP
+          port: 9428
