@@ -1,0 +1,115 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vlagent
+  labels:
+    # vlagent reads each node's log folders through hostPath, which baseline refuses.
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: vlagent
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: vlagent
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}
+  egress:
+    - to:
+        - podSelector: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: vlagent
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-internet
+  namespace: vlagent
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kube-apiserver
+  namespace: vlagent
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # vlagent reads pod metadata from the API. Policy sees the kubernetes Service after DNAT, as the server's port 6443.
+    - ports:
+        - protocol: TCP
+          port: 6443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-logs
+  namespace: vlagent
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: logs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: victoria-logs-single
+      ports:
+        - protocol: TCP
+          port: 9428
