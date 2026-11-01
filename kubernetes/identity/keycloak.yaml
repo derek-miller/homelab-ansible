@@ -1,0 +1,119 @@
+---
+# Keycloak, the house sign-in. Its hostname and database password are in identity.vault.yaml, with its Ingress.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: identity
+spec:
+  replicas: 1
+  # Two at once form one cluster, which Keycloak allows only between compatible releases.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      nodeSelector:
+        homelab.local/identity: "true"
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak
+          args: [start]
+          envFrom:
+            - secretRef:
+                name: keycloak
+          env:
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL_HOST
+              value: postgres
+            - name: KC_DB_URL_DATABASE
+              value: keycloak
+            - name: KC_DB_SCHEMA
+              value: public
+            - name: KC_DB_USERNAME
+              value: keycloak
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres
+                  key: password
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: TZ
+              value: America/Chicago
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9000
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+          volumeMounts:
+            - name: themes
+              mountPath: /opt/keycloak/themes
+              readOnly: true
+      volumes:
+        - name: themes
+          configMap:
+            name: themes
+            items:
+              - key: rack-theme.properties
+                path: rack/login/theme.properties
+              - key: rack.css
+                path: rack/login/resources/css/rack.css
+              - key: rack.svg
+                path: rack/login/resources/img/rack.svg
+              - key: finitelabs-theme.properties
+                path: finitelabs/login/theme.properties
+              - key: finitelabs.css
+                path: finitelabs/login/resources/css/finitelabs.css
+              - key: finitelabs-logo.svg
+                path: finitelabs/login/resources/img/logo.svg
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: identity
+spec:
+  selector:
+    app: keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-edge-traefik
+  namespace: identity
+spec:
+  podSelector:
+    matchLabels:
+      app: keycloak
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: edge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080

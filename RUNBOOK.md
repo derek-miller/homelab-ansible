@@ -160,7 +160,7 @@ The deploy copies the tree to rackvm1, decrypting vaulted files on the way, pins
 
 A suite backs up with a k8up `Schedule` in `kubernetes/<namespace>/backup.yaml`, a copy of edge's with every `edge` changed to the namespace, the repository's address included, beside a `backup.vault.yaml` holding the Secret `backup`: the login, its own password, and the repository's password, restic's encryption key. Besides this repository, that key lives only in the cluster on rackvm1, so the backups can be read only as long as one of the two survives. restic keeps the password a repository was created with, so changing `repository-password` locks k8up out of it. The Schedule backs up every claim in the namespace daily, prunes weekly to the last 7 daily, 4 weekly and 3 monthly snapshots, and checks the repository weekly, each at a time k8up derives from the namespace, in UTC. Its jobs run as root, so they can read every file whatever its owner, and wait 30 seconds before their first call, since the other nodes refuse a new pod at first. To leave a claim out, annotate it `k8up.io/backup: "false"`. Once a new Schedule is deployed, start its first backup by hand with a one-off k8up `Backup` in the namespace: a prune or check that comes due first creates the repository empty, and **Volume Backup Empty** fires until a backup lands.
 
-**Databases.** A database's files change while restic reads them, so its claim is left out and its pod streams a consistent copy instead. The claim is a plain PersistentVolumeClaim named after the database's container and annotated `k8up.io/backup: "false"`. The pod template carries `k8up.io/backupcommand`, a command that prints a tar of the folder's contents, and `k8up.io/file-extension: .tar`. At each backup k8up runs the command through pods/exec and saves its output as `/<namespace>-<container>.tar`, so the namespace's `backup.yaml` also needs firmware's `allow-kube-apiserver` policy. A command that fails fails the backup, and no copy of it is saved. For Postgres the command is `sh -c 'pg_basebackup -U "$POSTGRES_USER" -D - -Ft -X fetch -c fast'`; without `-c fast` it waits minutes for a spread checkpoint. The copy loads only into the same Postgres major. The official image's entrypoint starts as root and gives a restored folder back to the postgres user, so its pod sets no `runAsUser`.
+**Databases.** A database's files change while restic reads them, so its claim is left out and its pod streams a consistent copy instead. The claim is a plain PersistentVolumeClaim named after the database's container and annotated `k8up.io/backup: "false"`. The pod template carries `k8up.io/backupcommand`, a command that prints a tar of the folder's contents, and `k8up.io/file-extension: .tar`. At each backup k8up runs the command through pods/exec and saves its output as `/<namespace>-<container>.tar`, so the namespace's `backup.yaml` also needs firmware's `allow-kube-apiserver` policy. A command that fails fails the backup, and no copy of it is saved. For Postgres the command is `sh -c 'pg_basebackup -U "$POSTGRES_USER" -D - -Ft -X fetch -c fast'`; without `-c fast` it waits minutes for a spread checkpoint. The copy loads only into the same Postgres major. An image on a newer Debian than the one that made the data sorts text by its newer C library, and Postgres warns of a collation version mismatch until, in the pod, `REINDEX DATABASE <db>` and then `ALTER DATABASE <db> REFRESH COLLATION VERSION` run, the second also for `postgres` and `template1`; for Keycloak's database that takes seconds. The official image's entrypoint starts as root and gives a restored folder back to the postgres user, so its pod sets no `runAsUser`.
 
 `sudo kubectl -n <namespace> get backups,prunes,checks` on rackvm1 lists the last three successful and three failed runs of each, and a label move clears that list. A failing run retries in the same pod up to six times. While it does, `sudo kubectl -n <namespace> get pods -l k8upjob=true` shows the pod, and `sudo kubectl -n <namespace> logs <pod> --previous` says why its last attempt failed. Once the run is marked failed, Kubernetes deletes the pod, and its log with it.
 
@@ -254,9 +254,9 @@ oauth2-proxy uses the Swarm one's client and cookie secret, from the same vault 
 
 **Driver metrics.** Drivers report to InfluxDB at `influxdb.finitelabs.com`. The Swarm router `influxdb3-api` serves `influxdb.` and `influxdb3.` on both `finitelabs.com` and the homelab domain, the `influxdb3.` names for drivers already out there: any request carrying an `Authorization` header reaches InfluxDB, which checks the token. Give a driver a token that can only write, and only to the databases it reports to, since anyone can take the token out of the driver.
 
-**Sign-in addresses.** Each realm's pages are served at its own `auth.` name, set as the realm's Frontend URL in Keycloak: `auth.<homelab domain>` for the homelab realm and `auth.finitelabs.com` for `finitelabs`. The Swarm Traefik routes both to Keycloak. Keycloak's own name stays for the admin console, whose password sign-in is the way back in when a realm's passkeys fail. A realm's issuer is its `auth.` address. For `finitelabs` that's named only by `oauth2-proxy-finitelabs`; for the homelab realm, by the Swarm oauth2-proxy, the k3s one in `oauth2-proxy.vault.yaml`, the Flux UI's `flux_web_issuer_url`, Proxmox's `proxmox_oidc_issuer_url` and YouTrack's Keycloak auth module. Changing a Frontend URL changes the issuer at once, and an oauth2-proxy whose issuer doesn't match refuses to start, so change the URL first and deploy the rest straight after. Each realm's WebAuthn Passwordless Policy sets the Relying party ID to its whole domain, so a passkey works on any of its subdomains; a passkey made under another ID is never offered. To register a new one, bind the stock `browser` flow, which takes a password, sign in at `https://auth.<domain>/realms/<realm>/account`, set up a passkey under Signing in, then bind the realm's passkey flow (`browser-passkeys` or `browser-passkey`) back.
+**Sign-in addresses.** Each realm's pages are served at its own `auth.` name, set as the realm's Frontend URL in Keycloak: `auth.<homelab domain>` for the homelab realm and `auth.finitelabs.com` for `finitelabs`. Keycloak's Ingress, in `identity.vault.yaml`, routes both to it. Keycloak's own name stays for the admin console, whose password sign-in is the way back in when a realm's passkeys fail. A realm's issuer is its `auth.` address. For `finitelabs` that's named only by `oauth2-proxy-finitelabs`; for the homelab realm, by the Swarm oauth2-proxy, the k3s one in `oauth2-proxy.vault.yaml`, the Flux UI's `flux_web_issuer_url`, Proxmox's `proxmox_oidc_issuer_url` and YouTrack's Keycloak auth module. Changing a Frontend URL changes the issuer at once, and an oauth2-proxy whose issuer doesn't match refuses to start, so change the URL first and deploy the rest straight after. Each realm's WebAuthn Passwordless Policy sets the Relying party ID to its whole domain, so a passkey works on any of its subdomains; a passkey made under another ID is never offered. To register a new one, bind the stock `browser` flow, which takes a password, sign in at `https://auth.<domain>/realms/<realm>/account`, set up a passkey under Signing in, then bind the realm's passkey flow (`browser-passkeys` or `browser-passkey`) back.
 
-**Sign-in pages.** Each realm has its own look: the homelab's is `rack`, the `finitelabs` realm's follows finitelabs.com, and both switch with the device's light or dark setting. oauth2-proxy's error pages are the ConfigMaps in `oauth2-proxy-pages.yaml`, and Reloader restarts a proxy when its ConfigMap changes; a template that doesn't parse stops that proxy from starting. Keycloak's login themes, `rack` and `finitelabs`, are files under `playbooks/files/plaintext/rackvm1/var/docker/etc/keycloak/themes/`, mounted into the Swarm Keycloak on the `identity` node. Each only restyles Keycloak's `keycloak.v2` theme, so passkey, OTP and "Try another way" behave as stock. A realm takes one under Realm settings, Themes, Login theme. Keycloak caches themes, so after editing one, restart it with `docker service update --force rackvms_keycloak` on a manager.
+**Sign-in pages.** Each realm has its own look: the homelab's is `rack`, the `finitelabs` realm's follows finitelabs.com, and both switch with the device's light or dark setting. oauth2-proxy's error pages are the ConfigMaps in `oauth2-proxy-pages.yaml`, and Reloader restarts a proxy when its ConfigMap changes; a template that doesn't parse stops that proxy from starting. Keycloak's login themes, `rack` and `finitelabs`, are the ConfigMap `themes` in `kubernetes/identity/themes.yaml`, one key per file, which the Deployment in `keycloak.yaml` maps to each file's path under `/opt/keycloak/themes`, so a new file needs a line there too. Each only restyles Keycloak's `keycloak.v2` theme, so passkey, OTP and "Try another way" behave as stock. A realm takes one under Realm settings, Themes, Login theme. Keycloak caches themes, and Reloader restarts it when the ConfigMap changes.
 
 **Image registry.** Every deploy pushes the images the build hosts make (`generic/docker/build-images`) to the image registry, a second Zot in `kubernetes/registry/` on the `registry` label's node, as `<name>:<input hash>` and `<name>:latest`. It keeps each image's three most recently pushed tags, and an older build for a month after it was last pushed or pulled. An app names one `registry.homelab.local/<name>`, with no tag, which each node's `/etc/rancher/k3s/registries.yaml` maps to the registry with a read-only account. The deploy pins it to `registry.homelab.local/<name>@<digest>`, which a node runs from its own copy once it has one; with a `:latest` tag Kubernetes would pull on every start. While the registry doesn't answer, as on a new cluster before this deploy has created it, its images keep their tag and the deploy says so, rather than failing. The registry answers only clients on the home network, every pod and container included, since they all reach it through the UDM; its accounts are what keep the rest out. The build hosts push as `builder` and the nodes pull as `k3s`: both passwords are in `host_vars/rackvm1/vars.yml` and their bcrypt lines in `zot.vault.yaml`, so a new password changes both in one commit, and pushes or pulls with it are refused until that deploy has applied the new line. Vault the password with `printf '%s'`, since a trailing newline makes it a different password. On a new cluster the first deploy's pushes fail, since the registry comes up after the builds, and the next deploy makes them.
 
@@ -434,71 +434,6 @@ Run `docker service scale` on a manager and the rest on the node that holds the 
 | Date | VM backup | Volumes | Result |
 |---|---|---|---|
 | 2026-10-14 | 201 (rackvm1), 03:30 | `keycloak-pg-data`, `portainer-ee-data`, `letsencrypt` | Extracted to a scratch copy, not swapped in. Postgres recovered and was ready 11 s after unpacking; Keycloak's realm, client, user, credential and role counts matched production; `acme.json` parsed. |
-
-## Restoring a Postgres database from its dump
-
-`keycloak-pg-dump` dumps its database every hour at :15 into its own volume, as `keycloak.sql.gz` (plain SQL, gzip). `backup_identity` archives that volume nightly, so the last hour comes from the volume and an earlier night from the archive. Sourcebot's database is on k3s, backed up and restored with its suite (see Databases and Restoring in [Apps on k3s](#apps-on-k3s)).
-
-A dump service waits up to 5 min for its database when it starts. On any failure it exits after 60 s, which shows as **Container Crash Loop (Swarm)**, and `docker service logs rackvms_<db>-pg-dump` says which: `pg_dump failed`, `postgres not ready after 5 min`, or `dump shrank from <old> to <new> bytes, previous dump kept`. A dump under half the previous size is refused, so a real shrink (expired Keycloak events or sessions) loops until you accept it. On the node with that label, move the old dump aside and delete it once a new one is in place:
-
-```bash
-mv /mnt/data/docker/volumes/rackvms_<db>-pg-dump/_data/<db>.sql.gz /root/<db>.sql.gz.pre-shrink
-```
-
-### Loading a dump
-
-[Pause deploys](#pausing-deploys) throughout, since a deploy resets replicas. A dump service dumps as soon as it starts, so it stays at 0 until the load has succeeded; otherwise it replaces the dump you are loading. For Keycloak, on a manager:
-
-```bash
-docker service scale rackvms_keycloak=0 rackvms_keycloak-pg-dump=0
-```
-
-Then on the node with the `identity` label. The chain stops at the first failure: a damaged dump leaves the database untouched, and `keycloak_pre_restore` must not already exist.
-
-```bash
-set -o pipefail
-F=/mnt/data/docker/volumes/rackvms_keycloak-pg-dump/_data/keycloak.sql.gz
-C=$(docker ps -qf name=rackvms_keycloak-postgres)
-gunzip -t "$F" &&
-  docker exec $C psql -X -v ON_ERROR_STOP=1 -U keycloak -d postgres -c 'ALTER DATABASE keycloak RENAME TO keycloak_pre_restore' -c 'CREATE DATABASE keycloak OWNER keycloak TEMPLATE template0' &&
-  gunzip -c "$F" | docker exec -i $C psql -X -q -v ON_ERROR_STOP=1 --single-transaction -U keycloak -d keycloak >/dev/null
-```
-
-If the load fails, the new database is empty, since the load is one transaction. Swap the names back; both renames run as one transaction, so nothing changes unless both succeed:
-
-```bash
-docker exec $C psql -X -v ON_ERROR_STOP=1 -U keycloak -d postgres -c 'ALTER DATABASE keycloak RENAME TO keycloak_failed_restore; ALTER DATABASE keycloak_pre_restore RENAME TO keycloak'
-```
-
-Then bring up only Keycloak with `docker service scale rackvms_keycloak=1`, leave the dump service at 0, fix the cause and retry.
-
-Once the load succeeds, scale both back up on a manager with `docker service scale rackvms_keycloak=1 rackvms_keycloak-pg-dump=1`. Once logins work, drop the kept copies:
-
-```bash
-docker exec $C psql -U keycloak -d postgres -c 'DROP DATABASE IF EXISTS keycloak_pre_restore' -c 'DROP DATABASE IF EXISTS keycloak_failed_restore'
-```
-
-
-### Loading an earlier night's dump
-
-Scale both services to 0 as above first, then put the dump volume back from its label's archive and load it as above, skipping the scale-down. The list has to be JSON, as with `proxmox_reboot_order`:
-
-```bash
-make run hosts=rackvm1 tags=docker-restore-volumes ANSIBLE_FLAGS="-e docker_restore_volumes=yes -e docker_restore_volumes_label=identity -e docker_restore_volumes_force=yes -e '{\"docker_restore_volumes_only\":[\"keycloak-pg-dump\"]}'"
-```
-
-That takes the newest archive, which is last night's. For an earlier one, also pass `-e '{\"docker_restore_volumes_archive_patterns\":[\"backup-<ts>.tar.gz.age\"]}'` with the file name from `/mnt/Backups/Volumes/identity`, and check the `Restoring from:` line.
-
-The run drains every host in `hosts=`. rackvm1 also carries `edge`, so everything behind Traefik is down while it runs.
-
-### Drills
-
-Each drill loads the dump from the volume into a scratch Postgres (production's image) on an `--internal` Docker network on the database's own node, using the load chain above. To check Keycloak itself, start production's Keycloak image against the copy with `KC_PROXY_HEADERS=xforwarded` and request each realm's `/.well-known/openid-configuration` with `X-Forwarded-Proto: https`. Every realm requires HTTPS, so plain HTTP gets 403.
-
-| Date | Dump | Result |
-|---|---|---|
-| 2026-10-14 | `keycloak.sql.gz`, 21:06 | Loaded in 5 s. Realm, client, user, credential, role and component counts and schema version 26.8.1 matched production. Keycloak started on it in 8.5 s, and all three realms answered 200. |
-| 2026-10-14 | `sourcebot.sql.gz`, 21:15 | Loaded in 4 s. All 37 tables matched production's row counts. |
 
 ## docker-volume-backup on a Pi is unhealthy
 
