@@ -1,5 +1,5 @@
 ---
-# The cluster's logs, which vlagent in kubernetes/platform/vlagent sends. Its login is in victoria-logs.vault.yaml.
+# The cluster's logs, which vlagent in kubernetes/vlagent sends. Its login is in victoria-logs.vault.yaml.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -42,8 +42,8 @@ spec:
     name: victoria-logs-single
   values:
     server:
-      # Pinned so a chart release that changes its defaults keeps the same objects and claim.
       mode: deployment
+      # Names the Service victoria-logs, which vlagent's remoteWrite url depends on.
       fullnameOverride: victoria-logs
       retentionPeriod: 30d
       retentionDiskSpaceUsage: 8
