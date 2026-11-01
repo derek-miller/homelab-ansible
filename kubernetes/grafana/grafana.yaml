@@ -1,0 +1,294 @@
+---
+# Grafana, its image renderer and grafana-mcp. Secrets and routes are in grafana.vault.yaml.
+# The Service influxdb3 keeps the datasources' http://influxdb3:8181 pointing at the metrics namespace.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data
+  namespace: grafana
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: grafana
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      nodeSelector:
+        homelab.local/grafana: "true"
+      containers:
+        - name: grafana
+          image: grafana/grafana
+          env:
+            - name: GF_AUTH_BASIC_ENABLED
+              value: "false"
+            - name: GF_AUTH_DISABLE_LOGIN_FORM
+              value: "true"
+            - name: GF_AUTH_DISABLE_SIGNOUT_MENU
+              value: "true"
+            - name: GF_AUTH_PROXY_AUTO_SIGN_UP
+              value: "true"
+            - name: GF_AUTH_PROXY_ENABLED
+              value: "true"
+            - name: GF_AUTH_PROXY_HEADER_NAME
+              value: X-Auth-Request-Email
+            - name: GF_AUTH_PROXY_HEADER_PROPERTY
+              value: email
+            - name: GF_AUTH_PROXY_LDAP_SYNC_TTL
+              value: "60"
+            - name: GF_DATABASE_WAL
+              value: "true"
+            - name: GF_EMAILS_WELCOME_EMAIL_ON_SIGN_UP
+              value: "true"
+            - name: GF_INSTALL_PLUGINS
+              value: grafana-clock-panel,grafana-piechart-panel,grafana-worldmap-panel
+            - name: GF_RENDERING_CALLBACK_URL
+              value: http://grafana:3000/
+            - name: GF_RENDERING_SERVER_URL
+              value: http://grafana-image-renderer:8081/render
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_DISABLE_GRAVATAR
+              value: "false"
+            - name: GF_USERS_ALLOW_ORG_CREATE
+              value: "false"
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+            - name: GF_USERS_AUTO_ASSIGN_ORG
+              value: "true"
+            - name: GF_USERS_AUTO_ASSIGN_ORG_ROLE
+              value: Viewer
+            - name: TZ
+              value: America/Chicago
+            - name: GF_PLUGINS_PREINSTALL_SYNC
+              value: victoriametrics-logs-datasource
+          envFrom:
+            - secretRef:
+                name: grafana
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: grafana
+spec:
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-image-renderer
+  namespace: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana-image-renderer
+  template:
+    metadata:
+      labels:
+        app: grafana-image-renderer
+    spec:
+      nodeSelector:
+        homelab.local/grafana: "true"
+      containers:
+        - name: grafana-image-renderer
+          image: grafana/grafana-image-renderer
+          env:
+            - name: ENABLE_METRICS
+              value: "true"
+            - name: TZ
+              value: America/Chicago
+          envFrom:
+            - secretRef:
+                name: grafana-image-renderer
+          ports:
+            - name: http
+              containerPort: 8081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-image-renderer
+  namespace: grafana
+spec:
+  selector:
+    app: grafana-image-renderer
+  ports:
+    - name: http
+      port: 8081
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-mcp
+  namespace: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana-mcp
+  template:
+    metadata:
+      labels:
+        app: grafana-mcp
+    spec:
+      nodeSelector:
+        homelab.local/grafana: "true"
+      containers:
+        - name: grafana-mcp
+          image: grafana/mcp-grafana
+          args:
+            - -t
+            - streamable-http
+            - --address
+            - :8000
+            - --allowed-hosts
+            - $(ALLOWED_HOSTS)
+          env:
+            - name: GRAFANA_URL
+              value: http://grafana:3000
+            - name: DO_NOT_TRACK
+              value: "1"
+            - name: TZ
+              value: America/Chicago
+            - name: ALLOWED_HOSTS
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-mcp
+                  key: ALLOWED_HOSTS
+          ports:
+            - name: http
+              containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-mcp
+  namespace: grafana
+spec:
+  selector:
+    app: grafana-mcp
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: influxdb3
+  namespace: grafana
+spec:
+  type: ExternalName
+  externalName: influxdb3.metrics.svc.cluster.local
+  ports:
+    - name: http
+      port: 8181
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-edge-traefik
+  namespace: grafana
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: edge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-metrics
+  namespace: grafana
+spec:
+  podSelector:
+    matchLabels:
+      app: grafana
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: metrics
+          podSelector:
+            matchLabels:
+              app: influxdb3
+      ports:
+        - protocol: TCP
+          port: 8181
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-logs
+  namespace: grafana
+spec:
+  podSelector:
+    matchLabels:
+      app: grafana
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: logs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: victoria-logs
+      ports:
+        - protocol: TCP
+          port: 9428

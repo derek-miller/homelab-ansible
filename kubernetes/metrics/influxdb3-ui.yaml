@@ -1,0 +1,97 @@
+---
+# InfluxDB 3 Explorer in admin mode, so only the house sign-in reaches it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: influxdb3-ui
+  namespace: metrics
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: influxdb3-ui
+  namespace: metrics
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: influxdb3-ui
+  template:
+    metadata:
+      labels:
+        app: influxdb3-ui
+    spec:
+      nodeSelector:
+        homelab.local/metrics: "true"
+      containers:
+        - name: influxdb3-ui
+          image: influxdata/influxdb3-ui
+          args:
+            - --mode=admin
+          env:
+            - name: TZ
+              value: America/Chicago
+            - name: DEFAULT_INFLUX_SERVER
+              value: http://influxdb3:8181
+            - name: DEFAULT_INFLUX_DATABASE
+              value: metrics
+            - name: DEFAULT_SERVER_NAME
+              value: InfluxDB 3
+          envFrom:
+            - secretRef:
+                name: influxdb3-ui
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: db
+              mountPath: /db
+      volumes:
+        - name: db
+          persistentVolumeClaim:
+            claimName: influxdb3-ui
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: influxdb3-ui
+  namespace: metrics
+spec:
+  selector:
+    app: influxdb3-ui
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-edge-traefik-ui
+  namespace: metrics
+spec:
+  podSelector:
+    matchLabels:
+      app: influxdb3-ui
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: edge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080
