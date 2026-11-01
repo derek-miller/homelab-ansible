@@ -75,7 +75,7 @@ spec:
   type: LoadBalancer
   externalTrafficPolicy: Local
   selector:
-    app.kubernetes.io/name: victoria-logs-single
+    app.kubernetes.io/instance: victoria-logs
   ports:
     - name: http
       port: 9428
@@ -89,7 +89,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: victoria-logs-single
+      app.kubernetes.io/instance: victoria-logs
   policyTypes:
     - Ingress
   ingress:
