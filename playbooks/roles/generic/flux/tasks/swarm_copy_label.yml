@@ -1,10 +1,12 @@
 ---
 # Tasks that carry volume paths or app names are no_log, and failures name only the label.
 - name: "{{ copy_label }} | find the Swarm services using its volumes"
+  # A container gone between the two docker calls is skipped.
   shell: >-
-    set -o pipefail;
-    docker ps -a {{ _flux_copy_filters }}
-    --format '{% raw %}{{ .Label "com.docker.swarm.service.name" }}{% endraw %}' | sort -u
+    set -e; ids=$(docker ps -aq);
+    { [ -z "$ids" ] || docker inspect --format
+    '{% raw %}{{ index .Config.Labels "com.docker.swarm.service.name" }}{{ range .Mounts }}{{ "\t" }}{{ .Source }}{{ end }}{% endraw %}'
+    $ids 2>/dev/null || true; } | {{ _flux_copy_using }} | sort -u
   args:
     executable: /bin/bash
   delegate_to: "{{ _flux_copy_node }}"
@@ -66,7 +68,13 @@
       no_log: true
 
     - name: "{{ copy_label }} | wait until no container uses its volumes"
-      command: "docker ps -q {{ _flux_copy_filters }}"
+      shell: >-
+        set -e; ids=$(docker ps -q);
+        { [ -z "$ids" ] || docker inspect --format
+        '{% raw %}{{ .Id }}{{ range .Mounts }}{{ "\t" }}{{ .Source }}{{ end }}{% endraw %}'
+        $ids 2>/dev/null || true; } | {{ _flux_copy_using }}
+      args:
+        executable: /bin/bash
       delegate_to: "{{ _flux_copy_node }}"
       become: true
       register: _flux_copy_running
@@ -129,8 +137,8 @@
     - name: "{{ copy_label }} | report the copy"
       debug:
         msg: >-
-          {{ copy_label }}: copied {{ _flux_copy_entries | length }} Swarm volume(s) into its
-          k3s folders on {{ _flux_copy_node }}. The stack deploy removes its stopped Swarm services.
+          {{ copy_label }}: copied {{ _flux_copy_entries | length }} Swarm volume(s) and folder(s) into
+          its k3s folders on {{ _flux_copy_node }}. The stack deploy removes its stopped Swarm services.
   rescue:
     - name: "{{ copy_label }} | remove its copies"
       shell: >-

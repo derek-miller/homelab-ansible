@@ -1,0 +1,106 @@
+---
+# Sourcebot's database. Its password is in sourcebot.vault.yaml.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres
+  namespace: sourcebot
+  annotations:
+    # The backup command below saves a consistent copy, which the restore unpacks into this claim.
+    k8up.io/backup: "false"
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 4Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: sourcebot
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+      annotations:
+        k8up.io/backupcommand: sh -c 'pg_basebackup -U "$POSTGRES_USER" -D - -Ft -X fetch -c fast'
+        k8up.io/file-extension: .tar
+    spec:
+      nodeSelector:
+        homelab.local/sourcebot: "true"
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: postgres
+          image: postgres:16
+          args:
+            - postgres
+            - -c
+            - shared_buffers=2GB
+            - -c
+            - effective_cache_size=8GB
+            - -c
+            - work_mem=32MB
+            - -c
+            - maintenance_work_mem=512MB
+            - -c
+            - random_page_cost=1.1
+            - -c
+            - effective_io_concurrency=200
+            - -c
+            - autovacuum_vacuum_cost_limit=2000
+            - -c
+            - autovacuum_naptime=30s
+            - -c
+            - max_wal_size=2GB
+          env:
+            - name: POSTGRES_DB
+              value: sourcebot
+            - name: POSTGRES_USER
+              value: sourcebot
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres
+                  key: password
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: [pg_isready, -q, -U, sourcebot, -d, sourcebot]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            # Parallel workers share memory through it.
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: sourcebot
+spec:
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

@@ -1,0 +1,82 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis
+  namespace: sourcebot
+  annotations:
+    # Sourcebot rebuilds its job schedules from the database when it starts.
+    k8up.io/backup: "false"
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: sourcebot
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      nodeSelector:
+        homelab.local/sourcebot: "true"
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: redis
+          image: redis:8-alpine
+          # AOF on: this is BullMQ's job queue, not a cache — a restart without it
+          # strands queued index jobs. noeviction fails writes at the cap instead of
+          # evicting job records, so --maxmemory must clear the retained job set or
+          # indexing silently stalls. Sourcebot keeps the latest index job per repo,
+          # ~2.8KB each.
+          args:
+            - redis-server
+            - --save
+            - ""
+            - --appendonly
+            - "yes"
+            - --dir
+            - /data
+            - --maxmemory
+            - 3gb
+            - --maxmemory-policy
+            - noeviction
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: [redis-cli, ping]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: sourcebot
+spec:
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis

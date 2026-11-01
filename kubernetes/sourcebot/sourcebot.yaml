@@ -1,0 +1,287 @@
+---
+# Sourcebot code search: the web app and indexer, its config, and the driver sources the
+# control4-driver-scraper CronJob writes. Its keys, routes and API-key header rename are in
+# sourcebot.vault.yaml.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data
+  namespace: sourcebot
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: source
+  namespace: sourcebot
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 128Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sourcebot
+  namespace: sourcebot
+data:
+  config.json: |-
+    {
+      "$schema": "https://raw.githubusercontent.com/sourcebot-dev/sourcebot/main/schemas/v3/index.json",
+      "settings": {
+        "reindexIntervalMs": 21600000,
+        "reindexRepoPollingIntervalMs": 60000,
+        "resyncConnectionPollingIntervalMs": 60000,
+        "maxRepoIndexingJobConcurrency": 4
+      },
+      "connections": {
+        "drivers-control4-com-driver-repos-shard0": {
+          "type": "git",
+          "url": "file:///repos/drivers-control4-com/shard0/*"
+        },
+        "drivers-control4-com-driver-repos-shard1": {
+          "type": "git",
+          "url": "file:///repos/drivers-control4-com/shard1/*"
+        },
+        "drivers-control4-com-driver-repos-shard2": {
+          "type": "git",
+          "url": "file:///repos/drivers-control4-com/shard2/*"
+        },
+        "drivers-control4-com-driver-repos-shard3": {
+          "type": "git",
+          "url": "file:///repos/drivers-control4-com/shard3/*"
+        },
+        "drivers-control4-com-driver-repos-shard4": {
+          "type": "git",
+          "url": "file:///repos/drivers-control4-com/shard4/*"
+        },
+        "drivers-control4-com-driver-repos-shard5": {
+          "type": "git",
+          "url": "file:///repos/drivers-control4-com/shard5/*"
+        },
+        "drivers-control4-com-driver-repos-shard6": {
+          "type": "git",
+          "url": "file:///repos/drivers-control4-com/shard6/*"
+        },
+        "drivers-control4-com-driver-repos-shard7": {
+          "type": "git",
+          "url": "file:///repos/drivers-control4-com/shard7/*"
+        },
+        "drivers-control4-com-driver-repos-shard8": {
+          "type": "git",
+          "url": "file:///repos/drivers-control4-com/shard8/*"
+        },
+        "drivers-control4-com-driver-repos-shard9": {
+          "type": "git",
+          "url": "file:///repos/drivers-control4-com/shard9/*"
+        },
+        "chowmain-software-driver-repos": {
+          "type": "git",
+          "url": "file:///repos/chowmain-software/*"
+        },
+        "drivercentral-io-driver-repos": {
+          "type": "git",
+          "url": "file:///repos/drivercentral-io/*"
+        },
+        "github-com-driver-repos": {
+          "type": "git",
+          "url": "file:///repos/github-com/*/*/*"
+        },
+        "manual-driver-repos": {
+          "type": "git",
+          "url": "file:///repos/manual/*"
+        },
+        "github-personal": {
+          "type": "github",
+          "users": [
+            "derek-miller"
+          ],
+          "exclude": {
+            "archived": true,
+            "forks": true
+          },
+          "token": {
+            "env": "GITHUB_PERSONAL_TOKEN"
+          }
+        },
+        "github-black-ops-drivers": {
+          "type": "github",
+          "users": [
+            "black-ops-drivers"
+          ],
+          "exclude": {
+            "archived": true,
+            "forks": true
+          },
+          "token": {
+            "env": "GITHUB_BLACKOPSDRIVERS_TOKEN"
+          }
+        },
+        "github-finitelabs": {
+          "type": "github",
+          "orgs": [
+            "finitelabs"
+          ],
+          "exclude": {
+            "archived": true,
+            "forks": true
+          },
+          "token": {
+            "env": "GITHUB_FINITELABS_TOKEN"
+          }
+        },
+        "github-ckunakdot-homekit": {
+          "type": "github",
+          "repos": [
+            "ckunakdot/Control4-HomeKit-Controller"
+          ],
+          "token": {
+            "env": "GITHUB_PERSONAL_TOKEN"
+          }
+        }
+      },
+      "models": [
+        {
+          "provider": "anthropic",
+          "model": "claude-opus-4-6",
+          "displayName": "Claude Opus 4.6",
+          "token": {
+            "env": "ANTHROPIC_API_KEY"
+          }
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sourcebot
+  namespace: sourcebot
+spec:
+  replicas: 1
+  # Two at once would index into the same folder.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: sourcebot
+  template:
+    metadata:
+      labels:
+        app: sourcebot
+    spec:
+      nodeSelector:
+        homelab.local/sourcebot: "true"
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: sourcebot
+          image: registry.homelab.local/sourcebot
+          # No memory limit on purpose: the cgroup is dominated by zoekt's
+          # reclaimable mmap'd shard cache, so a limit evicts hot index pages
+          # instead of bounding the heap. The web heap is fixed at 6GiB by the
+          # image's web-heap-cap.patch.
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: TZ
+              value: America/Chicago
+            - name: CONFIG_PATH
+              value: /etc/sourcebot/config.json
+            - name: SOURCEBOT_LOG_LEVEL
+              value: debug
+            - name: SOURCEBOT_TELEMETRY_DISABLED
+              value: "true"
+            - name: REDIS_URL
+              value: redis://redis:6379
+            # git refuses repositories another user owns, as most driver sources are.
+            - name: GIT_CONFIG_COUNT
+              value: "1"
+            - name: GIT_CONFIG_KEY_0
+              value: safe.directory
+            - name: GIT_CONFIG_VALUE_0
+              value: "*"
+          envFrom:
+            - secretRef:
+                name: sourcebot
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/sourcebot
+              readOnly: true
+            # Its index and database name each repository by these paths.
+            - name: source
+              mountPath: /repos/chowmain-software
+              subPath: chowmain.software
+            - name: source
+              mountPath: /repos/drivers-control4-com
+              subPath: drivers.control4.com
+            - name: source
+              mountPath: /repos/drivercentral-io
+              subPath: drivercentral.io
+            - name: source
+              mountPath: /repos/github-com
+              subPath: github.com
+            - name: source
+              mountPath: /repos/manual
+              subPath: manual
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: data
+        - name: config
+          configMap:
+            name: sourcebot
+        - name: source
+          persistentVolumeClaim:
+            claimName: source
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sourcebot
+  namespace: sourcebot
+spec:
+  selector:
+    app: sourcebot
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-edge-traefik
+  namespace: sourcebot
+spec:
+  podSelector:
+    matchLabels:
+      app: sourcebot
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: edge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 3000

@@ -23,9 +23,10 @@
         label: "{{ move.label }}"
       no_log: true
 
-    # A backup started meanwhile would claim a volume or save a half-written one; Flux puts them back when it resumes.
-    - name: "{{ move.label }} | pause its backups"
-      command: "k3s kubectl -n {{ move.label }} delete schedules.k8up.io --all --timeout=2m"
+    # A backup or scheduled job started meanwhile would claim a volume or save a half-written one; Flux puts them
+    # back when it resumes. Foreground, so a scheduled job's pods are gone before the volumes are touched.
+    - name: "{{ move.label }} | pause its backups and scheduled jobs"
+      command: "k3s kubectl -n {{ move.label }} delete schedules.k8up.io,cronjobs --all --cascade=foreground --timeout=2m"
 
     # A pod started while the label moves or is restored would claim its volumes.
     - name: "{{ move.label }} | scale its workloads to zero"
