@@ -41,7 +41,8 @@ spec:
       code-challenge-method: S256
       cookie-expire: 168h0m0s
       cookie-refresh: 1h0m0s
-      cookie-samesite: strict
+      # An app's sign-in that returns from another site, such as Plex.tv, would leave a strict CSRF cookie behind.
+      cookie-samesite: lax
       cookie-secure: true
       custom-templates-dir: /templates
       reverse-proxy: true
