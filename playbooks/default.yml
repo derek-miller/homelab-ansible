@@ -409,8 +409,8 @@
       delay: 10
 
     # A crash-looping task replaces itself with a new task ID on each restart.
-    # One that restarts while its dependencies come up (oauth2-proxy while
-    # Keycloak starts) settles within a few rounds; a crash loop never does.
+    # One that restarts while its dependencies come up settles within a few
+    # rounds; a crash loop never does.
     - name: wait for the node's tasks to stay up for 30 s
       shell: |
         set -o pipefail
