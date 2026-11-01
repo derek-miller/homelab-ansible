@@ -52,9 +52,6 @@ rackvm3 docker_images_to_build=c4-release-notifier
 rackvm4 docker_images_to_build=unifi-collector
 rackvm5 docker_images_to_build=sourcebot,control4-driver-scraper
 
-[control4-driver-scraper]
-rackvm5
-
 [docker_swarm_manager]
 rackvm1 docker_stack_name=rackvms
 rackvm2
