@@ -1,0 +1,93 @@
+---
+# MQTT Explorer's web UI. Its route is in mqtt.vault.yaml.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mqtt-explorer
+  namespace: mqtt
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqtt-explorer
+  namespace: mqtt
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mqtt-explorer
+  template:
+    metadata:
+      labels:
+        app: mqtt-explorer
+    spec:
+      nodeSelector:
+        homelab.local/mqtt: "true"
+      containers:
+        - name: mqtt-explorer
+          image: smeagolworms4/mqtt-explorer
+          env:
+            - name: TZ
+              value: America/Chicago
+            - name: HTTP_PORT
+              value: "4000"
+            - name: CONFIG_PATH
+              value: /mqtt-explorer/config
+          ports:
+            - name: http
+              containerPort: 4000
+          readinessProbe:
+            tcpSocket:
+              port: http
+          volumeMounts:
+            - name: config
+              mountPath: /mqtt-explorer/config
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: mqtt-explorer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mqtt-explorer
+  namespace: mqtt
+spec:
+  selector:
+    app: mqtt-explorer
+  ports:
+    - name: http
+      port: 4000
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-edge-traefik-mqtt-explorer
+  namespace: mqtt
+spec:
+  podSelector:
+    matchLabels:
+      app: mqtt-explorer
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: edge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 4000
