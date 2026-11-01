@@ -60,6 +60,3 @@ disk_mounts:
 docker_daemon_options:
   data-root: /mnt/data/docker
   default-stop-timeout: 60
-
-# kubernetes/sourcebot/ runs the scraper as a CronJob.
-control4_driver_scraper_state: absent
