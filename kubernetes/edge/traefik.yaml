@@ -381,6 +381,49 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: allow-mqtt
+  namespace: edge
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mqtt
+          podSelector:
+            matchLabels:
+              app: zigbee2mqtt
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mqtt
+          podSelector:
+            matchLabels:
+              app: node-red
+      ports:
+        - protocol: TCP
+          port: 1880
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mqtt
+          podSelector:
+            matchLabels:
+              app: mqtt-explorer
+      ports:
+        - protocol: TCP
+          port: 4000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: allow-metrics
   namespace: edge
 spec:

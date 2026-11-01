@@ -61,15 +61,3 @@ disk_mounts:
 docker_daemon_options:
   data-root: /mnt/data/docker
   default-stop-timeout: 60
-
-project_files:
-  - src: "plaintext/{{ inventory_hostname }}/var/docker/mosquitto/config/mosquitto.conf"
-    dest: /var/docker/mosquitto/config/mosquitto.conf
-    owner: 1883
-    group: 1883
-    mode: '0640'
-  - src: "vault/{{ inventory_hostname }}/var/docker/mosquitto/config/mosquitto.passwd"
-    dest: /var/docker/mosquitto/config/mosquitto.passwd
-    owner: 1883
-    group: 1883
-    mode: '0700'
