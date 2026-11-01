@@ -99,6 +99,9 @@ const YOUTRACK_BASE_URL = process.env.YOUTRACK_BASE_URL || "";
 const MAX_BATCH_SIZE = 50;
 // The gateway's /hooks body limit is 256 KiB.
 const MAX_MESSAGE_BYTES = 200_000;
+// GitHub's largest delivery.
+const MAX_HOOK_BODY_BYTES = 25 * 1024 * 1024;
+const MAX_ADMIN_BODY_BYTES = 1024 * 1024;
 const MAX_ATTEMPTS = 3;
 const RETRY_BACKOFF_MS = 5 * 60_000;
 const BUSY_RETRY_MS = 60_000;
@@ -1064,6 +1067,26 @@ function allowMethod(req, res, method) {
   return false;
 }
 
+/** Read the body, or answer 413 and return null once it passes `limit` bytes */
+async function readBody(req, res, limit) {
+  const chunks = [];
+  let size = Number(req.headers["content-length"] ?? 0);
+  if (size <= limit) {
+    size = 0;
+    for await (const chunk of req) {
+      size += chunk.length;
+      if (size > limit) break;
+      chunks.push(chunk);
+    }
+  }
+  if (size > limit) {
+    res.writeHead(413, { Connection: "close" });
+    res.end("Payload too large", () => req.destroy());
+    return null;
+  }
+  return Buffer.concat(chunks);
+}
+
 function sendJson(res, status, value) {
   const body = JSON.stringify(value);
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -1078,11 +1101,11 @@ async function readIds(req, res) {
     res.end("Content-Type must be application/json");
     return null;
   }
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  const raw = await readBody(req, res, MAX_ADMIN_BODY_BYTES);
+  if (!raw) return null;
   let ids;
   try {
-    ids = JSON.parse(Buffer.concat(chunks).toString())?.ids;
+    ids = JSON.parse(raw.toString())?.ids;
   } catch {
     ids = null;
   }
@@ -1213,10 +1236,8 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // Read body
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  const body = Buffer.concat(chunks);
+  const body = await readBody(req, res, MAX_HOOK_BODY_BYTES);
+  if (!body) return;
 
   // ── GitHub path ──
   if (source.kind === "github") {
