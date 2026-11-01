@@ -45,7 +45,7 @@ spec:
       serviceAccountName: portainer-sa-clusteradmin
       containers:
         - name: portainer-agent
-          image: portainer/agent:latest
+          image: portainer/agent
           env:
             - name: LOG_LEVEL
               value: INFO

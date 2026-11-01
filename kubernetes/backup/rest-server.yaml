@@ -40,7 +40,7 @@ spec:
         runAsNonRoot: true
       containers:
         - name: rest-server
-          image: restic/rest-server:latest
+          image: restic/rest-server
           command:
             - rest-server
           args:
