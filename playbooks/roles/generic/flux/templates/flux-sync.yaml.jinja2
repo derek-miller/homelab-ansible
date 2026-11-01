@@ -74,5 +74,5 @@ spec:
     - apiVersion: v1
       kind: PersistentVolumeClaim
       current: >-
-        status.phase == 'Bound' || (status.phase == 'Pending'
+        status.phase == 'Bound' || (status.phase == 'Pending' && !has(spec.volumeName)
         && !(has(metadata.annotations) && 'volume.kubernetes.io/selected-node' in metadata.annotations))
