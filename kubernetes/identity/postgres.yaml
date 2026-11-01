@@ -1,0 +1,86 @@
+---
+# Keycloak's database. Its password is in identity.vault.yaml.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres
+  namespace: identity
+  annotations:
+    # The backup command below saves a consistent copy, which the restore unpacks into this claim.
+    k8up.io/backup: "false"
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: identity
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+      annotations:
+        k8up.io/backupcommand: sh -c 'pg_basebackup -U "$POSTGRES_USER" -D - -Ft -X fetch -c fast'
+        k8up.io/file-extension: .tar
+    spec:
+      nodeSelector:
+        homelab.local/identity: "true"
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: postgres
+          image: postgres:16
+          env:
+            - name: POSTGRES_DB
+              value: keycloak
+            - name: POSTGRES_USER
+              value: keycloak
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres
+                  key: password
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: [pg_isready, -q, -U, keycloak, -d, keycloak]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            # Parallel workers share memory through it.
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: identity
+spec:
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

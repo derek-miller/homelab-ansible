@@ -1,0 +1,347 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: themes
+  namespace: identity
+data:
+  rack-theme.properties: |
+    parent=keycloak.v2
+    import=common/keycloak
+    styles=css/styles.css css/rack.css
+  rack.css: |
+    :root.login-pf {
+      --rk-font: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --rk-page: radial-gradient(120% 90% at 50% 30%, #f7f8fa, #e3e7ec 80%);
+      --rk-text: #1d2128;
+      --rk-muted: #5f6b7a;
+      --rk-link: #a85a12;
+      --rk-card: #ffffff;
+      --rk-border: #d5dae1;
+      --rk-shadow: 0 1px 3px rgba(13, 11, 16, 0.08);
+      --rk-field: #ffffff;
+      --rk-field-border: #c4cad3;
+      --rk-amber: linear-gradient(#f6b34b, #e5892b);
+      --rk-amber-hover: linear-gradient(#efa43d, #d97b22);
+      --rk-amber-edge: #d9822a;
+      --rk-amber-text: #1f1405;
+
+      --pf-v5-global--FontFamily--text: var(--rk-font);
+      --pf-v5-global--FontFamily--text--vf: var(--rk-font);
+      --pf-v5-global--FontFamily--heading: var(--rk-font);
+      --pf-v5-global--FontFamily--heading--vf: var(--rk-font);
+      --pf-v5-global--Color--100: var(--rk-text);
+      --pf-v5-global--Color--200: var(--rk-muted);
+      --pf-v5-global--primary-color--100: #e5892b;
+      --pf-v5-global--primary-color--200: #d97b22;
+      --pf-v5-global--link--Color: var(--rk-link);
+      --pf-v5-global--link--Color--hover: var(--rk-text);
+    }
+
+    :root.login-pf.pf-v5-theme-dark {
+      --rk-page: radial-gradient(120% 90% at 50% 30%, #22252c, #0d0b10 75%);
+      --rk-text: #e8eaed;
+      --rk-muted: #9aa3ae;
+      --rk-link: #f6b34b;
+      --rk-card: rgba(24, 27, 33, 0.92);
+      --rk-border: #2c323c;
+      --rk-shadow: none;
+      --rk-field: #12151a;
+      --rk-field-border: #3a414c;
+    }
+
+    .login-pf body {
+      background: var(--rk-page);
+      background-attachment: fixed;
+      min-height: 100vh;
+      font-family: var(--rk-font);
+    }
+
+    #kc-header {
+      margin-bottom: 28px;
+    }
+
+    #kc-header-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      font-family: var(--rk-font);
+      font-size: 30px;
+      font-weight: 900;
+      text-transform: none;
+      letter-spacing: -0.5px;
+      line-height: 1;
+      color: var(--rk-text) !important;
+    }
+
+    #kc-header-wrapper::before {
+      content: "";
+      flex: none;
+      width: 44px;
+      height: 44px;
+      background: url("../img/rack.svg") center / contain no-repeat;
+    }
+
+    .login-pf .pf-v5-c-login__main {
+      --pf-v5-c-login__main--BackgroundColor: var(--rk-card);
+      --pf-v5-c-login__main--BoxShadow: var(--rk-shadow);
+      border: 1px solid var(--rk-border);
+      border-radius: 8px;
+    }
+
+    .login-pf .pf-v5-c-login__main-header {
+      border-top: 0;
+    }
+
+    .login-pf #kc-page-title {
+      font-weight: 700;
+    }
+
+    .login-pf .pf-v5-c-login__main a:not(.pf-v5-c-button) {
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .login-pf .pf-v5-c-button:is(.pf-m-primary, .pf-m-secondary, .pf-m-tertiary) {
+      --pf-v5-c-button--BorderRadius: 6px;
+      --pf-v5-c-button--after--BorderRadius: 6px;
+      --pf-v5-c-button--FontWeight: 500;
+      --pf-v5-c-button--PaddingTop: 0.625rem;
+      --pf-v5-c-button--PaddingBottom: 0.625rem;
+    }
+
+    .login-pf .pf-v5-c-button.pf-m-primary {
+      --pf-v5-c-button--m-primary--Color: var(--rk-amber-text);
+      --pf-v5-c-button--m-primary--hover--Color: var(--rk-amber-text);
+      --pf-v5-c-button--m-primary--focus--Color: var(--rk-amber-text);
+      --pf-v5-c-button--m-primary--active--Color: var(--rk-amber-text);
+      background: var(--rk-amber);
+      border: 1px solid var(--rk-amber-edge);
+    }
+
+    .login-pf .pf-v5-c-button.pf-m-primary:is(:hover, :focus, :active) {
+      background: var(--rk-amber-hover);
+    }
+
+    .login-pf .pf-v5-c-button:is(.pf-m-secondary, .pf-m-tertiary) {
+      --pf-v5-c-button--m-secondary--Color: var(--rk-text);
+      --pf-v5-c-button--m-secondary--hover--Color: var(--rk-text);
+      --pf-v5-c-button--m-secondary--focus--Color: var(--rk-text);
+      --pf-v5-c-button--m-secondary--active--Color: var(--rk-text);
+      --pf-v5-c-button--m-secondary--after--BorderColor: var(--rk-field-border);
+      --pf-v5-c-button--m-secondary--hover--after--BorderColor: var(--rk-muted);
+      --pf-v5-c-button--m-secondary--focus--after--BorderColor: var(--rk-muted);
+      --pf-v5-c-button--m-secondary--active--after--BorderColor: var(--rk-muted);
+      --pf-v5-c-button--m-tertiary--Color: var(--rk-text);
+      --pf-v5-c-button--m-tertiary--after--BorderColor: var(--rk-field-border);
+      --pf-v5-c-button--m-tertiary--hover--Color: var(--rk-text);
+      --pf-v5-c-button--m-tertiary--hover--after--BorderColor: var(--rk-muted);
+    }
+
+    .login-pf .pf-v5-c-form-control {
+      --pf-v5-c-form-control--BackgroundColor: var(--rk-field);
+      --pf-v5-c-form-control--before--BorderTopColor: var(--rk-field-border);
+      --pf-v5-c-form-control--before--BorderRightColor: var(--rk-field-border);
+      --pf-v5-c-form-control--before--BorderLeftColor: var(--rk-field-border);
+      --pf-v5-c-form-control--after--BorderBottomColor: var(--rk-field-border);
+      --pf-v5-c-form-control--hover--after--BorderBottomColor: #e5892b;
+      --pf-v5-c-form-control--focus--after--BorderBottomColor: #e5892b;
+    }
+  rack.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+      <defs>
+        <radialGradient id="disc" cx="50%" cy="40%" r="60%">
+          <stop offset="0" stop-color="#22252C"/>
+          <stop offset="1" stop-color="#0D0B10"/>
+        </radialGradient>
+        <linearGradient id="rail" x1="0" x2="1">
+          <stop offset="0" stop-color="#4A5260"/>
+          <stop offset="0.5" stop-color="#363D48"/>
+          <stop offset="1" stop-color="#21252D"/>
+        </linearGradient>
+        <linearGradient id="blade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#F6B34B"/>
+          <stop offset="1" stop-color="#E5892B"/>
+        </linearGradient>
+      </defs>
+      <circle cx="256" cy="256" r="248" fill="url(#disc)"/>
+      <rect x="128" y="104" width="64" height="304" rx="10" fill="url(#rail)"/>
+      <rect x="320" y="104" width="64" height="304" rx="10" fill="url(#rail)"/>
+      <g fill="#0D0B10" opacity="0.75">
+        <rect x="152" y="128" width="16" height="16" rx="3"/>
+        <rect x="152" y="176" width="16" height="16" rx="3"/>
+        <rect x="152" y="320" width="16" height="16" rx="3"/>
+        <rect x="152" y="368" width="16" height="16" rx="3"/>
+        <rect x="344" y="128" width="16" height="16" rx="3"/>
+        <rect x="344" y="176" width="16" height="16" rx="3"/>
+        <rect x="344" y="320" width="16" height="16" rx="3"/>
+        <rect x="344" y="368" width="16" height="16" rx="3"/>
+      </g>
+      <rect x="112" y="220" width="288" height="72" rx="10" fill="url(#blade)"/>
+      <circle cx="150" cy="256" r="11" fill="#34D399"/>
+      <g stroke="#9A5512" stroke-width="7" stroke-linecap="round" opacity="0.55">
+        <line x1="270" y1="240" x2="270" y2="272"/>
+        <line x1="292" y1="240" x2="292" y2="272"/>
+        <line x1="314" y1="240" x2="314" y2="272"/>
+        <line x1="336" y1="240" x2="336" y2="272"/>
+        <line x1="358" y1="240" x2="358" y2="272"/>
+      </g>
+    </svg>
+  finitelabs-theme.properties: |
+    parent=keycloak.v2
+    import=common/keycloak
+    styles=css/styles.css css/finitelabs.css
+  finitelabs.css: |
+    :root.login-pf {
+      --fl-font: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --fl-page:
+        radial-gradient(60% 55% at 60% 62%, rgba(236, 120, 170, 0.28), transparent 70%),
+        radial-gradient(70% 60% at 30% 30%, rgba(140, 120, 230, 0.3), transparent 70%),
+        #f8f9fa;
+      --fl-text: #212529;
+      --fl-muted: #6c757d;
+      --fl-strong: #404040;
+      --fl-card: rgba(255, 255, 255, 0.65);
+      --fl-border: rgba(0, 0, 0, 0.1);
+      --fl-field: rgba(255, 255, 255, 0.7);
+      --fl-field-border: rgba(0, 0, 0, 0.2);
+      --fl-button: #212529;
+      --fl-button-text: #f8f9fa;
+      --fl-button-hover: #404040;
+
+      --pf-v5-global--FontFamily--text: var(--fl-font);
+      --pf-v5-global--FontFamily--text--vf: var(--fl-font);
+      --pf-v5-global--FontFamily--heading: var(--fl-font);
+      --pf-v5-global--FontFamily--heading--vf: var(--fl-font);
+      --pf-v5-global--Color--100: var(--fl-text);
+      --pf-v5-global--Color--200: var(--fl-muted);
+      --pf-v5-global--primary-color--100: var(--fl-text);
+      --pf-v5-global--primary-color--200: var(--fl-strong);
+      --pf-v5-global--link--Color: var(--fl-text);
+      --pf-v5-global--link--Color--hover: var(--fl-strong);
+    }
+
+    :root.login-pf.pf-v5-theme-dark {
+      --fl-page:
+        radial-gradient(60% 55% at 55% 58%, rgba(214, 40, 120, 0.55), transparent 70%),
+        radial-gradient(70% 60% at 30% 35%, rgba(88, 60, 190, 0.55), transparent 70%),
+        radial-gradient(90% 80% at 80% 90%, rgba(70, 40, 140, 0.5), transparent 75%),
+        #050308;
+      --fl-text: #f8f9fa;
+      --fl-muted: #a7a9ac;
+      --fl-strong: #d0d0d0;
+      --fl-card: rgba(10, 10, 15, 0.7);
+      --fl-border: rgba(255, 255, 255, 0.1);
+      --fl-field: rgba(255, 255, 255, 0.05);
+      --fl-field-border: rgba(255, 255, 255, 0.22);
+      --fl-button: #f8f9fa;
+      --fl-button-text: #050308;
+      --fl-button-hover: #d0d0d0;
+    }
+
+    .login-pf body {
+      background: var(--fl-page);
+      background-attachment: fixed;
+      min-height: 100vh;
+      font-family: var(--fl-font);
+    }
+
+    #kc-header {
+      margin-bottom: 28px;
+    }
+
+    #kc-header-wrapper {
+      width: 240px;
+      max-width: 100%;
+      height: 57px;
+      margin: 0 auto;
+      font-size: 0;
+      color: transparent !important;
+      background-color: var(--fl-text);
+      -webkit-mask: url("../img/logo.svg") center / contain no-repeat;
+      mask: url("../img/logo.svg") center / contain no-repeat;
+    }
+
+    .login-pf .pf-v5-c-login__main {
+      --pf-v5-c-login__main--BackgroundColor: var(--fl-card);
+      --pf-v5-c-login__main--BoxShadow: none;
+      border: 1px solid var(--fl-border);
+      border-radius: 8px;
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+    }
+
+    .login-pf .pf-v5-c-login__main-header {
+      border-top: 0;
+    }
+
+    .login-pf #kc-page-title {
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .login-pf .pf-v5-c-login__main a:not(.pf-v5-c-button) {
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .login-pf .pf-v5-c-button:is(.pf-m-primary, .pf-m-secondary, .pf-m-tertiary) {
+      --pf-v5-c-button--BorderRadius: 30px;
+      --pf-v5-c-button--after--BorderRadius: 30px;
+      --pf-v5-c-button--FontWeight: 500;
+      --pf-v5-c-button--PaddingTop: 0.625rem;
+      --pf-v5-c-button--PaddingBottom: 0.625rem;
+    }
+
+    .login-pf .pf-v5-c-button.pf-m-primary {
+      --pf-v5-c-button--m-primary--BackgroundColor: var(--fl-button);
+      --pf-v5-c-button--m-primary--Color: var(--fl-button-text);
+      --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--fl-button-hover);
+      --pf-v5-c-button--m-primary--hover--Color: var(--fl-button-text);
+      --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--fl-button-hover);
+      --pf-v5-c-button--m-primary--focus--Color: var(--fl-button-text);
+      --pf-v5-c-button--m-primary--active--BackgroundColor: var(--fl-button-hover);
+      --pf-v5-c-button--m-primary--active--Color: var(--fl-button-text);
+    }
+
+    .login-pf .pf-v5-c-button:is(.pf-m-secondary, .pf-m-tertiary) {
+      --pf-v5-c-button--m-secondary--Color: var(--fl-text);
+      --pf-v5-c-button--m-secondary--hover--Color: var(--fl-text);
+      --pf-v5-c-button--m-secondary--focus--Color: var(--fl-text);
+      --pf-v5-c-button--m-secondary--active--Color: var(--fl-text);
+      --pf-v5-c-button--m-secondary--after--BorderColor: var(--fl-field-border);
+      --pf-v5-c-button--m-secondary--hover--after--BorderColor: var(--fl-text);
+      --pf-v5-c-button--m-secondary--focus--after--BorderColor: var(--fl-text);
+      --pf-v5-c-button--m-secondary--active--after--BorderColor: var(--fl-text);
+      --pf-v5-c-button--m-tertiary--Color: var(--fl-text);
+      --pf-v5-c-button--m-tertiary--after--BorderColor: var(--fl-field-border);
+      --pf-v5-c-button--m-tertiary--hover--Color: var(--fl-text);
+      --pf-v5-c-button--m-tertiary--hover--after--BorderColor: var(--fl-text);
+    }
+
+    .login-pf .pf-v5-c-form-control {
+      --pf-v5-c-form-control--BackgroundColor: var(--fl-field);
+      --pf-v5-c-form-control--before--BorderTopColor: var(--fl-field-border);
+      --pf-v5-c-form-control--before--BorderRightColor: var(--fl-field-border);
+      --pf-v5-c-form-control--before--BorderLeftColor: var(--fl-field-border);
+      --pf-v5-c-form-control--after--BorderBottomColor: var(--fl-field-border);
+      --pf-v5-c-form-control--hover--after--BorderBottomColor: var(--fl-text);
+      --pf-v5-c-form-control--focus--after--BorderBottomColor: var(--fl-text);
+    }
+  finitelabs-logo.svg: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <svg width="1921px" height="456px" viewBox="0 0 1921 456" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <title>Black Logo@1x</title>
+        <g id="Black-Logo" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+            <g id="Logo" fill="#000000" fill-rule="nonzero">
+                <g id="Icon">
+                    <polygon id="Path" points="0 306.543947 0 394.255303 0 396.175989 1.44185526 395.215646 94.6818288 455.237103 94.6818288 340.956249 261.136008 243.801518 261.136008 135.282724 0 287.657195"></polygon>
+                    <polygon id="Path" points="0 152.219742 0 260.902396 261.136008 108.522592 261.136008 0"></polygon>
+                </g>
+                <g id="Text" transform="translate(425.2215, 168.0875)">
+                    <path d="M1.20855211e-13,1.83280998 L78.9783711,1.83280998 L78.9783711,22.5748546 L25.6556791,22.5748546 L25.6556791,55.3419208 L66.5081019,55.3419208 L66.5081019,75.7263439 L25.6556791,75.7263439 L25.6556791,129.771887 L1.20855211e-13,129.771887 L1.20855211e-13,1.83280998 Z M146.291006,1.83280998 L171.946686,1.83280998 L171.946686,129.771887 L146.291006,129.771887 L146.291006,1.83280998 Z M355.782588,1.65399925 L355.782588,129.771887 L330.126909,129.771887 L272.066409,41.9758187 L272.066409,129.771887 L246.41073,129.771887 L246.41073,1.65399925 L272.066409,1.65399925 L330.126909,89.6288782 L330.126909,1.65399925 L355.782588,1.65399925 Z M430.246633,1.83280998 L455.902312,1.83280998 L455.902312,129.771887 L430.246633,129.771887 L430.246633,1.83280998 Z M523.572518,1.83280998 L617.434758,1.83280998 L617.434758,22.5748546 L583.331477,22.5748546 L583.331477,129.771887 L557.675798,129.771887 L557.675798,22.5748546 L523.572518,22.5748546 L523.572518,1.83280998 Z M759.479616,22.5748546 L710.939428,22.5748546 L710.939428,54.6266779 L753.98197,54.6266779 L753.98197,74.9663983 L710.939428,74.9663983 L710.939428,108.895734 L759.479616,108.895734 L759.479616,129.771887 L685.283749,129.771887 L685.283749,1.65399925 L759.479616,1.65399925 L759.479616,22.5748546 Z M950.377535,1.83280998 L950.377535,109.432166 L992.52615,109.432166 L992.52615,129.771887 L924.721856,129.771887 L924.721856,1.83280998 L950.377535,1.83280998 Z M1144.85116,129.771887 L1136.40356,105.408925 L1085.49446,105.408925 L1077.04686,129.771887 L1050.09499,129.771887 L1096.08749,1.65399925 L1125.98932,1.65399925 L1171.98182,129.771887 L1144.85116,129.771887 Z M1092.42239,84.8903938 L1129.47563,84.8903938 L1110.97136,31.3365803 L1092.42239,84.8903938 Z M1310.94263,64.1483492 C1318.15363,65.4894297 1324.08334,69.0954461 1328.73176,74.9663983 C1333.35038,80.8373506 1335.65968,87.5576539 1335.65968,95.1273081 L1335.65968,95.1273081 C1335.65968,101.981719 1333.99102,108.001681 1330.6537,113.187192 C1327.28658,118.372703 1322.42958,122.440647 1316.0827,125.391024 C1309.70603,128.311599 1302.18215,129.771887 1293.51107,129.771887 L1293.51107,129.771887 L1238.35583,129.771887 L1238.35583,1.83280998 L1291.14216,1.83280998 C1299.81325,1.83280998 1307.29243,3.24839492 1313.57971,6.0795648 C1319.86699,8.8809329 1324.6346,12.7849672 1327.88253,17.7916676 C1331.13046,22.798368 1332.75442,28.4756087 1332.75442,34.8233896 L1332.75442,34.8233896 C1332.75442,42.2738366 1330.75799,48.5024104 1326.76512,53.5091108 C1322.80205,58.545613 1317.52788,62.0920258 1310.94263,64.1483492 L1310.94263,64.1483492 Z M1264.01151,22.5748546 L1264.01151,54.6266779 L1287.47707,54.6266779 C1293.58556,54.6266779 1298.29357,53.2557956 1301.6011,50.5140311 C1304.87883,47.7722666 1306.51769,43.8235296 1306.51769,38.6678203 L1306.51769,38.6678203 C1306.51769,33.5419127 1304.87883,29.5782748 1301.6011,26.7769067 C1298.29357,23.9755386 1293.58556,22.5748546 1287.47707,22.5748546 L1287.47707,22.5748546 L1264.01151,22.5748546 Z M1289.84597,108.895734 C1296.07366,108.895734 1300.93066,107.420546 1304.41697,104.470169 C1307.90328,101.549593 1309.64643,97.392244 1309.64643,91.9981203 L1309.64643,91.9981203 C1309.64643,86.5145913 1307.81389,82.2082329 1304.14879,79.0790451 C1300.48369,75.9796591 1295.5373,74.4299662 1289.30962,74.4299662 L1289.30962,74.4299662 L1264.01151,74.4299662 L1264.01151,108.895734 L1289.84597,108.895734 Z M1449.54587,131.068265 C1440.60661,131.068265 1432.56127,129.533473 1425.40987,126.463888 C1418.28825,123.424106 1412.64162,119.028342 1408.46997,113.276597 C1404.32811,107.524852 1402.19758,100.744945 1402.07839,92.9368767 L1402.07839,92.9368767 L1429.56662,92.9368767 C1429.92419,98.1819914 1431.78654,102.339341 1435.15366,105.408925 C1438.52078,108.448707 1443.1245,109.968599 1448.96482,109.968599 L1448.96482,109.968599 C1454.95412,109.968599 1459.66213,108.538113 1463.08885,105.677141 C1466.51557,102.816169 1468.22893,99.0611441 1468.22893,94.4120652 L1468.22893,94.4120652 C1468.22893,90.6272381 1467.06682,87.5129512 1464.74261,85.0692046 C1462.41841,82.6254579 1459.51315,80.6883417 1456.02683,79.2578558 C1452.54052,77.8571718 1447.74312,76.3074788 1441.63462,74.6087769 L1441.63462,74.6087769 C1433.35091,72.1650302 1426.60177,69.7510854 1421.3872,67.3669423 C1416.20243,64.9827993 1411.74769,61.3767829 1408.023,56.5488932 C1404.29831,51.7210035 1402.43596,45.2838172 1402.43596,37.2373344 L1402.43596,37.2373344 C1402.43596,29.6378784 1404.32811,23.0367823 1408.11239,17.4340461 C1411.89668,11.8015081 1417.21554,7.49514974 1424.06898,4.51497092 C1430.89261,1.50499031 1438.71447,0 1447.53454,0 L1447.53454,0 C1460.70505,0 1471.41726,3.20369224 1479.67118,9.61107671 C1487.9251,16.048263 1492.48412,25.0037003 1493.34825,36.4773888 L1493.34825,36.4773888 L1465.10018,36.4773888 C1464.8618,32.0965259 1462.99946,28.4607078 1459.51315,25.5699343 C1456.02683,22.7089626 1451.42311,21.2784768 1445.70199,21.2784768 L1445.70199,21.2784768 C1440.6662,21.2784768 1436.65844,22.5599537 1433.67868,25.1229075 C1430.69893,27.6858613 1429.20905,31.4110848 1429.20905,36.2985781 L1429.20905,36.2985781 C1429.20905,39.7257837 1430.32646,42.5718545 1432.56127,44.8367904 C1434.82589,47.1017263 1437.64175,48.9345363 1441.00888,50.3352204 C1444.376,51.7359044 1449.11381,53.345201 1455.2223,55.16311 L1455.2223,55.16311 C1463.53581,57.6068567 1470.31475,60.0506033 1475.55912,62.49435 C1480.80349,64.9380966 1485.31781,68.6037166 1489.1021,73.4912098 C1492.88639,78.3787031 1494.77853,84.8009885 1494.77853,92.7580659 L1494.77853,92.7580659 C1494.77853,99.5826754 1493.00558,105.930456 1489.45967,111.801409 C1485.94356,117.672361 1480.75879,122.351242 1473.90536,125.838051 C1467.05192,129.32486 1458.93209,131.068265 1449.54587,131.068265 L1449.54587,131.068265 Z" id="Shape"></path>
+                </g>
+            </g>
+        </g>
+    </svg>
