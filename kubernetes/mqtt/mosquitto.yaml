@@ -1,0 +1,135 @@
+---
+# The MQTT broker. Its password file and the LAN clients its policy admits are in mqtt.vault.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mosquitto
+  namespace: mqtt
+data:
+  mosquitto.conf: |
+    persistence true
+    persistence_location /mosquitto/data
+    log_dest stdout
+    listener 1883
+    socket_domain ipv4
+    allow_anonymous false
+    password_file /mosquitto/config/mosquitto.passwd
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mosquitto
+  namespace: mqtt
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  namespace: mqtt
+spec:
+  replicas: 1
+  # Two at once would share one persistence file.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mosquitto
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+    spec:
+      nodeSelector:
+        homelab.local/mqtt: "true"
+      initContainers:
+        # Mosquitto refuses a password file anyone but its owner can read.
+        - name: config
+          image: eclipse-mosquitto
+          command:
+            - sh
+            - -c
+            - cp /config-source/mosquitto.conf /secret/mosquitto.passwd /mosquitto/config/ && chown 1883:1883 /mosquitto/config/* && chmod 0600 /mosquitto/config/mosquitto.passwd
+          volumeMounts:
+            - name: config-source
+              mountPath: /config-source
+            - name: passwd
+              mountPath: /secret
+            - name: config
+              mountPath: /mosquitto/config
+      containers:
+        - name: mosquitto
+          image: eclipse-mosquitto
+          env:
+            - name: TZ
+              value: America/Chicago
+          ports:
+            - name: mqtt
+              containerPort: 1883
+          readinessProbe:
+            tcpSocket:
+              port: mqtt
+          volumeMounts:
+            - name: config
+              mountPath: /mosquitto/config
+            - name: data
+              mountPath: /mosquitto/data
+      volumes:
+        - name: config-source
+          configMap:
+            name: mosquitto
+        - name: passwd
+          secret:
+            secretName: mosquitto-passwd
+        - name: config
+          emptyDir: {}
+        - name: data
+          persistentVolumeClaim:
+            claimName: mosquitto
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto
+  namespace: mqtt
+  labels:
+    svccontroller.k3s.cattle.io/lbpool: mqtt
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app: mosquitto
+  ports:
+    - name: mqtt
+      port: 1883
+      targetPort: mqtt
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-servicelb
+  namespace: mqtt
+spec:
+  podSelector:
+    matchLabels:
+      app: mosquitto
+  policyTypes:
+    - Ingress
+  ingress:
+    # Clients on the node's Tailscale address or localhost arrive from the Service's ServiceLB pod.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              svccontroller.k3s.cattle.io/svcnamespace: mqtt
+      ports:
+        - protocol: TCP
+          port: 1883

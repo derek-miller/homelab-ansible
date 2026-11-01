@@ -1,0 +1,126 @@
+---
+# Zigbee2MQTT, talking to the network coordinator over TCP. Its keys, coordinator address and frontend URL are in mqtt.vault.yaml.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zigbee2mqtt
+  namespace: mqtt
+spec:
+  storageClassName: local-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zigbee2mqtt
+  namespace: mqtt
+spec:
+  replicas: 1
+  # The coordinator takes one connection at a time.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: zigbee2mqtt
+  template:
+    metadata:
+      labels:
+        app: zigbee2mqtt
+    spec:
+      nodeSelector:
+        homelab.local/mqtt: "true"
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: zigbee2mqtt
+          image: ghcr.io/koenkk/zigbee2mqtt
+          envFrom:
+            - secretRef:
+                name: zigbee2mqtt
+          env:
+            - name: TZ
+              value: America/Chicago
+            - name: ZIGBEE2MQTT_CONFIG_ADVANCED_CHANNEL
+              value: "15"
+            - name: ZIGBEE2MQTT_CONFIG_ADVANCED_LAST_SEEN
+              value: ISO_8601_local
+            - name: ZIGBEE2MQTT_CONFIG_ADVANCED_LOG_LEVEL
+              value: debug
+            - name: ZIGBEE2MQTT_CONFIG_ADVANCED_OUTPUT
+              value: attribute
+            - name: ZIGBEE2MQTT_CONFIG_ADVANCED_TRANSMIT_POWER
+              value: "20"
+            - name: ZIGBEE2MQTT_CONFIG_AVAILABILITY_ENABLED
+              value: "true"
+            - name: ZIGBEE2MQTT_CONFIG_FRONTEND_ENABLED
+              value: "true"
+            - name: ZIGBEE2MQTT_CONFIG_FRONTEND_PORT
+              value: "8080"
+            - name: ZIGBEE2MQTT_CONFIG_HOMEASSISTANT_ENABLED
+              value: "false"
+            - name: ZIGBEE2MQTT_CONFIG_MQTT_BASE_TOPIC
+              value: zigbee
+            - name: ZIGBEE2MQTT_CONFIG_MQTT_CLIENT_ID
+              value: zigbee2mqtt
+            - name: ZIGBEE2MQTT_CONFIG_MQTT_SERVER
+              value: mqtt://mosquitto:1883
+            - name: ZIGBEE2MQTT_CONFIG_MQTT_USER
+              value: mosquitto
+            - name: ZIGBEE2MQTT_CONFIG_SERIAL_ADAPTER
+              value: ember
+            - name: ZIGBEE2MQTT_CONFIG_SERIAL_BAUDRATE
+              value: "115200"
+            - name: ZIGBEE2MQTT_CONFIG_SERIAL_DISABLE_LED
+              value: "false"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: http
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: zigbee2mqtt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zigbee2mqtt
+  namespace: mqtt
+spec:
+  selector:
+    app: zigbee2mqtt
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-edge-traefik-zigbee2mqtt
+  namespace: mqtt
+spec:
+  podSelector:
+    matchLabels:
+      app: zigbee2mqtt
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: edge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080
