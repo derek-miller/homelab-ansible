@@ -27,14 +27,10 @@
     install_python_debian: yes
   register: _influxdata_repo
 
-- name: remove old influxdata source files
+- name: remove the keyring package's influxdata source
   file:
-    path: "{{ item }}"
+    path: /etc/apt/sources.list.d/influxdata.list
     state: absent
-  loop:
-    - /etc/apt/sources.list.d/influxdata.list
-    - /usr/share/keyrings/influxdata-archive.gpg
-    - /etc/apt/keyrings/influxdata-archive.gpg
   register: _influxdata_old_repo
 
 - name: update apt cache

@@ -34,7 +34,6 @@
     - ansible/remote
   tags:
     - always
-    - base-setup  # not part of base tag since really a setup task but needs apt mirrors, etc. from previous base plays
     - ansible-remote
 
 - name: common
@@ -147,22 +146,6 @@
         - docker-stats
   tags:
     - docker
-
-- hosts: docker
-  tasks:
-    - name: log in to Docker Hub
-      community.docker.docker_login:
-        username: "{{ docker_hub_username }}"
-        password: "{{ docker_hub_password }}"
-      when: docker_hub_username is defined and docker_hub_password is defined
-    - name: log out of Docker Hub
-      community.docker.docker_login:
-        state: absent
-      when: docker_hub_username is not defined or docker_hub_password is not defined
-  tags:
-    - docker
-    - docker-compose
-    - docker-build-images
 
 - hosts: k3s_server
   any_errors_fatal: true
@@ -359,7 +342,6 @@
   tags:
     - qemu-guest-agent
 
-# After the shares, since Homebridge reads its TLS cert from one at startup.
 # Near the end because these groups hold one host: a failure there fails the
 # whole play, which would stop the run before the fleet-wide plays.
 - hosts: homebridge

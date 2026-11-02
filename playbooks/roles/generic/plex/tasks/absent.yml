@@ -1,23 +1,12 @@
 ---
-# Plex absent — reverse what present.yml installed. Always removes the cask
-# and LaunchAgent. Whether library state is also wiped depends on
-# plex_wipe_state (default: false, preserve data).
+# Plex absent — reverse what present.yml installed. Always removes the cask.
+# Whether library state is also wiped depends on plex_wipe_state (default:
+# false, preserve data).
 
 - name: quit Plex Media Server
   command: osascript -e 'tell application "Plex Media Server" to quit'
   failed_when: false
   changed_when: true
-
-- name: unload Plex user LaunchAgent
-  shell: |
-    uid=$(id -u {{ mac_user | mandatory }})
-    launchctl bootout gui/${uid}/com.plexapp.plexmediaserver 2>/dev/null || true
-  changed_when: true
-
-- name: remove Plex LaunchAgent plist
-  file:
-    path: "{{ plex_launchagent }}"
-    state: absent
 
 - name: brew uninstall Plex Media Server cask
   community.general.homebrew_cask:

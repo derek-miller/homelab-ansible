@@ -1,12 +1,9 @@
 ---
 # Telegraf absent — fully reverse what present.yml installed:
-#   - remove leftover config backups (first: the Debian purge takes the dir)
 #   - remove the config file
 #   - stop + disable service (systemd / launchd), remove conf.d, uninstall the
 #     package (apt / brew), remove the apt source and key (Debian)
 #   - remove the config directory
-
-- include_tasks: cleanup-backups.yml
 
 - name: remove rendered telegraf config
   file:

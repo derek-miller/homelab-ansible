@@ -1,4 +1,4 @@
-PIP_INDEX_URL = https://pypi.python.org/simple
+PIP_INDEX_URL = https://pypi.org/simple
 
 ifeq ($(VIRTUAL_ENV),)
 $(error must run in a virtualenv)

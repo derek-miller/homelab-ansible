@@ -1,0 +1,23 @@
+---
+- name: create tplink-plug-stats script dir
+  file:
+    path: "{{ tplink_plug_stats_script_path|dirname }}"
+    owner: root
+    group: "{{ root_group }}"
+    mode: 0755
+    state: directory
+
+- name: copy tplink-plug-stats script
+  template:
+    src: tplink-plug-stats.jinja2
+    dest: "{{ tplink_plug_stats_script_path }}"
+    owner: root
+    group: "{{ root_group }}"
+    mode: 0755
+
+- include_role:
+    name: generic/telegraf/plugin
+  vars:
+    telegraf_plugin_conf_src: telegraf.conf.jinja2
+    telegraf_plugin_conf: tplink-plug-stats.conf
+    telegraf_plugin_state: "{{ 'present' if tplink_plug_stats_ip_addresses|length > 0 else 'absent' }}"

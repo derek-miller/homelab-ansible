@@ -1,0 +1,12 @@
+---
+- include_role:
+    name: generic/telegraf/plugin
+  vars:
+    telegraf_plugin_conf_src: telegraf.conf.jinja2
+    telegraf_plugin_conf: nut-stats.conf
+    telegraf_plugin_state: absent
+
+- name: delete nut-stats script
+  file:
+    path: "{{ nut_stats_dir }}"
+    state: absent

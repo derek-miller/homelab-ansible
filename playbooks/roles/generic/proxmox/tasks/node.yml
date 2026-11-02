@@ -70,7 +70,7 @@
     owner: root
     group: root
     mode: 0444
-  when: proxmox_machine_id | default('') | length > 0
+  when: proxmox_machine_id | length > 0
   register: proxmox_machine_id_result
 
 - name: read current subscription status
@@ -79,13 +79,13 @@
   changed_when: false
   failed_when: false
   check_mode: no
-  when: proxmox_subscription_key | default('') | length > 0
+  when: proxmox_subscription_key | length > 0
 
 - name: apply subscription key
   command: "pvesubscription set {{ proxmox_subscription_key }}"
   no_log: yes
   when:
-    - proxmox_subscription_key | default('') | length > 0
+    - proxmox_subscription_key | length > 0
     - >-
       proxmox_machine_id_result is changed
       or 'status: active' not in (proxmox_subscription_status.stdout | default(''))

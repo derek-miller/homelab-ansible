@@ -4,8 +4,7 @@
 #     dirs, if left empty)
 #   - remove the symlinks it created
 #   - unmount each configured path
-#   - remove the fstab entry
-#   - remove the (now-empty) mount-point dir
+#   - remove the fstab entry and the (now-empty) mount-point dir
 
 - name: remove mount requirements from units
   file:
@@ -44,13 +43,3 @@
   loop: "{{ disk_mounts }}"
   loop_control:
     label: "{{ item.path }}"
-
-- name: remove mount-point dirs (only if empty)
-  # rmdir, not file:state=absent, so we don't clobber a dir that still
-  # contains data (e.g., if something wrote there while unmounted).
-  command: "rmdir {{ item.path | quote }}"
-  loop: "{{ disk_mounts }}"
-  loop_control:
-    label: "{{ item.path }}"
-  failed_when: false
-  changed_when: true

@@ -216,10 +216,6 @@ def catalog_installers():
     Betas are dropped here, never recorded, so one announces if it is later
     promoted. A build whose full version the installer feed has already
     announced is recorded without posting.
-
-    State from before cards were tracked has no composer_cards. Its in-app
-    builds were posted without links, so on the first read they are dropped
-    from the posted set to be posted again with links and tracked.
     """
     entries, page, pages = [], 1, 1
     while page <= pages:
@@ -251,9 +247,6 @@ def catalog_installers():
             }
             quiet = [i for i in items if i["version"] in announced]
             s["composer"] = sorted(set(s["composer"]) | {composer_key(i) for i in quiet})
-            if "composer_cards" not in s:
-                repost = {composer_key(i) for i in items if i["version"] not in announced}
-                s["composer"] = [k for k in s["composer"] if k not in repost]
         s.setdefault("composer_cards", {})
     catalog_served["versions"] = {i["version"] for i in items}
     return items
