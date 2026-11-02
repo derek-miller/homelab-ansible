@@ -179,6 +179,57 @@
   tags:
     - k3s-migrate-labels
 
+- hosts: docker_swarm_manager:docker_swarm_worker
+  tasks:
+    - name: read this node's swarm state
+      command: docker info --format '{% raw %}{{.Swarm.LocalNodeState}} {{.Swarm.ControlAvailable}}{% endraw %}'
+      register: _swarm_teardown_state
+      changed_when: false
+      check_mode: no
+
+    - name: remove the stack
+      community.docker.docker_stack:
+        name: "{{ docker_stack_name }}"
+        state: absent
+        absent_retries: 30
+        absent_retries_interval: 2
+      when:
+        - inventory_hostname == groups['docker_swarm_manager'][0]
+        - _swarm_teardown_state.stdout == 'active true'
+
+    - name: leave the swarm as a worker
+      community.docker.docker_swarm:
+        state: absent
+      when: _swarm_teardown_state.stdout == 'active false'
+
+    - name: leave the swarm as a manager
+      community.docker.docker_swarm:
+        state: absent
+        force: yes
+      when: _swarm_teardown_state.stdout == 'active true'
+
+    - name: remove the swarm's gateway bridge
+      community.docker.docker_network:
+        name: docker_gwbridge
+        state: absent
+
+    - name: remove what Swarm left on the host
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/docker/network
+        - /var/lib/docker/volumes
+        - /var/docker
+        - /etc/systemd/system/docker.service.d/stop-timeout.conf
+
+    - name: reload systemd units
+      systemd:
+        daemon_reload: yes
+  tags:
+    - never
+    - swarm-teardown
+
 - hosts: docker
   roles:
     - role: generic/docker/restore-volumes
