@@ -175,7 +175,7 @@
     - import_role:
         name: generic/flux
         tasks_from: migrate.yml
-      when: docker_migrate_labels | bool
+      when: k3s_migrate_labels | bool
   tags:
     - k3s-migrate-labels
 

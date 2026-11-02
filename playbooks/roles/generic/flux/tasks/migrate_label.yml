@@ -15,7 +15,7 @@
   command: "mountpoint -q {{ item.1 | quote }}"
   delegate_to: "{{ item.0 }}"
   become: true
-  loop: "{{ [move.from, move.to] | product([k3s_local_storage_path | dirname, docker_migrate_transit_dir | dirname]) | list }}"
+  loop: "{{ [move.from, move.to] | product([k3s_local_storage_path | dirname, k3s_migrate_transit_dir | dirname]) | list }}"
   changed_when: false
 
 # The folders, not the volumes, so a move cut off after deleting its volumes still finds its data.
@@ -98,7 +98,7 @@
       fail:
         msg: >-
           {{ move.label }}: {{ move.to }} already has data in a volume folder. Set
-          docker_migrate_force=yes to overwrite it; nothing was changed.
+          k3s_migrate_force=yes to overwrite it; nothing was changed.
       when:
         - not _flux_move_overwrite
         - _flux_move_targets.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list | length > 0
@@ -155,7 +155,7 @@
           block:
             - name: "{{ move.label }} | create the transit directory"
               file:
-                path: "{{ docker_migrate_transit_dir }}"
+                path: "{{ k3s_migrate_transit_dir }}"
                 state: directory
               delegate_to: "{{ move.from }}"
               become: true
@@ -163,7 +163,7 @@
             - name: "{{ move.label }} | archive each volume on {{ move.from }}"
               command: >-
                 tar --numeric-owner -C {{ item | quote }}
-                -cf {{ (docker_migrate_transit_dir ~ '/k3s-' ~ move.label ~ '-' ~ index ~ '.tar') | quote }} .
+                -cf {{ (k3s_migrate_transit_dir ~ '/k3s-' ~ move.label ~ '-' ~ index ~ '.tar') | quote }} .
               delegate_to: "{{ move.from }}"
               become: true
               loop: "{{ _flux_move_volumes }}"
@@ -185,7 +185,7 @@
                 install -d -o root -g root -m 0700 {{ (item | dirname | dirname) | quote }} {{ (item | dirname) | quote }};
                 {% if _flux_move_overwrite %}[ ! -e {{ item | quote }} ] || find {{ item | quote }} -mindepth 1 -delete;{% endif %}
                 mkdir -p {{ item | quote }};
-                tar --numeric-owner -xpf {{ (docker_migrate_transit_dir ~ '/k3s-' ~ move.label ~ '-' ~ index ~ '.tar') | quote }}
+                tar --numeric-owner -xpf {{ (k3s_migrate_transit_dir ~ '/k3s-' ~ move.label ~ '-' ~ index ~ '.tar') | quote }}
                 -C {{ item | quote }}
               args:
                 executable: /bin/bash
@@ -281,7 +281,7 @@
       always:
         - name: "{{ move.label }} | remove the transit archives"
           file:
-            path: "{{ docker_migrate_transit_dir }}/k3s-{{ move.label }}-{{ index }}.tar"
+            path: "{{ k3s_migrate_transit_dir }}/k3s-{{ move.label }}-{{ index }}.tar"
             state: absent
           delegate_to: "{{ move.from }}"
           become: true

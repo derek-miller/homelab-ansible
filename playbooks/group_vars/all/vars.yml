@@ -7,10 +7,10 @@ ansible_surrogate_secure_path: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 docker_volume_backup_root: /mnt/Backups/Volumes
 # The k3s restic server's repositories, one per namespace, as the hosts mount the Backups drive.
 k3s_backup_root: /mnt/Backups/Restic
-docker_migrate_transit_dir: /mnt/Backups/migrate
-# A label whose host changed in [docker_labels] moves only with docker_migrate_labels.
-docker_migrate_labels: false
-docker_migrate_force: false
+k3s_migrate_transit_dir: /mnt/Backups/migrate
+# A label whose host changed in [node_labels] moves only with k3s_migrate_labels.
+k3s_migrate_labels: false
+k3s_migrate_force: false
 # The namespace whose k3s claims tags=k3s-restore puts back: all of them, or those listed with commas,
 # each from its newest snapshot, or its newest from before a UTC time such as 2026-10-29T12:00.
 k3s_restore_namespace: ""
@@ -81,9 +81,9 @@ influxdb3_ui_session_secret: !vault |
   34323565306365366565613433646537306137376338626139393664353936343861306362333838
   64313936616666613065
 influxdb3_metrics_host: >-
-  {{ groups['docker_labels'] | map('extract', hostvars)
-     | selectattr('docker_labels', 'defined')
-     | selectattr('docker_labels', 'search', '(^|,)\s*metrics\s*(,|$)')
+  {{ groups['node_labels'] | map('extract', hostvars)
+     | selectattr('node_labels', 'defined')
+     | selectattr('node_labels', 'search', '(^|,)\s*metrics\s*(,|$)')
      | map(attribute='inventory_hostname') | first }}
 influxdb3_url: "http://{{ hostvars[influxdb3_metrics_host].ansible_host }}:8181"
 influxdb3_admin_token: !vault |

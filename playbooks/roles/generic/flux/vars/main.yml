@@ -33,8 +33,8 @@ _flux_version: "{{ _flux_applied.stdout | default('') | regex_replace('@.*$', ''
 
 _flux_inventory_nodes: >-
   {%- set out = {} -%}
-  {%- for host in groups['docker_labels'] | default([]) | sort -%}
-  {%- for label in (hostvars[host].docker_labels | default('')).split(',') | map('trim') | select -%}
+  {%- for host in groups['node_labels'] | sort -%}
+  {%- for label in (hostvars[host].node_labels | default('')).split(',') | map('trim') | select -%}
   {%- set _ = out.update({label: host}) -%}
   {%- endfor -%}
   {%- endfor -%}
@@ -130,7 +130,7 @@ _flux_move_pvs: >-
   {{ out }}
 _flux_move_volumes: "{{ _flux_move_found.stdout_lines | default([]) | sort }}"
 # A label a move left stopped can only hold that move's own copy on the new node.
-_flux_move_overwrite: "{{ docker_migrate_force | bool or move.label in _flux_stopped_labels }}"
+_flux_move_overwrite: "{{ k3s_migrate_force | bool or move.label in _flux_stopped_labels }}"
 _flux_move_charts: "{{ (_flux_move_hr_json.stdout | from_json)['items'] | map(attribute='metadata.name') | list }}"
 _flux_move_workloads: >-
   {%- set out = [] -%}

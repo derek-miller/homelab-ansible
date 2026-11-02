@@ -230,7 +230,7 @@
     msg: >-
       {{ item }} runs on {{ _flux_held_nodes[item] }}, the inventory says
       {{ _flux_inventory_nodes[item] }}. Its k3s apps stay put until a run with
-      docker_migrate_labels=yes.
+      k3s_migrate_labels=yes.
   loop: "{{ _flux_inventory_nodes.keys() | sort }}"
   when: _flux_held_nodes[item] != _flux_inventory_nodes[item]
 
