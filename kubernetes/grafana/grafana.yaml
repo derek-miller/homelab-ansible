@@ -142,6 +142,10 @@ spec:
           ports:
             - name: http
               containerPort: 8081
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
 ---
 apiVersion: v1
 kind: Service
@@ -198,6 +202,10 @@ spec:
           ports:
             - name: http
               containerPort: 8000
+          # --allowed-hosts refuses every HTTP request with the probe's Host, so it checks the port.
+          readinessProbe:
+            tcpSocket:
+              port: http
 ---
 apiVersion: v1
 kind: Service

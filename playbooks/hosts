@@ -100,6 +100,9 @@ rackmini1
 [openclaw]
 rackmini1
 
+[process-stats]
+rackmini1
+
 [nodenv]
 rackmini1
 

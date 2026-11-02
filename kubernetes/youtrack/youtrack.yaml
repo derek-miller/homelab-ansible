@@ -89,6 +89,13 @@ spec:
           env:
             - name: TZ
               value: America/Chicago
+          # The port opens at once, and until YouTrack has started every path gets a 503 starting page.
+          # The root, unlike /api/, also answers while an upgrade waits in its Configuration Wizard,
+          # which can only be reached while the pod is ready.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
           volumeMounts:
             - name: data
               mountPath: /opt/youtrack/data

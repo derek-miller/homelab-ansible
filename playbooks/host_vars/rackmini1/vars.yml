@@ -40,6 +40,15 @@ tailscale_host_args: --accept-routes
 
 homebridge_ui_port: 443
 
+# Matched against each command line (pgrep -f), since OpenClaw's gateway runs as node.
+process_stats_processes:
+  - name: homebridge
+    pattern: ^hb-service
+  - name: plex
+    pattern: MacOS/Plex Media Server
+  - name: openclaw
+    pattern: openclaw/dist/index.js gateway
+
 # The versions repos the bot works on pin in .node-version (control4-zigbee3).
 nodenv_versions:
   - 24.21.0

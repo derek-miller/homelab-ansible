@@ -1,0 +1,6 @@
+{% for process in process_stats_processes %}
+[[inputs.procstat]]
+  pattern = '{{ process.pattern }}'
+  [inputs.procstat.tags]
+    process = "{{ process.name }}"
+{% endfor %}

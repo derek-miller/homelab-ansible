@@ -28,13 +28,15 @@ spec:
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
-      backoffLimit: 0
+      # A failed run retries in its pod, so it shows as Container Crash Loop (k3s).
+      backoffLimit: 3
+      activeDeadlineSeconds: 21600
       template:
         metadata:
           labels:
             app: control4-driver-scraper
         spec:
-          restartPolicy: Never
+          restartPolicy: OnFailure
           nodeSelector:
             homelab.local/sourcebot: "true"
           containers:
