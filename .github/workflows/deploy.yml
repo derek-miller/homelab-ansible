@@ -72,7 +72,7 @@ jobs:
           fi
           make run "${args[@]}"
 
-      # Last, so it runs before any action's post step.
+      # Post steps run after this, so none of them can read the vault password or key.
       - name: Remove secrets
         if: always()
         run: rm -f .vault_pass .ssh/ansible-id_ed25519

@@ -42,7 +42,7 @@ all: after-git-pull check
 .PHONY: after-git-pull
 after-git-pull: init install galaxy-install install-git-hooks
 
-git_hook := $(shell git rev-parse --git-path hooks)/pre-commit
+git_hook := $(shell git rev-parse --git-common-dir)/hooks/pre-commit
 
 .PHONY: install-git-hooks
 install-git-hooks: $(git_hook)
