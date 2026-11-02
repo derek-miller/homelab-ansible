@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#
+# Post to Discord once Grafana fails its health check 3 times in a row, and
+# once more when it passes again.
+
+set -u
+
+failures_file=/var/lib/grafana-check/failures
+alerted_file=/var/lib/grafana-check/alerted
+
+post() {
+  curl -fsS --max-time 20 -H 'Content-Type: application/json' \
+    --data "{\"content\": \"$1\"}" "$DISCORD_WEBHOOK_URL" >/dev/null
+}
+
+# Any Authorization header skips the sign-in; Grafana's health endpoint ignores it.
+status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
+  -H 'Authorization: Bearer none' "$GRAFANA_HEALTH_URL")
+
+if [[ $status == 200 ]]; then
+  rm -f "$failures_file"
+  if [[ -e $alerted_file ]] && post "Grafana is passing its health check again."; then
+    rm -f "$alerted_file"
+  fi
+  exit 0
+fi
+
+failures=$(( $(cat "$failures_file" 2>/dev/null || echo 0) + 1 ))
+echo "$failures" >"$failures_file"
+echo "Grafana's health check returned HTTP $status, $failures time(s) in a row"
+
+if (( failures >= 3 )) && [[ ! -e $alerted_file ]] \
+  && post "Grafana has failed its health check $failures times in a row."; then
+  touch "$alerted_file"
+fi

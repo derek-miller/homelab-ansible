@@ -1,0 +1,10 @@
+[Unit]
+Description=Check that Grafana answers from outside the cluster
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/default/grafana-check
+ExecStart=/usr/local/sbin/grafana-check
+StateDirectory=grafana-check

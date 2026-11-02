@@ -391,6 +391,12 @@
   tags:
     - nodenv
 
+- hosts: grafana-check
+  roles:
+    - role: generic/grafana-check
+  tags:
+    - grafana-check
+
 # Last, so a host whose image kept its previous build still ran everything else.
 - name: report images that kept their previous build
   hosts: docker-build-images

@@ -1,0 +1,50 @@
+---
+- name: check the inputs
+  assert:
+    that:
+      - grafana_check_url | length > 0
+      - grafana_check_webhook_url | length > 0
+    quiet: yes
+
+- name: install the grafana-check script
+  copy:
+    src: grafana-check
+    dest: /usr/local/sbin/grafana-check
+    owner: root
+    group: root
+    mode: 0755
+
+- name: configure grafana-check
+  template:
+    src: grafana-check.jinja2
+    dest: /etc/default/grafana-check
+    owner: root
+    group: root
+    mode: 0600
+  no_log: true
+
+- name: create the grafana-check service
+  copy:
+    src: grafana-check.service
+    dest: /etc/systemd/system/grafana-check.service
+    owner: root
+    group: root
+    mode: 0644
+  register: _grafana_check_service
+
+- name: create the grafana-check timer
+  copy:
+    src: grafana-check.timer
+    dest: /etc/systemd/system/grafana-check.timer
+    owner: root
+    group: root
+    mode: 0644
+  register: _grafana_check_timer
+
+- name: enable and start the grafana-check timer
+  systemd:
+    name: grafana-check.timer
+    enabled: yes
+    state: "{{ (_grafana_check_timer.changed or _grafana_check_service.changed) | ternary('restarted', 'started') }}"
+    daemon_reload: "{{ _grafana_check_timer.changed or _grafana_check_service.changed }}"
+  when: not (ansible_check_mode and _grafana_check_timer is changed)

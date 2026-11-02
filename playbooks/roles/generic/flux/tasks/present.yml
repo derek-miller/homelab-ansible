@@ -10,6 +10,7 @@
       - flux_web_client_id | length > 0
       - flux_web_client_secret | length > 0
       - flux_web_admin | length > 0
+      - flux_alert_webhook_url | length > 0
     quiet: yes
 
 - name: create the registry's volume
