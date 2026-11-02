@@ -14,8 +14,8 @@
     src: telegraf.conf.jinja2
     dest: "{{ telegraf_conf }}"
     owner: root
-    group: "{{ root_group }}"
-    mode: 0644
+    group: "{{ telegraf_conf_group }}"
+    mode: 0640
   notify: restart telegraf
 
 - include_tasks: cleanup-backups.yml

@@ -8,8 +8,8 @@
     src: "{{ telegraf_plugin_conf_src }}"
     dest: "{{ telegraf_conf_dir }}/{{ telegraf_plugin_conf }}"
     owner: root
-    group: "{{ root_group }}"
-    mode: 0644
+    group: "{{ telegraf_conf_group }}"
+    mode: 0640
   notify: restart telegraf
   when:
     - telegraf_state == 'present'

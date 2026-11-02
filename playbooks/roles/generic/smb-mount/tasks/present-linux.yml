@@ -13,6 +13,7 @@
     owner: root
     group: root
     mode: 0600
+  no_log: true
 
 - include_tasks: present-linux-share.yml
   with_items: "{{ smb_share_names | mandatory }}"

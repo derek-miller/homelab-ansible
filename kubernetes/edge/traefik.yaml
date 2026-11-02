@@ -5,7 +5,9 @@ metadata:
   name: allow-web
   namespace: edge
 spec:
-  podSelector: {}
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
   policyTypes:
     - Ingress
   ingress:
@@ -21,7 +23,9 @@ metadata:
   name: allow-kube-apiserver
   namespace: edge
 spec:
-  podSelector: {}
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
   policyTypes:
     - Egress
   egress:
