@@ -14,6 +14,12 @@
     state: absent
     purge: yes
 
+- name: uninstall telegraf dependencies
+  apt:
+    name: "{{ telegraf_apt_dependencies }}"
+    state: absent
+    purge: yes
+
 - name: remove influxdata repository
   deb822_repository:
     name: influxdata

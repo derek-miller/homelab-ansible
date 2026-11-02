@@ -6,8 +6,8 @@ telegraf_flush_interval: "{{ telegraf_collection_interval }}"
 telegraf_flush_jitter: 5s
 telegraf_conf: /etc/telegraf/telegraf.conf
 telegraf_conf_dir: /etc/telegraf/telegraf.d
-telegraf_apt_dependencies:
-  - lm-sensors
+# VM guests have no hardware sensors, so they skip lm-sensors and inputs.sensors.
+telegraf_apt_dependencies: "{{ [] if ansible_virtualization_role == 'guest' else ['lm-sensors'] }}"
 # Set false on hosts without ntpq, such as chrony hosts.
 telegraf_inputs_ntpq: true
 
