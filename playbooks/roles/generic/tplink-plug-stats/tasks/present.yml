@@ -20,4 +20,4 @@
   vars:
     telegraf_plugin_conf_src: telegraf.conf.jinja2
     telegraf_plugin_conf: tplink-plug-stats.conf
-    telegraf_plugin_state: "{{ 'present' if tplink_plug_stats_ip_addresses|length > 0 else 'absent' }}"
+    telegraf_plugin_state: present
