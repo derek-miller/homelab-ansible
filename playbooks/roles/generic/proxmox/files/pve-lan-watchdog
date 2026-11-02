@@ -410,9 +410,9 @@ def elect_reporter(docs, now=None):
 
 
 # Message composition lives entirely on the reporter, keyed by event name.
-# severity 'warning' is routed by the cluster's critical matcher, 'notice' by
-# the non-critical one. Unknown event names (from a newer node) are reported
-# raw rather than dropped.
+# The cluster's matchers send severity 'warning' straight to Discord and
+# 'notice' through node-red. Unknown event names (from a newer node) are
+# reported raw rather than dropped.
 
 
 def _fmt_targets(detail):
@@ -486,7 +486,7 @@ _RENDERERS = {
 
 def notify(severity, event_name, node, detail_text):
     """Deliver one notification through PVE's own system, so it follows the
-    matchers the cluster already routes (node-red -> Discord today). Runs only
+    matchers the cluster already routes (to Discord today). Runs only
     on the elected reporter, whose LAN is verified working by its own
     election, so the transport does not share fate with the fault being
     reported. Never fatal: a lost notification must not affect the watchdog."""
@@ -631,8 +631,9 @@ def report(docs, members, announced, now=None, unreadable=frozenset()):
             cursor["stale_ts"] = -1  # publishing again; a future stall re-alerts
             cursor["stale_kind"] = None
 
-            # A node that left the cluster is HA's problem, and PVE sends its own
-            # fencing notification; repeating it here would be noise.
+            # A node that left the cluster is HA's problem: PVE notifies when it
+            # fences one running HA resources, and Grafana's Host Deadman reports
+            # the others. Repeating it here would be noise.
             if not online or not doc:
                 continue
 

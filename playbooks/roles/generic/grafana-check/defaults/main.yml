@@ -1,0 +1,6 @@
+---
+grafana_check_state: present
+
+# Grafana's /api/health, and the Discord webhook told when it stops answering.
+grafana_check_url: ""
+grafana_check_webhook_url: ""

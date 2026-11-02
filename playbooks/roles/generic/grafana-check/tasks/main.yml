@@ -1,0 +1,6 @@
+---
+- assert:
+    that: grafana_check_state in ('present', 'absent')
+    quiet: yes
+
+- include_tasks: "{{ grafana_check_state }}.yml"

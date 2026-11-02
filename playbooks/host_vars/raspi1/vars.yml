@@ -131,3 +131,5 @@ nut_ups_devices:
         desc = "WAN UPS"
 nut_ups_monitors:
   - "MONITOR wan-i10-ups@localhost 1 {{ nut_user_master_name }} {{ nut_user_master_password | mandatory }} master"
+
+grafana_check_url: "https://grafana.{{ cloudflare_zone }}/api/health"

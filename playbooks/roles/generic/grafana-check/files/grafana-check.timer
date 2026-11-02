@@ -1,0 +1,8 @@
+[Unit]
+Description=Check that Grafana answers from outside the cluster
+
+[Timer]
+OnCalendar=minutely
+
+[Install]
+WantedBy=timers.target

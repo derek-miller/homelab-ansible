@@ -177,7 +177,7 @@ influxdb3_url: !vault |
   3232383532323733370a303130313732343237636234323039346164613031356566373032383232
   38643933323866346337316665303734303131343931383034613036373663623231
 
-# node-red reformats and decides where these end up. Mail is unusable here, no relayhost.
+# node-red reformats and decides where its share ends up. Mail is unusable here, no relayhost.
 proxmox_notification_targets:
   - name: node-red
     url: !vault |
@@ -194,20 +194,32 @@ proxmox_notification_targets:
       X-Webhook-Token: "{{ '{{ secrets.token }}' }}"
     secrets:
       token: "{{ node_red_webhook_token }}"
+  - name: discord
+    url: "https://discord.com/api/webhooks/{{ '{{ secrets.token }}' }}"
+    body_file: discord-notification-body.json
+    headers:
+      Content-Type: application/json
+    secrets:
+      token: "{{ proxmox_discord_webhook_token }}"
 
+# The second matcher is the first inverted, so each notification goes out once. Backup logs and
+# forwarded mail outgrow a Discord message, so they stay with node-red, which trims them.
 proxmox_notification_matchers:
-  - name: critical
-    comment: Critical (warning/error/unknown) notifications
+  - name: straight-to-discord
+    comment: Replication, fencing and LAN watchdog warnings and errors
     match-severity: warning,error,unknown
-    target: node-red
-  - name: non-critical
-    comment: Non-critical (info/notice) notifications - disable to quiet routine traffic
-    match-severity: info,notice
+    match-field: exact:type=replication,fencing,lan-watchdog
+    target: discord
+  - name: through-node-red
+    comment: Everything straight-to-discord leaves
+    match-severity: warning,error,unknown
+    match-field: exact:type=replication,fencing,lan-watchdog
+    invert-match: 1
     target: node-red
   # PVE re-injects this built-in whenever the file omits it, and it matches
   # everything. Overriding it disabled is the only way to retire it.
   - name: default-matcher
-    comment: Superseded by the node-red matchers
+    comment: Superseded by the matchers above
     mode: all
     target: mail-to-root
     disable: 1

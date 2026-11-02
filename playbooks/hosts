@@ -85,6 +85,9 @@ rackvm4
 [control4-director-stats]
 rackvm4
 
+[grafana-check]
+raspi1
+
 [macos]
 rackmini1
 

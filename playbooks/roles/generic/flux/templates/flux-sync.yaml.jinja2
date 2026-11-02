@@ -8,6 +8,40 @@ type: kubernetes.io/dockerconfigjson
 stringData:
   .dockerconfigjson: {{ {'auths': {_flux_registry_cluster_address: {'auth': _flux_registry_auth}}} | to_json | to_json }}
 ---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: discord-webhook
+  namespace: flux-system
+stringData:
+  address: {{ flux_alert_webhook_url | to_json }}
+---
+apiVersion: notification.toolkit.fluxcd.io/v1
+kind: Provider
+metadata:
+  name: discord
+  namespace: flux-system
+spec:
+  type: discord
+  secretRef:
+    name: discord-webhook
+---
+# Both wait on every chart they apply, so a failed chart already turns one of them red.
+apiVersion: notification.toolkit.fluxcd.io/v1
+kind: Alert
+metadata:
+  name: kustomizations
+  namespace: flux-system
+spec:
+  providerRef:
+    name: discord
+  eventSeverity: error
+  eventSources:
+    - kind: Kustomization
+      name: platform
+    - kind: Kustomization
+      name: apps
+---
 # The add-ons in platform/, such as operators whose CRDs the apps use, apply first.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
