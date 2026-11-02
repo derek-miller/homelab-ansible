@@ -27,8 +27,7 @@
     state: absent
   when: sudoers|default([])|length == 0
 
-# sshd keeps the first value it reads, so the name must sort before the image's
-# own drop-ins, such as cloud-init's 50-cloud-init.conf.
+# sshd keeps the first value it reads, so this must sort before 50-cloud-init.conf.
 - name: refuse ssh passwords
   copy:
     content: |

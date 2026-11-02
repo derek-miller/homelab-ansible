@@ -6,8 +6,6 @@ telegraf_flush_interval: "{{ telegraf_collection_interval }}"
 telegraf_flush_jitter: 5s
 telegraf_conf: /etc/telegraf/telegraf.conf
 telegraf_conf_dir: /etc/telegraf/telegraf.d
-# The configs hold tokens and passwords, so only the user Telegraf runs as may
-# read them: the package's telegraf on Linux, root under launchd.
 telegraf_conf_group: "{{ root_group if ansible_os_family == 'Darwin' else 'telegraf' }}"
 # VM guests have no hardware sensors, so they skip lm-sensors and inputs.sensors.
 telegraf_apt_dependencies: "{{ [] if ansible_virtualization_role == 'guest' else ['lm-sensors'] }}"
