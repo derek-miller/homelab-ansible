@@ -152,6 +152,8 @@ proxmox_storages:
       prune-backups: keep-all=1
       subdir: /Proxmox
       username: derek
+      # Uncached, so a backup to a slow NAS can't fill the host's dirty-page budget and stall every writer on it.
+      options: cache=none
 
 proxmox_metrics_id: influxdb3
 proxmox_metrics_server: !vault |
@@ -242,10 +244,34 @@ proxmox_backup_jobs:
     schedule: "03:00"
     storage: unas-backup
     prune: keep-last=30,keep-monthly=12,keep-yearly=2
-  - id: workers-daily
-    comment: Swarm workers
-    vmid: [201, 202, 203, 204, 205]
+  - id: rackvm1-daily
+    comment: rackvm1
+    vmid: [201]
     schedule: "03:30"
+    storage: unas-backup
+    prune: keep-last=7,keep-monthly=3
+  - id: rackvm2-daily
+    comment: rackvm2
+    vmid: [202]
+    schedule: "04:00"
+    storage: unas-backup
+    prune: keep-last=7,keep-monthly=3
+  - id: rackvm3-daily
+    comment: rackvm3
+    vmid: [203]
+    schedule: "04:30"
+    storage: unas-backup
+    prune: keep-last=7,keep-monthly=3
+  - id: rackvm4-daily
+    comment: rackvm4
+    vmid: [204]
+    schedule: "05:00"
+    storage: unas-backup
+    prune: keep-last=7,keep-monthly=3
+  - id: rackvm5-daily
+    comment: rackvm5
+    vmid: [205]
+    schedule: "05:30"
     storage: unas-backup
     prune: keep-last=7,keep-monthly=3
 

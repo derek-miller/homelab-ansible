@@ -424,7 +424,7 @@ The pipeline sets `pipefail`, so a wrong or missing identity fails the run at th
 
 ## Restoring one volume from a VM backup
 
-The nightly vzdump of each rackvm (VMIDs 201-205 for rackvm1-5, 03:30 America/Chicago, to the `unas-backup` storage) includes the data disk, so any volume can come back from it, including ones no archive covers. Extract on a pve node, which mounts the dumps; nothing is restored as a VM:
+The nightly vzdump of each rackvm (VMIDs 201-205 for rackvm1-5, one at a time half an hour apart from 03:30 America/Chicago, to the `unas-backup` storage) includes the data disk, so any volume can come back from it, including ones no archive covers. Extract on a pve node, which mounts the dumps; nothing is restored as a VM:
 
 ```bash
 F=/mnt/pve/unas-backup/dump/vzdump-qemu-<vmid>-<timestamp>.vma.zst
