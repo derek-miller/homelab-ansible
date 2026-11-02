@@ -57,7 +57,7 @@ metadata:
   name: grafana-db
   namespace: grafana
 spec:
-  backupCommand: python -c "import sqlite3, sys; m = sqlite3.connect(':memory:'); sqlite3.connect('/data/grafana.db').backup(m); sys.stdout.buffer.write(m.serialize())"
+  backupCommand: python -c "import sqlite3, sys; m = sqlite3.connect(':memory:'); sqlite3.connect('file:/data/grafana.db?mode=rw', uri=True).backup(m); sys.stdout.buffer.write(m.serialize())"
   fileExtension: .sqlite3
   pod:
     spec:

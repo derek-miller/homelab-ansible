@@ -57,7 +57,7 @@ metadata:
   name: inbox-db
   namespace: webhooks
 spec:
-  backupCommand: python -c "import sqlite3, sys; m = sqlite3.connect(':memory:'); sqlite3.connect('/data/inbox.db').backup(m); sys.stdout.buffer.write(m.serialize())"
+  backupCommand: python -c "import sqlite3, sys; m = sqlite3.connect(':memory:'); sqlite3.connect('file:/data/inbox.db?mode=rw', uri=True).backup(m); sys.stdout.buffer.write(m.serialize())"
   fileExtension: .sqlite3
   pod:
     spec:
