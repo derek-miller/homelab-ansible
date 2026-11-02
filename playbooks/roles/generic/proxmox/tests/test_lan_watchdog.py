@@ -10,9 +10,14 @@ import importlib.util
 import json
 import os
 import sys
+import tempfile
 import time
 
 SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files", "pve-lan-watchdog")
+TMP = tempfile.mkdtemp()
+STATE_DIR = os.path.join(TMP, "wd-state")
+PEER_DIR = os.path.join(TMP, "wd-peers")
+MEMBERS_FILE = os.path.join(TMP, "wd-members")
 
 results = []
 
@@ -56,9 +61,9 @@ def load(env):
         "FLAP_WINDOW_SECONDS": "21600",
         "NAG_SECONDS": "300",
         "PEER_FRESH_SECONDS": "180",
-        "STATE_DIR": "/tmp/wd-state",
-        "PEER_DIR": "/tmp/wd-peers",
-        "MEMBERS_FILE": "/tmp/wd-members",
+        "STATE_DIR": STATE_DIR,
+        "PEER_DIR": PEER_DIR,
+        "MEMBERS_FILE": MEMBERS_FILE,
     }
     base.update(env)
     os.environ.clear()
@@ -78,7 +83,7 @@ def load(env):
 
 class Harness:
     def __init__(self, env=None, link_script=None, peers=1, bounce_fixes=False, initial_state=None):
-        os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members")
+        os.system(f"rm -rf {STATE_DIR} {PEER_DIR} {MEMBERS_FILE}")
         self.mod = load(env or {})
         self.clock = FakeClock()
         self.mod.time = self.clock
@@ -375,15 +380,15 @@ results.append(check("18 unknown event surfaces", len(out), 1))
 results.append(check("18 raw detail included", "something_new" in out[0][3], True))
 
 # 19. read_peer_docs parses v1 JSON and falls back to the v0 line format.
-os.makedirs("/tmp/wd-peers", exist_ok=True)
-with open("/tmp/wd-peers/pve7", "w") as fh:
+os.makedirs(PEER_DIR, exist_ok=True)
+with open(os.path.join(PEER_DIR, "pve7"), "w") as fh:
     json.dump(doc("pve7", seq=2, events=[ev(2, "recovered", {"bounces": 0})]), fh)
-with open("/tmp/wd-peers/pve8", "w") as fh:
+with open(os.path.join(PEER_DIR, "pve8"), "w") as fh:
     fh.write("1999999 down\n")
 parsed, _ = mod.read_peer_docs()
 results.append(check("19 v1 parsed", parsed["pve7"]["seq"], 2))
 results.append(check("19 v0 parsed", (parsed["pve8"]["v"], parsed["pve8"]["lan"]), (0, "down")))
-os.system("rm -rf /tmp/wd-peers")
+os.system(f"rm -rf {PEER_DIR}")
 
 # ===========================================================================
 # rearm: the one operator entry point.
@@ -391,7 +396,7 @@ os.system("rm -rf /tmp/wd-peers")
 
 # 20. Clears the flap counter, keeps drain bookkeeping, restarts the service,
 #     and the next real fault is allowed to drain again.
-os.system("rm -rf /tmp/wd-state")
+os.system(f"rm -rf {STATE_DIR}")
 mod = load({"NODE": "pve1"})
 mod.save_state({"phase": "drained", "owns_maintenance": True, "trips": [1, 2], "seq": 9})
 calls = []
@@ -419,7 +424,7 @@ results.append(
 
 # 21. A failed state write fails loudly and does not restart: the daemon would
 #     come back still flap-guarded while the operator saw exit 0.
-os.system("rm -rf /tmp/wd-state")
+os.system(f"rm -rf {STATE_DIR}")
 mod = load({"NODE": "pve1"})
 mod.save_state({"phase": "degraded", "owns_maintenance": False, "trips": [1, 2], "seq": 0})
 calls = []
@@ -427,7 +432,7 @@ mod.run = lambda argv, timeout=30: (calls.append(argv), (0, ""))[1]
 mod.save_state = lambda state: False
 results.append(check("21 rearm fails loudly", mod.rearm(), 1))
 results.append(check("21 no restart on failed write", calls, []))
-os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members")
+os.system(f"rm -rf {STATE_DIR} {PEER_DIR} {MEMBERS_FILE}")
 
 # 22. A newly elected reporter has an empty cursor. It must not re-announce a
 #     peer's whole ring: those events were delivered by the reporter it is
@@ -478,10 +483,10 @@ results.append(
 
 # 24. One malformed peer document must not stop the acting half. /etc/pve is
 #     replicated, so a doc that kills report() kills it on every node at once.
-os.makedirs("/tmp/wd-peers", exist_ok=True)
+os.makedirs(PEER_DIR, exist_ok=True)
 json.dump(
     {"v": 1, "node": "pve1", "ts": NOW, "seq": 0, "lan": "healthy", "events": []},
-    open("/tmp/wd-peers/pve1", "w"),
+    open(os.path.join(PEER_DIR, "pve1"), "w"),
 )
 json.dump(
     {
@@ -492,10 +497,10 @@ json.dump(
         "lan": "down",
         "events": [ev(1, "lan_down", {"fails": "6/6", "targets": ["192.168.1.1"]})],
     },
-    open("/tmp/wd-peers/pve3", "w"),
+    open(os.path.join(PEER_DIR, "pve3"), "w"),
 )
 json.dump(
-    {"nodelist": {"pve1": {"online": 1}, "pve3": {"online": 1}}}, open("/tmp/wd-members", "w")
+    {"nodelist": {"pve1": {"online": 1}, "pve3": {"online": 1}}}, open(MEMBERS_FILE, "w")
 )
 m = load({"NODE": "pve1", "NOTIFY_ENABLED": "no"})
 m.time = type(
@@ -516,7 +521,7 @@ except SystemExit:
 except Exception as err:
     raised = "%s: %s" % (type(err).__name__, err)
 results.append(check("24 a bad peer doc does not stop the acting half", raised, None))
-os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members")
+os.system(f"rm -rf {STATE_DIR} {PEER_DIR} {MEMBERS_FILE}")
 
 # 25. A drain whose local state write fails still drains (the action was
 #     correct) but the event says so, and the rendered message tells a human
@@ -537,7 +542,7 @@ sev, title, text = mod._RENDERERS["drained"](
     "pve3", {"bounces": 2, "stable_seconds": 600, "persisted": True}
 )
 results.append(check("25 persisted drain does not warn", "WARNING" in text, False))
-os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members")
+os.system(f"rm -rf {STATE_DIR} {PEER_DIR} {MEMBERS_FILE}")
 
 # 26. A cursor frozen at an earlier reign is exactly as far behind as no
 #     cursor at all: without an unconditional floor, the next election replays
@@ -639,10 +644,10 @@ results.append(check("28 resync happens once", out, []))
 # 29. A peer document whose scalars a newer node changed the type of must not
 #     reach the arithmetic. healthy_peers() gates the drain and is called from
 #     the local half, outside every guard report() carries.
-os.system("rm -rf /tmp/wd-peers && mkdir -p /tmp/wd-peers")
-mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
+os.system(f"rm -rf {PEER_DIR} && mkdir -p {PEER_DIR}")
+mod = load({"NODE": "pve2", "PEER_DIR": PEER_DIR})
 for name, stamp in (("pve1", NOW), ("pve3", str(NOW)), ("pve4", "2026-08-02T05:00:00Z")):
-    with open("/tmp/wd-peers/" + name, "w") as fh:
+    with open(os.path.join(PEER_DIR, name), "w") as fh:
         json.dump(dict(doc(name, seq=1), ts=stamp), fh)
 loaded, _unreadable = mod.read_peer_docs()
 try:
@@ -666,7 +671,7 @@ results.append(
         [("watchdog silent", "pve4")],
     )
 )
-os.system("rm -rf /tmp/wd-peers")
+os.system(f"rm -rf {PEER_DIR}")
 
 # 30. A partial gap: seq 21-24 aged out of the ring for good, while 25-30 are
 #     merely old. Suppressing on "any of the range survives" hides the real
@@ -727,8 +732,8 @@ results.append(
 #     ones. Unguarded, one string ts inside an event put that node's whole
 #     processing into the per-node except — permanently silenced, cursor
 #     frozen, document fresh and healthy so `watchdog silent` never fires.
-os.system("rm -rf /tmp/wd-peers && mkdir -p /tmp/wd-peers")
-mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
+os.system(f"rm -rf {PEER_DIR} && mkdir -p {PEER_DIR}")
+mod = load({"NODE": "pve2", "PEER_DIR": PEER_DIR})
 good = doc(
     "pve3",
     lan="down",
@@ -738,9 +743,9 @@ good = doc(
         ev(12, "drained", {"bounces": 2, "stable_seconds": 600}),
     ],
 )
-with open("/tmp/wd-peers/pve1", "w") as fh:
+with open(os.path.join(PEER_DIR, "pve1"), "w") as fh:
     json.dump(doc("pve1"), fh)
-with open("/tmp/wd-peers/pve3", "w") as fh:
+with open(os.path.join(PEER_DIR, "pve3"), "w") as fh:
     json.dump(good, fh)
 loaded, _unreadable = mod.read_peer_docs()
 out, _ = mod.report(loaded, {"pve1": True, "pve3": True}, {}, now=NOW)
@@ -753,7 +758,7 @@ results.append(
 )
 bad = dict(good)
 bad["events"] = [dict(ev(11, "lan_down", {"fails": 6}), ts={"nested": True})]
-with open("/tmp/wd-peers/pve3", "w") as fh:
+with open(os.path.join(PEER_DIR, "pve3"), "w") as fh:
     json.dump(bad, fh)
 loaded, _unreadable = mod.read_peer_docs()
 results.append(check("32 unreadable ring scalar drops the doc", sorted(loaded), ["pve1"]))
@@ -765,7 +770,7 @@ results.append(
         [("watchdog silent", "pve3")],
     )
 )
-os.system("rm -rf /tmp/wd-peers")
+os.system(f"rm -rf {PEER_DIR}")
 
 # 33. `watchdog state lost` must not outrank the quiet gates: an offline node
 #     is fencing's story. The message waits until the node is back and it is
@@ -792,11 +797,11 @@ results.append(
 # 34. A wrong container type for `events` is as unreadable as a wrong scalar:
 #     kept-but-mute would be silent and permanent, so it drops the doc and the
 #     drop is announced. A ring merely containing junk entries is kept.
-os.system("rm -rf /tmp/wd-peers && mkdir -p /tmp/wd-peers")
-mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
-with open("/tmp/wd-peers/pve1", "w") as fh:
+os.system(f"rm -rf {PEER_DIR} && mkdir -p {PEER_DIR}")
+mod = load({"NODE": "pve2", "PEER_DIR": PEER_DIR})
+with open(os.path.join(PEER_DIR, "pve1"), "w") as fh:
     json.dump(doc("pve1"), fh)
-with open("/tmp/wd-peers/pve3", "w") as fh:
+with open(os.path.join(PEER_DIR, "pve3"), "w") as fh:
     json.dump(dict(doc("pve3", seq=1), events={"not": "a list"}), fh)
 loaded, _unreadable = mod.read_peer_docs()
 results.append(check("34 non-list events drops the doc", sorted(loaded), ["pve1"]))
@@ -808,7 +813,7 @@ results.append(
         [("watchdog silent", "pve3")],
     )
 )
-with open("/tmp/wd-peers/pve3", "w") as fh:
+with open(os.path.join(PEER_DIR, "pve3"), "w") as fh:
     json.dump(
         dict(doc("pve3", seq=1, events=[None, "junk", ev(1, "recovered", {"bounces": 0})])), fh
     )
@@ -824,16 +829,16 @@ results.append(
         ["LAN recovered"],
     )
 )
-os.system("rm -rf /tmp/wd-peers")
+os.system(f"rm -rf {PEER_DIR}")
 
 # 35. A dropped document is announced as what it IS: a version mismatch, not a
 #     dead watchdog. The old text sent the operator hunting for a stalled
 #     pmxcfs that did not exist while a real drain went unannounced.
-os.system("rm -rf /tmp/wd-peers && mkdir -p /tmp/wd-peers")
-mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
-with open("/tmp/wd-peers/pve1", "w") as fh:
+os.system(f"rm -rf {PEER_DIR} && mkdir -p {PEER_DIR}")
+mod = load({"NODE": "pve2", "PEER_DIR": PEER_DIR})
+with open(os.path.join(PEER_DIR, "pve1"), "w") as fh:
     json.dump(doc("pve1"), fh)
-with open("/tmp/wd-peers/pve3", "w") as fh:
+with open(os.path.join(PEER_DIR, "pve3"), "w") as fh:
     json.dump(dict(doc("pve3", seq=2), events={"2": "a map, from some future node"}), fh)
 docs_u, unreadable = mod.read_peer_docs()
 results.append(check("35 unreadable set carries the node", sorted(unreadable), ["pve3"]))
@@ -850,7 +855,7 @@ results.append(
 )
 out2, _ = mod.report(docs_u, {"pve1": True, "pve3": True}, cur, now=NOW + 60, unreadable=unreadable)
 results.append(check("35 announced once, latched", out2, []))
-os.system("rm -rf /tmp/wd-peers")
+os.system(f"rm -rf {PEER_DIR}")
 
 # 36. `name` is the one peer-supplied value used as a dict key. An unhashable
 #     name must land in _raw like every other uncomposable event, not in the
@@ -882,11 +887,11 @@ results.append(
 #     that reach it carry doc_ts == 0: there is no document to take a stamp
 #     from. So whichever fires first must not suppress the other — neither
 #     path reaches the re-arm, which only runs for a fresh readable document.
-os.system("rm -rf /tmp/wd-peers && mkdir -p /tmp/wd-peers")
-mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
+os.system(f"rm -rf {PEER_DIR} && mkdir -p {PEER_DIR}")
+mod = load({"NODE": "pve2", "PEER_DIR": PEER_DIR})
 MEMBERS = {"pve1": True, "pve2": True, "pve3": True}
 for name in ("pve1", "pve2"):
-    with open("/tmp/wd-peers/" + name, "w") as fh:
+    with open(os.path.join(PEER_DIR, name), "w") as fh:
         json.dump(doc(name), fh)
 loaded, unreadable = mod.read_peer_docs()
 out, cur = mod.report(loaded, MEMBERS, {}, now=NOW, unreadable=unreadable)
@@ -897,7 +902,7 @@ results.append(
         [("watchdog silent", "pve3")],
     )
 )
-with open("/tmp/wd-peers/pve3", "w") as fh:
+with open(os.path.join(PEER_DIR, "pve3"), "w") as fh:
     json.dump(dict(doc("pve3", seq=4), events={"4": "a map, from some future node"}), fh)
 loaded, unreadable = mod.read_peer_docs()
 out, cur = mod.report(loaded, MEMBERS, cur, now=NOW + 60, unreadable=unreadable)
@@ -914,12 +919,12 @@ results.append(check("37 and then latched, not every tick", out, []))
 # 38. The same collision the other way: a node whose document was dropped,
 #     then removed entirely. The retained message must not go on claiming a
 #     version mismatch once the watchdog is simply gone.
-os.system("rm -rf /tmp/wd-peers && mkdir -p /tmp/wd-peers")
-mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
+os.system(f"rm -rf {PEER_DIR} && mkdir -p {PEER_DIR}")
+mod = load({"NODE": "pve2", "PEER_DIR": PEER_DIR})
 for name in ("pve1", "pve2"):
-    with open("/tmp/wd-peers/" + name, "w") as fh:
+    with open(os.path.join(PEER_DIR, name), "w") as fh:
         json.dump(doc(name), fh)
-with open("/tmp/wd-peers/pve3", "w") as fh:
+with open(os.path.join(PEER_DIR, "pve3"), "w") as fh:
     json.dump(dict(doc("pve3", seq=4), events={"4": "a map"}), fh)
 loaded, unreadable = mod.read_peer_docs()
 out, cur = mod.report(loaded, MEMBERS, {}, now=NOW, unreadable=unreadable)
@@ -930,7 +935,7 @@ results.append(
         [("watchdog unreadable", "pve3")],
     )
 )
-os.remove("/tmp/wd-peers/pve3")
+os.remove(os.path.join(PEER_DIR, "pve3"))
 loaded, unreadable = mod.read_peer_docs()
 out, cur = mod.report(loaded, MEMBERS, cur, now=NOW + 60, unreadable=unreadable)
 results.append(
@@ -943,13 +948,13 @@ results.append(
 results.append(
     check("38 and it says never published", "never published" in (out[0][3] if out else ""), True)
 )
-os.system("rm -rf /tmp/wd-peers")
+os.system(f"rm -rf {PEER_DIR}")
 
 # 39. An unreadable file (open() itself fails, not the parse) joins the same
 #     `unreadable` set as a bad parse, since the node IS publishing something.
-os.system("rm -rf /tmp/wd-peers && mkdir -p /tmp/wd-peers/pve3")  # a dir, not a file
-mod = load({"NODE": "pve2", "PEER_DIR": "/tmp/wd-peers"})
-with open("/tmp/wd-peers/pve1", "w") as fh:
+os.system(f"rm -rf {PEER_DIR} && mkdir -p {PEER_DIR}/pve3")  # a dir, not a file
+mod = load({"NODE": "pve2", "PEER_DIR": PEER_DIR})
+with open(os.path.join(PEER_DIR, "pve1"), "w") as fh:
     json.dump(doc("pve1"), fh)
 loaded, unreadable = mod.read_peer_docs()
 results.append(check("39 an unopenable entry joins unreadable", sorted(unreadable), ["pve3"]))
@@ -961,7 +966,7 @@ results.append(
         [("watchdog unreadable", "pve3")],
     )
 )
-os.system("rm -rf /tmp/wd-peers")
+os.system(f"rm -rf {PEER_DIR}")
 
 # 40. The stall latch only works if the re-arm is durable. reporter_tick
 #     saves `if due`, and a re-arm is by design not due, so the one function
@@ -969,8 +974,8 @@ os.system("rm -rf /tmp/wd-peers")
 #     unit restarts on every deploy of this role, and both no-document
 #     incidents key on the same (0, kind), so a lost re-arm silences the
 #     next one for its whole duration.
-os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members && mkdir -p /tmp/wd-peers")
-with open("/tmp/wd-members", "w") as fh:
+os.system(f"rm -rf {STATE_DIR} {PEER_DIR} {MEMBERS_FILE} && mkdir -p {PEER_DIR}")
+with open(MEMBERS_FILE, "w") as fh:
     json.dump({"nodelist": {n: {"online": 1} for n in ("pve1", "pve2", "pve3")}}, fh)
 mod = load({"NODE": "pve1", "NOTIFY_ENABLED": "no"})
 sent = []
@@ -978,7 +983,7 @@ mod.notify = lambda sev, title, node, text: sent.append((title, node))
 
 
 def live(node, seq=0):
-    with open("/tmp/wd-peers/" + node, "w") as fh:
+    with open(os.path.join(PEER_DIR, node), "w") as fh:
         json.dump(
             {
                 "v": 2,
@@ -1010,7 +1015,7 @@ results.append(check("40 the cursor re-armed", state["announced"]["pve3"]["stale
 results.append(
     check(
         "40 and the re-arm reached the state file",
-        json.load(open("/tmp/wd-state/state.json"))["announced"]["pve3"]["stale_ts"],
+        json.load(open(os.path.join(STATE_DIR, "state.json")))["announced"]["pve3"]["stale_ts"],
         -1,
     )
 )
@@ -1021,14 +1026,14 @@ results.append(
 )
 
 sent[:] = []
-os.remove("/tmp/wd-peers/pve3")  # a second, independent no-document incident
+os.remove(os.path.join(PEER_DIR, "pve3"))  # a second, independent no-document incident
 live("pve1")
 live("pve2")
 mod.reporter_tick(state)
 results.append(
     check("40 the second stall is announced, not latched out", sent, [("watchdog silent", "pve3")])
 )
-os.system("rm -rf /tmp/wd-state /tmp/wd-peers /tmp/wd-members")
+os.system(f"rm -rf {TMP}")
 
 passed = sum(results)
 print("\n%d/%d passed" % (passed, len(results)))

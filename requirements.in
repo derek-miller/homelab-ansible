@@ -1,19 +1,9 @@
 --index-url https://pypi.org/simple
 
 ansible
-black
-chardet
-click
 cryptography
-dnspython
 jinja2
-keyring
-paramiko
-passlib
 proxmoxer
-python-debian
 pyyaml
 requests[security]
-semantic-version
-websocket-client
 yamllint

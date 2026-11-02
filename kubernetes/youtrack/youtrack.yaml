@@ -82,7 +82,8 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: youtrack
-          image: jetbrains/youtrack:2026.1.12458
+          # YouTrack has no floating tag, so builds are bumped by hand; a new minor runs its upgrade step on start, a build within one doesn't.
+          image: jetbrains/youtrack:2026.1.14165
           ports:
             - name: http
               containerPort: 8080
