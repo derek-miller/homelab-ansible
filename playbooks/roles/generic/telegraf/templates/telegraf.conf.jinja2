@@ -3536,7 +3536,7 @@
 
 
 {% if ansible_system == 'Linux' and ansible_virtualization_role != 'guest' %}
-# Monitor sensors, requires lm-sensors package (Linux only, not VM guests)
+# Monitor sensors, requires lm-sensors package (Linux only)
 [[inputs.sensors]]
   ## Remove numbers from field names.
   ## If true, a field name like 'temp1_input' will be changed to 'temp_input'.
