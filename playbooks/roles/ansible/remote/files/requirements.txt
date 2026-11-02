@@ -14,14 +14,10 @@ docker[tls]==7.2.0
     # via -r playbooks/roles/ansible/remote/files/requirements.in
 idna==3.20
     # via requests
-jsondiff==2.2.1
-    # via -r playbooks/roles/ansible/remote/files/requirements.in
 packaging==26.3
     # via -r playbooks/roles/ansible/remote/files/requirements.in
 pyyaml==6.0.3
-    # via
-    #   -r playbooks/roles/ansible/remote/files/requirements.in
-    #   jsondiff
+    # via -r playbooks/roles/ansible/remote/files/requirements.in
 requests==2.34.2
     # via docker
 urllib3==2.8.0
