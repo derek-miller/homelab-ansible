@@ -31,7 +31,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Addresses and credentials are required rather than defaulted: the image
-# carries no site-specific values, so the stack definition is the only place
+# carries no site-specific values, so its Deployment is the only place
 # that describes where this deployment points. Values are stripped because
 # ansible-vault encrypt_string keeps the trailing newline of whatever was
 # typed, and a newline in a header value makes requests reject the call.
@@ -41,7 +41,7 @@ INFLUX_URL = os.environ["INFLUX_URL"].strip().rstrip("/")
 INFLUX_TOKEN = os.environ["INFLUX_TOKEN"].strip()
 INFLUX_DB = os.environ["INFLUX_DB"].strip()
 
-# Tuning knobs keep defaults so the stack only declares them to override.
+# Tuning knobs keep defaults so its Deployment only declares them to override.
 UNIFI_SITE = os.environ.get("UNIFI_SITE", "default").strip()
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "30"))
 EVENTS_INTERVAL = int(os.environ.get("EVENTS_INTERVAL", "300"))

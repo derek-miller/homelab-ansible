@@ -52,20 +52,12 @@ rackvm3 docker_images_to_build=c4-release-notifier
 rackvm4 docker_images_to_build=unifi-collector
 rackvm5 docker_images_to_build=sourcebot,control4-driver-scraper
 
-[docker_swarm_manager]
-rackvm1 docker_stack_name=rackvms
-rackvm2
-rackvm3
-
-[docker_swarm_worker]
-rackvm[4:5]
-
-[docker_labels]
-rackvm1  docker_labels=identity,edge,webhooks,portainer
-rackvm2  docker_labels=home,mqtt,youtrack,registry
-rackvm3  docker_labels=media,notifier,firmware,logs
-rackvm4  docker_labels=grafana,metrics
-rackvm5  docker_labels=sourcebot
+[node_labels]
+rackvm1  node_labels=identity,edge,webhooks,portainer
+rackvm2  node_labels=home,mqtt,youtrack,registry
+rackvm3  node_labels=media,notifier,firmware,logs
+rackvm4  node_labels=grafana,metrics
+rackvm5  node_labels=sourcebot
 
 [k3s_server]
 rackvm1 k3s_role=server
@@ -76,12 +68,6 @@ rackvm[2:5]
 [k3s:children]
 k3s_server
 k3s_agent
-
-[project-files]
-rackvm1
-rackvm2
-rackvm5
-raspi1
 
 [disk-mounts]
 rackvm[1:5]

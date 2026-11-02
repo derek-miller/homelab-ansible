@@ -33,8 +33,8 @@ _flux_version: "{{ _flux_applied.stdout | default('') | regex_replace('@.*$', ''
 
 _flux_inventory_nodes: >-
   {%- set out = {} -%}
-  {%- for host in groups['docker_labels'] | default([]) | sort -%}
-  {%- for label in (hostvars[host].docker_labels | default('')).split(',') | map('trim') | select -%}
+  {%- for host in groups['node_labels'] | sort -%}
+  {%- for label in (hostvars[host].node_labels | default('')).split(',') | map('trim') | select -%}
   {%- set _ = out.update({label: host}) -%}
   {%- endfor -%}
   {%- endfor -%}
@@ -130,7 +130,7 @@ _flux_move_pvs: >-
   {{ out }}
 _flux_move_volumes: "{{ _flux_move_found.stdout_lines | default([]) | sort }}"
 # A label a move left stopped can only hold that move's own copy on the new node.
-_flux_move_overwrite: "{{ docker_migrate_force | bool or move.label in _flux_stopped_labels }}"
+_flux_move_overwrite: "{{ k3s_migrate_force | bool or move.label in _flux_stopped_labels }}"
 _flux_move_charts: "{{ (_flux_move_hr_json.stdout | from_json)['items'] | map(attribute='metadata.name') | list }}"
 _flux_move_workloads: >-
   {%- set out = [] -%}
@@ -224,49 +224,3 @@ _flux_restore_picks: >-
   {%- endfor -%}
   {{ out }}
 _flux_restore_missing: "{{ _flux_restore_claims | reject('in', _flux_restore_picks | map(attribute='claim')) | list }}"
-
-_flux_stack_name: "{{ hostvars[groups['docker_swarm_manager'][0]].docker_stack_name }}"
-_flux_copy_labels: "{{ swarm_volume_copies | map(attribute='label') | unique | sort }}"
-_flux_copy_moving: "{{ _flux_moves | map(attribute='label') | select('in', _flux_copy_labels) | list }}"
-_flux_copies_pending: >-
-  {%- set out = [] -%}
-  {%- for result in _flux_copy_state.results | default([]) if result.stdout | default('') not in ['', 'missing'] -%}
-  {%- set _ = out.append(result.item | combine({'source': result.stdout,
-        'dest': k3s_local_storage_path ~ '/' ~ result.item.label ~ '/' ~ result.item.claim ~ '/data'})) -%}
-  {%- endfor -%}
-  {{ out }}
-_flux_copies_missing: >-
-  {{ _flux_copy_state.results | default([]) | selectattr('stdout', 'defined') | selectattr('stdout', 'eq', 'missing')
-     | map(attribute='item.label') | unique | sort }}
-_flux_copy_node: "{{ _flux_held_nodes[copy_label] }}"
-_flux_copy_entries: "{{ _flux_copies_pending | selectattr('label', 'eq', copy_label) | list }}"
-# Reads lines of a name and a container's mount sources, tab-separated, and prints the name of each
-# container with a mount at or under a source being copied. Docker's own volume filter matches a bind
-# only by its exact path.
-_flux_copy_using: >-
-  awk -F '\t' '{ for (i = 2; i <= NF; i++) if ({% for entry in _flux_copy_entries %}{{ ' || ' if not loop.first }}$i == "{{ entry.source }}" || index($i, "{{ entry.source }}/") == 1{% endfor %}) { print $1; next } }'
-_flux_copy_stack_users: >-
-  {%- set volumes = _flux_copies_pending | selectattr('volume', 'defined') | map(attribute='volume') | list -%}
-  {%- set paths = _flux_copies_pending | selectattr('path', 'defined') | map(attribute='path') | list -%}
-  {%- set out = [] -%}
-  {%- for name, service in (hostvars[groups['docker_swarm_manager'][0]].docker_stack_definition.services | default({})) | dictsort -%}
-  {%- for volume in service.volumes | default([]) -%}
-  {%- set source = volume.source | default('') if volume is mapping else volume.split(':')[0] -%}
-  {%- for path in paths if source == path or source.startswith(path ~ '/') -%}
-  {%- set _ = out.append(name) -%}
-  {%- endfor -%}
-  {%- if source in volumes -%}
-  {%- set _ = out.append(name) -%}
-  {%- endif -%}
-  {%- endfor -%}
-  {%- endfor -%}
-  {{ out | unique | list }}
-_flux_copy_services: >-
-  {%- set out = {} -%}
-  {%- for line in _flux_copy_replicas.stdout_lines | default([]) -%}
-  {%- set name, _, replicas = line.partition(' ') -%}
-  {%- set _ = out.update({name: replicas}) -%}
-  {%- endfor -%}
-  {{ out }}
-_flux_copy_backup: "{{ _flux_stack_name }}_backup_{{ copy_label }}"
-_flux_copy_apps: "{{ _flux_copy_services.keys() | reject('eq', _flux_copy_backup) | list }}"
