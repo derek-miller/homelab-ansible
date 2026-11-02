@@ -1,7 +1,7 @@
 #jinja2:trim_blocks:True,lstrip_blocks:True
 [Unit]
 Description=Proxmox LAN link watchdog
-Documentation=https://youtrack.dmiller.me/issue/HL-24
+Documentation=https://youtrack.{{ cloudflare_zone }}/issue/HL-24
 # pve-cluster owns /etc/pve, which is where peers publish their LAN health.
 # Wants, not Requires: without /etc/pve the watchdog still probes and bounces,
 # and it counts zero healthy peers, so it declines to drain. Requires would stop

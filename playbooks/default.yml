@@ -13,7 +13,6 @@
     - name: node summary
       debug:
         msg: >-
-          {{ ansible_all_ipv4_addresses | join(' ') }},
           {{ ansible_distribution }} {{ ansible_distribution_version }},
           {{ ansible_processor_vcpus }} CPU(s),
           {{ ansible_memtotal_mb }} MB memory
