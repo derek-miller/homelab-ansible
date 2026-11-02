@@ -1,0 +1,49 @@
+---
+# Echoes each request, to show the headers an app gets behind the house sign-in. Its Ingress is in whoami.vault.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whoami
+  namespace: edge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: whoami
+  template:
+    metadata:
+      labels:
+        app: whoami
+    spec:
+      nodeSelector:
+        homelab.local/edge: "true"
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+      containers:
+        - name: whoami
+          image: traefik/whoami
+          args:
+            - --port=8080
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: whoami
+  namespace: edge
+spec:
+  selector:
+    app: whoami
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
