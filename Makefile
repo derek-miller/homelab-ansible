@@ -15,7 +15,7 @@ override inventory_file = $(or $(wildcard $(inventory_file_maybe)),$(error could
 playbook_file_maybe = playbooks/$(playbook).yml
 override playbook_file = $(or $(wildcard $(playbook_file_maybe)),$(error could not find playbook file $(playbook_file_maybe)))
 
-vault_files ?= $(shell find playbooks kubernetes -type f -path '*vault*' -not -path '*vault-plaintext*' -not -path 'playbooks/collections/*' -not -path 'playbooks/roles/galaxy/*')
+vault_files ?= $(shell find playbooks kubernetes -type f -path '*vault*' -not -path 'playbooks/collections/*' -not -path 'playbooks/roles/galaxy/*')
 vault_flag = --vault-id=.vault_pass
 base ?= HEAD
 
@@ -40,14 +40,14 @@ python_version_minor := $(word 2,${python_version_full})
 all: after-git-pull check
 
 .PHONY: after-git-pull
-after-git-pull: init install galaxy-install
+after-git-pull: init install galaxy-install install-git-hooks
 
--include install-git-hooks
+git_hook := $(shell git rev-parse --git-path hooks)/pre-commit
+
 .PHONY: install-git-hooks
+install-git-hooks: $(git_hook)
 
-install-git-hooks: .git/hooks/pre-commit
-
-.git/hooks/pre-commit:
+$(git_hook):
 	ln -sf ../../hooks/pre-commit $@
 
 .PHONY: init
@@ -186,7 +186,7 @@ vault-revert-unchanged:
 .PHONY: vault-check
 vault-check:
 	$(if $(vault_files_decrypted_staged),\
-		cat hooks/nope >&2; echo 'must encrypt vault files by running make vault-encrypt-all' >&2; exit 1;\
+		cat hooks/nope >&2; echo 'must encrypt vault files by running make vault-encrypt' >&2; exit 1;\
 	)
 
 .PHONY: vault-diff

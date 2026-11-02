@@ -16,6 +16,9 @@ on:
         description: Run specific tag(s)
         required: false
 
+permissions:
+  contents: read
+
 concurrency:
   group: deploy
   cancel-in-progress: false
@@ -25,21 +28,23 @@ jobs:
     if: vars.DEPLOY_PAUSED != 'true'
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: tailscale/github-action@v4
+      - uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.13"
           cache: pip
 
       - name: Write vault password
-        run: echo "${{ secrets.VAULT_PASS }}" > .vault_pass
+        env:
+          VAULT_PASS: ${{ secrets.VAULT_PASS }}
+        run: printf '%s\n' "$VAULT_PASS" > .vault_pass
 
       - name: Install dependencies
         run: |
@@ -66,3 +71,8 @@ jobs:
             args+=("tags=$TAGS")
           fi
           make run "${args[@]}"
+
+      # Last, so it runs before any action's post step.
+      - name: Remove secrets
+        if: always()
+        run: rm -f .vault_pass .ssh/ansible-id_ed25519
