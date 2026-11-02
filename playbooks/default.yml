@@ -303,8 +303,14 @@
   tags:
     - k3s
 
-# After the agents, so a node that joins in this run has its labels before the apps go on.
+# After the agents, so CoreDNS's pods land on different nodes and a node that
+# joins in this run has its labels before the apps go on.
 - hosts: k3s_server
+  pre_tasks:
+    - import_role:
+        name: generic/k3s
+        tasks_from: coredns.yml
+      when: k3s_state == 'present'
   roles:
     - role: generic/flux
   tags:
