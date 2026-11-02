@@ -18,6 +18,10 @@ k3s_token: ""
 k3s_server_disable:
   - traefik
 
+# k3s's own CoreDNS manifest keeps each pod on a different node, so cluster DNS
+# outlives losing one.
+k3s_coredns_replicas: 2
+
 k3s_tls_san: []
 
 # Debian's 128 instances runs out once kubelet, containerd and Docker all watch.

@@ -214,3 +214,24 @@
   delay: 10
   changed_when: false
   when: not ansible_check_mode
+
+# On a new server, k3s creates the Deployment some seconds after it starts.
+- name: read the CoreDNS replica count
+  command: k3s kubectl -n kube-system get deployment coredns -o 'jsonpath={.spec.replicas}'
+  register: _k3s_coredns
+  until: _k3s_coredns.rc == 0
+  retries: 30
+  delay: 5
+  changed_when: false
+  when:
+    - k3s_role == 'server'
+    - not ansible_check_mode
+
+# k3s's coredns.yaml sets no replica count, so k3s keeps this one; a second
+# manifest naming the Deployment would fight k3s's own.
+- name: scale CoreDNS to {{ k3s_coredns_replicas }}
+  command: k3s kubectl -n kube-system scale deployment coredns --replicas={{ k3s_coredns_replicas }}
+  when:
+    - k3s_role == 'server'
+    - not ansible_check_mode
+    - _k3s_coredns.stdout | int != k3s_coredns_replicas | int
