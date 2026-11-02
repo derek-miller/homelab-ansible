@@ -77,12 +77,6 @@ rackvm[2:5]
 k3s_server
 k3s_agent
 
-[project-files]
-rackvm1
-rackvm2
-rackvm5
-raspi1
-
 [disk-mounts]
 rackvm[1:5]
 

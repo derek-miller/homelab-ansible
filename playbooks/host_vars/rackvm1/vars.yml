@@ -61,10 +61,6 @@ disk_mounts:
 docker_daemon_options:
   data-root: /mnt/data/docker
 
-project_files:
-  - src: "vault/{{ inventory_hostname }}/var/docker/"
-    dest: /var/docker/
-
 k3s_cluster_token: !vault |
   $ANSIBLE_VAULT;1.1;AES256
   62303538613438646466343366313438656165653836333534653561396437656638383462316237

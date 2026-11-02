@@ -131,12 +131,6 @@
     - smb-mount
     - smb-shares
 
-- hosts: project-files
-  roles:
-    - role: generic/project-files
-  tags:
-    - project-files
-
 - hosts: disk-mounts
   roles:
     - role: generic/disk-mount
