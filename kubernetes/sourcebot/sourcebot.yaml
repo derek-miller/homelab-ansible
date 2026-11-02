@@ -197,8 +197,6 @@ spec:
               value: America/Chicago
             - name: CONFIG_PATH
               value: /etc/sourcebot/config.json
-            - name: SOURCEBOT_LOG_LEVEL
-              value: debug
             - name: SOURCEBOT_TELEMETRY_DISABLED
               value: "true"
             - name: REDIS_URL

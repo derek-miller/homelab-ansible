@@ -3535,7 +3535,7 @@
 #   # version = "39.0"
 
 
-{% if ansible_system == 'Linux' %}
+{% if ansible_system == 'Linux' and ansible_virtualization_role != 'guest' %}
 # Monitor sensors, requires lm-sensors package (Linux only)
 [[inputs.sensors]]
   ## Remove numbers from field names.
