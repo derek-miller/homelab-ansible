@@ -8,10 +8,10 @@
 
 - include_tasks: labels.yml
 
-- name: "{{ k3s_restore_namespace }} | check [docker_labels] puts it on a node"
+- name: "{{ k3s_restore_namespace }} | check [node_labels] puts it on a node"
   assert:
     that: k3s_restore_namespace in _flux_inventory_nodes
-    fail_msg: "{{ k3s_restore_namespace }} is not a [docker_labels] word, so it has no node to restore onto; nothing was changed."
+    fail_msg: "{{ k3s_restore_namespace }} is not a [node_labels] word, so it has no node to restore onto; nothing was changed."
     quiet: yes
 
 # Before any refusal, since a move of the label refuses while it runs.
@@ -24,7 +24,7 @@
   fail:
     msg: >-
       {{ k3s_restore_namespace }} waits to move from {{ _flux_restore_from }} to {{ _flux_restore_to }}. While
-      {{ _flux_restore_from }} is a node, move it with `make run tags=k3s-migrate-labels ANSIBLE_FLAGS="-e docker_migrate_labels=yes"`,
+      {{ _flux_restore_from }} is a node, move it with `make run tags=k3s-migrate-labels ANSIBLE_FLAGS="-e k3s_migrate_labels=yes"`,
       which copies its current data; if it is lost for good, delete it first with
       `sudo k3s kubectl delete node {{ _flux_restore_from }}` on {{ inventory_hostname }}. Nothing was changed.
   when:
@@ -35,7 +35,7 @@
   fail:
     msg: >-
       {{ k3s_restore_namespace }}: {{ _flux_restore_to }} is not a ready k3s node. If it is lost for good, move
-      {{ k3s_restore_namespace }} to another node in [docker_labels] and delete {{ _flux_restore_to }} with
+      {{ k3s_restore_namespace }} to another node in [node_labels] and delete {{ _flux_restore_to }} with
       `sudo k3s kubectl delete node {{ _flux_restore_to }}` on {{ inventory_hostname }}. Nothing was changed.
   when: _flux_restore_to not in _flux_ready_nodes
 
@@ -108,7 +108,7 @@
       fail:
         msg: >-
           {{ move.label }} is still stopped but Flux is running, so a restore or move was cut off while bringing
-          it back. Finish that with make run tags=k3s-migrate-labels ANSIBLE_FLAGS="-e docker_migrate_labels=yes".
+          it back. Finish that with make run tags=k3s-migrate-labels ANSIBLE_FLAGS="-e k3s_migrate_labels=yes".
           Nothing was changed.
       when:
         - move.label in _flux_stopped_labels
@@ -345,8 +345,8 @@
                  else (move.label ~ ' is part moved to ' ~ _flux_restore_to ~ ', so its apps stay stopped and every'
                        ~ ' deploy refuses to run. Run the same command again to finish it.') if _flux_restore_lost
                  else (move.label ~ ': a volume did not restore, so its apps stay stopped and every deploy refuses to'
-                       ~ ' run. Run the same command again to finish the restore; any run with docker_migrate_labels=yes,'
-                       ~ ' the Swarm move included, gives it up and starts the apps on what their folders hold.') if _flux_restore_started
+                       ~ ' run. Run the same command again to finish the restore; any run with k3s_migrate_labels=yes'
+                       ~ ' gives it up and starts the apps on what their folders hold.') if _flux_restore_started
                  else (move.label ~ ' was not restored, so its apps are back with their data as it was; the error above says why.') }}
   always:
     - name: "{{ k3s_restore_namespace }} | remove the restore pod"

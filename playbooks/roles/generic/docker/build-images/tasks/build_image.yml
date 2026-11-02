@@ -224,36 +224,6 @@
     docker_build_images_push_failed: "{{ docker_build_images_push_failed | default([]) + [image_name] }}"
   when: _registry_push.results | default([]) | selectattr('failed_when_suppressed_exception', 'defined') | list | length > 0
 
-# Decided by what runs, not by this run's retag, so a restart that a run missed,
-# or that had no swarm manager to go through, is made by the next one.
-- name: Roll the swarm services still on an older {{ image_name }} build
-  when:
-    - _build_id != ''
-    - groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | length > 0
-  block:
-    - name: List the swarm services
-      community.docker.docker_swarm_info:
-        services: yes
-      delegate_to: "{{ docker_swarm_delegate_manager }}"
-      register: _swarm_services
-
-    - name: List the swarm tasks on this node
-      community.docker.docker_host_info:
-        containers: yes
-        containers_filters:
-          label: "com.docker.swarm.service.name={{ item }}"
-        verbose_output: yes
-      loop: "{{ _swarm_services.services | selectattr('Image', 'eq', image_config.image_name ~ ':latest') | map(attribute='Name') }}"
-      register: _service_tasks
-
-    - name: Restart them on the new build
-      command: "docker service update --force --detach {{ item.item | quote }}"
-      delegate_to: "{{ docker_swarm_delegate_manager }}"
-      loop: "{{ _service_tasks.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-      when: item.containers | rejectattr('ImageID', 'eq', _build_id) | list | length > 0
-
 - name: Remove deploy key for {{ image_name }} from remote
   file:
     path: "/tmp/docker-image-builds/{{ image_name }}-deploy-key"

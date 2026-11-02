@@ -19,8 +19,8 @@ ignore: |
   .claude/
 
 rules:
-  # Vault ciphertext, long URLs, and the inline docker stack all exceed any sane
-  # width; wrapping them would hurt readability.
+  # Vault ciphertext and long URLs exceed any sane width; wrapping them would
+  # hurt readability.
   line-length: disable
   # Ansible convention is yes/no, not true/false.
   truthy:

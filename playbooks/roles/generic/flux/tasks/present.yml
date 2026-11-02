@@ -230,7 +230,7 @@
     msg: >-
       {{ item }} runs on {{ _flux_held_nodes[item] }}, the inventory says
       {{ _flux_inventory_nodes[item] }}. Its k3s apps stay put until a run with
-      docker_migrate_labels=yes.
+      k3s_migrate_labels=yes.
   loop: "{{ _flux_inventory_nodes.keys() | sort }}"
   when: _flux_held_nodes[item] != _flux_inventory_nodes[item]
 
@@ -240,17 +240,6 @@
       A label move or restore stopped part way, leaving {{ _flux_stopped_labels | join(', ') }} scaled
       down. Run the same move or restore command again to finish it.
   when: _flux_stopped_labels | length > 0
-
-- include_tasks: swarm_copy_state.yml
-  when: swarm_volume_copies | length > 0
-
-- name: refuse to start an app on an empty folder
-  fail:
-    msg: >-
-      {{ _flux_copies_pending | map(attribute='label') | unique | join(', ') }} has Swarm
-      volumes its k3s folders don't have yet, so its apps would start empty. Copy them with
-      `make run ANSIBLE_FLAGS="-e swarm_copy_volumes=yes"`; nothing was deployed.
-  when: _flux_copies_pending | length > 0
 
 - include_tasks: place.yml
   vars:

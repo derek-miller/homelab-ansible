@@ -243,7 +243,7 @@ proxmox_backup_jobs:
     storage: unas-backup
     prune: keep-last=30,keep-monthly=12,keep-yearly=2
   - id: workers-daily
-    comment: Swarm workers
+    comment: rackvm1-5
     vmid: [201, 202, 203, 204, 205]
     schedule: "03:30"
     storage: unas-backup

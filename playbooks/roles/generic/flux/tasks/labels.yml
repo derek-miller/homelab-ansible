@@ -2,7 +2,7 @@
 - name: check every label can name a namespace
   assert:
     that: _flux_inventory_nodes.keys() | reject('match', '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$') | list | length == 0
-    fail_msg: "[docker_labels] words name k3s namespaces, so they must be lowercase letters, digits and hyphens."
+    fail_msg: "[node_labels] words name k3s namespaces, so they must be lowercase letters, digits and hyphens."
     quiet: yes
 
 - name: read which node carries each label
