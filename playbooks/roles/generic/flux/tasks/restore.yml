@@ -345,8 +345,8 @@
                  else (move.label ~ ' is part moved to ' ~ _flux_restore_to ~ ', so its apps stay stopped and every'
                        ~ ' deploy refuses to run. Run the same command again to finish it.') if _flux_restore_lost
                  else (move.label ~ ': a volume did not restore, so its apps stay stopped and every deploy refuses to'
-                       ~ ' run. Run the same command again to finish the restore; any run with docker_migrate_labels=yes,'
-                       ~ ' the Swarm move included, gives it up and starts the apps on what their folders hold.') if _flux_restore_started
+                       ~ ' run. Run the same command again to finish the restore; any run with docker_migrate_labels=yes'
+                       ~ ' gives it up and starts the apps on what their folders hold.') if _flux_restore_started
                  else (move.label ~ ' was not restored, so its apps are back with their data as it was; the error above says why.') }}
   always:
     - name: "{{ k3s_restore_namespace }} | remove the restore pod"

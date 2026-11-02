@@ -120,17 +120,9 @@
         - docker_restore_volumes_only | length > 0
         - (docker_restore_volumes_only | difference(_docker_restore_archive_volumes)) | length > 0
 
-    - name: determine volume name prefix (swarm hosts)
-      set_fact:
-        docker_restore_volume_prefix: >-
-          {{ hostvars[groups['docker_swarm_manager'][0]].docker_stack_name
-             | default(groups['docker_swarm_manager'][0]) }}
-      when: "'docker_swarm_manager' in group_names or 'docker_swarm_worker' in group_names"
-
-    - name: determine volume name prefix (compose hosts)
+    - name: determine volume name prefix
       set_fact:
         docker_restore_volume_prefix: "{{ docker_compose_project_name | default(inventory_hostname) }}"
-      when: "'docker_swarm_manager' not in group_names and 'docker_swarm_worker' not in group_names"
 
     - name: display volumes to restore
       debug:

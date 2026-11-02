@@ -5,7 +5,7 @@ docker_restore_volumes_label: ""
 docker_restore_volumes_backup_dir: >-
   {{ docker_volume_backup_root }}/{{ docker_restore_volumes_label | default(inventory_hostname, true) }}
 # When empty (default), every volume found inside the archive is restored.
-# Set to a list of volume names (without the docker stack/project prefix)
+# Set to a list of volume names (without the compose project prefix)
 # to restrict the restore — useful for migrations where only a subset of
 # volumes from the source archive should land on the target host.
 # Example: docker_restore_volumes_only=["sourcebot-data", "sourcebot-redis"]

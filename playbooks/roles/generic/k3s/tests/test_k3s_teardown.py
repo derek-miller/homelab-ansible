@@ -3,8 +3,8 @@
 ipset state while leaving Docker's and Tailscale's exactly as they were.
 
 The commands it runs are stubs that log their arguments and answer from a
-canned table, fed rules shaped like a node running Docker, Swarm, Tailscale
-and k3s at once. Stdlib only, since CI's venv holds just yamllint.
+canned table, fed rules shaped like a node running Docker, Tailscale and
+k3s at once. Stdlib only, since CI's venv holds just yamllint.
 """
 
 import ast
@@ -52,7 +52,6 @@ COMMIT
 :DOCKER-BRIDGE - [0:0]
 :DOCKER-CT - [0:0]
 :DOCKER-FORWARD - [0:0]
-:DOCKER-INGRESS - [0:0]
 :DOCKER-USER - [0:0]
 :FLANNEL-FWD - [0:0]
 :KUBE-EXTERNAL-SERVICES - [0:0]
@@ -80,12 +79,10 @@ COMMIT
 -A FORWARD -m comment --comment "flanneld forward" -j FLANNEL-FWD
 -A OUTPUT -m comment --comment "kube-router netpol - VEAAIY32XVBHCSCY" -j KUBE-ROUTER-OUTPUT
 -A OUTPUT -j KUBE-FIREWALL
--A DOCKER ! -i docker_gwbridge -o docker_gwbridge -j DROP
 -A DOCKER-BRIDGE -o docker0 -j DOCKER
 -A DOCKER-CT -o docker0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 -A DOCKER-FORWARD -j DOCKER-CT
 -A DOCKER-FORWARD -j DOCKER-BRIDGE
--A DOCKER-INGRESS -p tcp -m tcp --dport 7443 -j ACCEPT
 -A DOCKER-USER -j RETURN
 -A FLANNEL-FWD -s 10.42.0.0/16 -m comment --comment "flanneld forward" -j ACCEPT
 -A KUBE-FIREWALL ! -s 127.0.0.0/8 -d 127.0.0.0/8 -m comment --comment "block incoming localnet connections" -m conntrack ! --ctstate RELATED,ESTABLISHED,DNAT -j DROP
@@ -102,27 +99,22 @@ COMMIT
 :CNI-HOSTPORT-DNAT - [0:0]
 :CNI-HOSTPORT-MASQ - [0:0]
 :DOCKER - [0:0]
-:DOCKER-INGRESS - [0:0]
 :FLANNEL-POSTRTG - [0:0]
 :KUBE-POSTROUTING - [0:0]
 :KUBE-SERVICES - [0:0]
 :ts-postrouting - [0:0]
 -A PREROUTING -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
--A PREROUTING -m addrtype --dst-type LOCAL -j DOCKER-INGRESS
 -A PREROUTING -m addrtype --dst-type LOCAL -j DOCKER
 -A PREROUTING -m addrtype --dst-type LOCAL -j CNI-HOSTPORT-DNAT
 -A OUTPUT -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
--A OUTPUT -m addrtype --dst-type LOCAL -j DOCKER-INGRESS
 -A OUTPUT ! -d 127.0.0.0/8 -m addrtype --dst-type LOCAL -j DOCKER
 -A POSTROUTING -m comment --comment "kubernetes postrouting rules" -j KUBE-POSTROUTING
--A POSTROUTING -o docker_gwbridge -m addrtype --src-type LOCAL -j MASQUERADE
 -A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE
 -A POSTROUTING -j ts-postrouting
 -A POSTROUTING -m comment --comment "CNI portfwd requiring masquerade" -j CNI-HOSTPORT-MASQ
 -A POSTROUTING -m comment --comment "flanneld masq" -j FLANNEL-POSTRTG
 -A CNI-DN-1a2b3c4d5e -p tcp -m tcp --dport 8080 -j DNAT --to-destination 10.42.0.5:80
 -A CNI-HOSTPORT-DNAT -p tcp -m comment --comment "dnat name: \"cbr0\" id: \"abc\"" -m multiport --dports 8080 -j CNI-DN-1a2b3c4d5e
--A DOCKER-INGRESS -p tcp -m tcp --dport 7443 -j DNAT --to-destination 172.18.0.2:7443
 -A ts-postrouting -m mark --mark 0x40000/0xff0000 -j MASQUERADE
 COMMIT
 """

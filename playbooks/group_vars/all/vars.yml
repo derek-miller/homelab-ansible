@@ -4,19 +4,6 @@ ansible_surrogate_ssh_group: ssh
 # The PATH every become runs with, through the surrogate's sudoers entry.
 ansible_surrogate_secure_path: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-swarm_node_labels: >-
-  {{ dict((docker_labels | default('')).split(',')
-          | map('trim') | select | list
-          | zip_longest([], fillvalue='true')) }}
-
-# A manager to run swarm-admin commands through (drain/activate, label reconcile).
-# Prefers one already in the run, so a scoped hosts=<manager> drains through
-# itself rather than demanding the primary be connected; else the primary.
-docker_swarm_delegate_manager: >-
-  {{ (groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | sort | first)
-     if (groups['docker_swarm_manager'] | intersect(ansible_play_hosts) | length > 0)
-     else (groups['docker_swarm_manager'] | first) }}
-
 docker_volume_backup_root: /mnt/Backups/Volumes
 # The k3s restic server's repositories, one per namespace, as the hosts mount the Backups drive.
 k3s_backup_root: /mnt/Backups/Restic
@@ -24,11 +11,6 @@ docker_migrate_transit_dir: /mnt/Backups/migrate
 # A label whose host changed in [docker_labels] moves only with docker_migrate_labels.
 docker_migrate_labels: false
 docker_migrate_force: false
-docker_migrate_keep_transit: false
-# Swarm volumes to copy into k3s claims, as {volume, label, claim}: the stack's name for
-# the volume, the label its services run under, and the claim of the app replacing them.
-swarm_volume_copies: []
-swarm_copy_volumes: false
 # The namespace whose k3s claims tags=k3s-restore puts back: all of them, or those listed with commas,
 # each from its newest snapshot, or its newest from before a UTC time such as 2026-10-29T12:00.
 k3s_restore_namespace: ""
