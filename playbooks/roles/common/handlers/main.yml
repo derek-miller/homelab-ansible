@@ -4,3 +4,10 @@
     name: cron
     state: restarted
   when: ansible_service_mgr == 'systemd'
+
+# launchd starts a new sshd for each macOS connection, which reads the change.
+- name: reload sshd
+  service:
+    name: ssh
+    state: reloaded
+  when: ansible_service_mgr == 'systemd'
