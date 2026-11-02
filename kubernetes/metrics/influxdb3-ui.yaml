@@ -52,6 +52,10 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
           volumeMounts:
             - name: db
               mountPath: /db

@@ -385,6 +385,12 @@
   tags:
     - openclaw
 
+- hosts: process-stats
+  roles:
+    - role: generic/process-stats
+  tags:
+    - process-stats
+
 - hosts: nodenv
   roles:
     - role: generic/nodenv

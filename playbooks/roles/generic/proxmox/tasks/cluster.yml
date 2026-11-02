@@ -216,22 +216,6 @@
       or (live.resources | default('')) != item.resources
       or (live.strict | default(-1) | int) != (item.strict | default(0) | int)
 
-# Maintenance is runtime CRM state, not config, so nothing else clears it;
-# a node left in it is silently excluded from HA placement.
-- name: find nodes left in ha maintenance
-  shell: |
-    set -o pipefail
-    ha-manager status | sed -n 's/^lrm \([^ ]*\) (maintenance mode.*/\1/p'
-  args:
-    executable: /bin/bash
-  register: proxmox_ha_maintenance
-  changed_when: false
-  check_mode: no
-
-- name: clear ha maintenance left behind
-  command: "ha-manager crm-command node-maintenance disable {{ item }}"
-  loop: "{{ proxmox_ha_maintenance.stdout_lines }}"
-
 - name: replication
   when: proxmox_replication_enabled | bool
   block:

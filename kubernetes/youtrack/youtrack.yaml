@@ -89,6 +89,11 @@ spec:
           env:
             - name: TZ
               value: America/Chicago
+          # The port opens at once, and until YouTrack has started its paths get a 503 starting page.
+          readinessProbe:
+            httpGet:
+              path: /api/config
+              port: http
           volumeMounts:
             - name: data
               mountPath: /opt/youtrack/data
