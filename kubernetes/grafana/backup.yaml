@@ -49,8 +49,7 @@ data:
   # The other nodes refuse a new pod for its first few seconds, and restic doesn't retry its first call.
   SLEEP_DURATION: 30s
 ---
-# At each backup k8up starts this pod and saves what its command prints, a consistent copy of Grafana's database,
-# beside the claim's files. The grafana image has no sqlite3 to make one in Grafana's own pod.
+# The grafana image has no sqlite3, so the copy can't be made in Grafana's own pod.
 apiVersion: k8up.io/v1
 kind: PreBackupPod
 metadata:
