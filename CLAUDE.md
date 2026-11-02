@@ -49,7 +49,7 @@ make galaxy-install                   # Reinstall Galaxy roles/collections
 - **A role that installs something splits `present.yml` / `absent.yml`,** routed from `tasks/main.yml` on a `<role>_state` variable. `absent` must fully reverse `present`: stop the service, remove config, uninstall the package, clear the repo and keyring.
 - Vault variables are referenced indirectly: `openclaw_hooks_token: "{{ vault_openclaw_hooks_token }}"`. Layering is role defaults → group_vars → host_vars.
 - Ingress annotations (`router.entrypoints`, `router.middlewares`) carry routing and sign-in on k3s.
-- Images the `generic/docker/build-images` role makes are tagged by a hash of their inputs (files, base image digest or source commit) and moved onto `<name>:latest`, which is what runs them. Each build is also pushed to the cluster's image registry, where apps on k3s name it `registry.homelab.local/<name>`. Nothing gets a version bump; a changed input rebuilds, and the same deploy pins the apps that name it to the new digest.
+- Images the `generic/docker/build-images` role makes are tagged by a hash of their inputs (files, base image digest or source commit) and pushed to the cluster's image registry as that tag and `<name>:latest`, where apps on k3s name it `registry.homelab.local/<name>`. Nothing gets a version bump; a changed input rebuilds, and the same deploy pins the apps that name it to the new digest.
 
 ## Runbook
 

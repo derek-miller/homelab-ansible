@@ -180,7 +180,16 @@
     - k3s-migrate-labels
 
 - hosts: docker_swarm_manager:docker_swarm_worker
+  any_errors_fatal: true
   tasks:
+    # A node that leaves while another can't would strand that one as a manager without quorum.
+    - name: every swarm node must be in this run
+      assert:
+        that: groups['docker_swarm_manager'] | union(groups['docker_swarm_worker']) | difference(ansible_play_hosts) | length == 0
+        fail_msg: Run it again with every rackvm reachable.
+        quiet: yes
+      run_once: true
+
     - name: read this node's swarm state
       command: docker info --format '{% raw %}{{.Swarm.LocalNodeState}} {{.Swarm.ControlAvailable}}{% endraw %}'
       register: _swarm_teardown_state
@@ -196,6 +205,13 @@
       when:
         - inventory_hostname == groups['docker_swarm_manager'][0]
         - _swarm_teardown_state.stdout == 'active true'
+
+    - name: retire the stack's volume backups
+      command: mv {{ docker_volume_backup_root }}/edge {{ docker_volume_backup_root | dirname }}/RetiredVolumes/edge
+      args:
+        removes: "{{ docker_volume_backup_root }}/edge"
+        creates: "{{ docker_volume_backup_root | dirname }}/RetiredVolumes/edge"
+      when: inventory_hostname == groups['docker_swarm_manager'][0]
 
     - name: leave the swarm as a worker
       community.docker.docker_swarm:
@@ -306,9 +322,7 @@
         images: yes
         images_filters:
           dangling: "false"
-          # Local builds can't be pulled back, and one may be unused right now:
-          # a one-shot job between runs, or a rebuild whose service hasn't
-          # restarted yet. They're pruned below instead.
+          # Local builds can't be pulled back, so they're pruned below instead, keeping each one's latest.
           "label!": homelab.local-build
         networks: yes
         volumes: yes
