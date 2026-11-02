@@ -13,6 +13,7 @@ post() {
     --data "{\"content\": \"$1\"}" "$DISCORD_WEBHOOK_URL" >/dev/null
 }
 
+# Any Authorization header skips the sign-in; Grafana's health endpoint ignores it.
 status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
   -H 'Authorization: Bearer none' "$GRAFANA_HEALTH_URL")
 
