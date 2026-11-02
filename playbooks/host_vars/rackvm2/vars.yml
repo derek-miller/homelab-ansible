@@ -60,4 +60,3 @@ disk_mounts:
 
 docker_daemon_options:
   data-root: /mnt/data/docker
-  default-stop-timeout: 60
