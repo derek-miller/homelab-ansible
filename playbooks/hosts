@@ -21,6 +21,9 @@ rackmini1
 rackvm[1:5]
 raspi1
 
+[tailscale:vars]
+create_cloudflare_ipv4_dns_record=yes
+
 [nas-subnet-router]
 rackvm[1:5]
 

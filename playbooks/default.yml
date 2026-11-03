@@ -80,6 +80,18 @@
             ttl: 1
             proxied: no
             solo: yes
+          when: create_cloudflare_ipv4_dns_record is defined and create_cloudflare_ipv4_dns_record is truthy
+        - name: add Cloudflare DNS record for tailscale ipv6 address
+          community.general.cloudflare_dns:
+            zone: "{{ cloudflare_zone }}"
+            api_token: "{{ cloudflare_api_token }}"
+            type: "AAAA"
+            record: "{{ inventory_hostname }}.ts"
+            value: "{{ tailscale_node_ipv6 }}"
+            ttl: 1
+            proxied: no
+            solo: yes
+          when: create_cloudflare_ipv6_dns_record is defined and create_cloudflare_ipv6_dns_record is truthy
     - name: remove the tailscale DNS records
       when: tailscale_state == 'absent'
       block:
@@ -90,6 +102,15 @@
             type: "A"
             record: "{{ inventory_hostname }}.ts"
             state: absent
+          when: create_cloudflare_ipv4_dns_record is defined and create_cloudflare_ipv4_dns_record is truthy
+        - name: remove Cloudflare DNS record for tailscale ipv6 address
+          community.general.cloudflare_dns:
+            zone: "{{ cloudflare_zone }}"
+            api_token: "{{ cloudflare_api_token }}"
+            type: "AAAA"
+            record: "{{ inventory_hostname }}.ts"
+            state: absent
+          when: create_cloudflare_ipv6_dns_record is defined and create_cloudflare_ipv6_dns_record is truthy
   tags:
     - tailscale
 
