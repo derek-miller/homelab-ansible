@@ -73,8 +73,7 @@
         - name: add Cloudflare DNS record for tailscale ipv4 address
           community.general.cloudflare_dns:
             zone: "{{ cloudflare_zone }}"
-            account_email: "{{ cloudflare_email }}"
-            account_api_token: "{{ cloudflare_api_key }}"
+            api_token: "{{ cloudflare_api_token }}"
             type: "A"
             record: "{{ inventory_hostname }}.ts"
             value: "{{ tailscale_node_ipv4 }}"
@@ -85,8 +84,7 @@
         - name: add Cloudflare DNS record for tailscale ipv6 address
           community.general.cloudflare_dns:
             zone: "{{ cloudflare_zone }}"
-            account_email: "{{ cloudflare_email }}"
-            account_api_token: "{{ cloudflare_api_key }}"
+            api_token: "{{ cloudflare_api_token }}"
             type: "AAAA"
             record: "{{ inventory_hostname }}.ts"
             value: "{{ tailscale_node_ipv6 }}"
@@ -100,8 +98,7 @@
         - name: remove Cloudflare DNS record for tailscale ipv4 address
           community.general.cloudflare_dns:
             zone: "{{ cloudflare_zone }}"
-            account_email: "{{ cloudflare_email }}"
-            account_api_token: "{{ cloudflare_api_key }}"
+            api_token: "{{ cloudflare_api_token }}"
             type: "A"
             record: "{{ inventory_hostname }}.ts"
             state: absent
@@ -109,8 +106,7 @@
         - name: remove Cloudflare DNS record for tailscale ipv6 address
           community.general.cloudflare_dns:
             zone: "{{ cloudflare_zone }}"
-            account_email: "{{ cloudflare_email }}"
-            account_api_token: "{{ cloudflare_api_key }}"
+            api_token: "{{ cloudflare_api_token }}"
             type: "AAAA"
             record: "{{ inventory_hostname }}.ts"
             state: absent
