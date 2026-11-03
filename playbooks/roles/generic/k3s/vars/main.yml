@@ -21,7 +21,6 @@ _k3s_config: >-
         if k3s_role == 'server' else
         {'server': 'https://' ~ k3s_server_address ~ ':6443'}
       )
-    | combine(k3s_config_extra)
   }}
 
 _k3s_release_pattern: 'v\d+\.\d+\.\d+\+k3s\d+'

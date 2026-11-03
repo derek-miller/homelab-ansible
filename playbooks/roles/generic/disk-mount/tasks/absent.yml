@@ -52,5 +52,6 @@
   loop: "{{ disk_mounts }}"
   loop_control:
     label: "{{ item.path }}"
+  register: _disk_mount_rmdir
   failed_when: false
-  changed_when: true
+  changed_when: _disk_mount_rmdir.rc == 0

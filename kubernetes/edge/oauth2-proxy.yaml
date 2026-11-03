@@ -84,7 +84,7 @@ spec:
       code-challenge-method: S256
       cookie-expire: 168h0m0s
       cookie-refresh: 1h0m0s
-      # Keycloak is on another site, so its redirect back would leave a strict CSRF cookie behind.
+      # A link from another site would arrive without strict cookies and go back through sign-in.
       cookie-samesite: lax
       cookie-secure: true
       custom-templates-dir: /templates

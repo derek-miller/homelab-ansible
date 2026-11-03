@@ -19,7 +19,9 @@ make run hosts=rackvm1  # Limit to a host
 make run tags=docker    # Limit to a tag (implies --skip-tags=base,common)
 make run tags=flux      # Deploy only the k3s apps in kubernetes/
 make dry-run            # --check
-make check              # Syntax validation
+make lint               # yamllint (CI requires lint and test)
+make test               # Role test suites
+make check              # lint + test + syntax check
 make bootstrap hosts=<host> user=<user>
 
 # make {run,dry-run,check,bootstrap}-<name> runs playbooks/<name>.yml, paired with
@@ -37,6 +39,7 @@ make vault-check        # Verify encryption (pre-commit hook)
 # Dependencies
 make -B requirements.txt              # Recompile Python deps
 make -B requirements.txt UPGRADE=1    # Upgrade unpinned packages
+make -B init install UPGRADE=1        # Upgrade every lock, the roles' too, and sync the venv
 make galaxy-install                   # Reinstall Galaxy roles/collections
 ```
 
@@ -47,7 +50,7 @@ make galaxy-install                   # Reinstall Galaxy roles/collections
 
 - **Placement is by node label, never by hostname.** Each label is declared on exactly one host as a comma-delimited `node_labels` in the `[node_labels]` inventory group, and the flux role puts each label on its node as `homelab.local/<label>: "true"` and as the ServiceLB pool `<label>`: a suite's pods pin with that node selector and its LoadBalancers with `svccontroller.k3s.cattle.io/lbpool: <label>`. Volumes come from the `local-retain` storage class.
 - **A role that installs something splits `present.yml` / `absent.yml`,** routed from `tasks/main.yml` on a `<role>_state` variable. `absent` must fully reverse `present`: stop the service, remove config, uninstall the package, clear the repo and keyring.
-- Vault variables are referenced indirectly: `openclaw_hooks_token: "{{ vault_openclaw_hooks_token }}"`. Layering is role defaults → group_vars → host_vars.
+- Secrets in group_vars and host_vars are inline `!vault` values, except in a host's whole-file `vault.yml`, whose `vault_<name>` values its `vars.yml` reads indirectly: `openclaw_hooks_token: "{{ vault_openclaw_hooks_token }}"`. Layering is role defaults → group_vars → host_vars.
 - Ingress annotations (`router.entrypoints`, `router.middlewares`) carry routing and sign-in on k3s.
 - Images the `generic/docker/build-images` role makes are tagged by a hash of their inputs (files, base image digest or source commit) and pushed to the cluster's image registry as that tag and `<name>:latest`, where apps on k3s name it `registry.homelab.local/<name>`. Nothing gets a version bump; a changed input rebuilds, and the same deploy pins the apps that name it to the new digest.
 

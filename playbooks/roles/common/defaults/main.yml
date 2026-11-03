@@ -15,7 +15,7 @@ common_pkgs:
     - jq
     - mosh
     - net-tools
-    - "{{ 'ntpsec' if (ansible_distribution == 'Debian' and ansible_distribution_major_version | int >= 12) else 'ntp' }}"
+    - ntpsec
     - pigz
     - tmux
     - unzip

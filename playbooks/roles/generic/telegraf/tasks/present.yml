@@ -18,6 +18,4 @@
     mode: 0640
   notify: restart telegraf
 
-- include_tasks: cleanup-backups.yml
-
 - include_tasks: "present-{{ ansible_os_family | lower }}.yml"

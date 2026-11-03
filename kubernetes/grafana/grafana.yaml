@@ -51,22 +51,14 @@ spec:
               value: X-Auth-Request-Email
             - name: GF_AUTH_PROXY_HEADER_PROPERTY
               value: email
-            - name: GF_AUTH_PROXY_LDAP_SYNC_TTL
-              value: "60"
             - name: GF_DATABASE_WAL
               value: "true"
-            - name: GF_EMAILS_WELCOME_EMAIL_ON_SIGN_UP
-              value: "true"
-            - name: GF_INSTALL_PLUGINS
-              value: grafana-clock-panel,grafana-piechart-panel,grafana-worldmap-panel
             - name: GF_RENDERING_CALLBACK_URL
               value: http://grafana:3000/
             - name: GF_RENDERING_SERVER_URL
               value: http://grafana-image-renderer:8081/render
             - name: GF_SECURITY_ADMIN_USER
               value: admin
-            - name: GF_SECURITY_DISABLE_GRAVATAR
-              value: "false"
             - name: GF_USERS_ALLOW_ORG_CREATE
               value: "false"
             - name: GF_USERS_ALLOW_SIGN_UP
@@ -78,7 +70,7 @@ spec:
             - name: TZ
               value: America/Chicago
             - name: GF_PLUGINS_PREINSTALL_SYNC
-              value: victoriametrics-logs-datasource
+              value: grafana-clock-panel,victoriametrics-logs-datasource
           envFrom:
             - secretRef:
                 name: grafana

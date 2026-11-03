@@ -3,35 +3,6 @@
 # picks wayvnc or vncserver-x11-serviced to match the session. Authentication is
 # PAM over TLS, so there is no password for this role to place.
 
-- name: stop the legacy x11vnc service
-  systemd:
-    name: x11vnc
-    state: stopped
-    enabled: no
-  failed_when: false
-
-- name: remove the legacy x11vnc unit
-  file:
-    path: /etc/systemd/system/x11vnc.service
-    state: absent
-  notify: reload systemd
-
-- name: clear the failed x11vnc unit
-  command: systemctl reset-failed x11vnc
-  changed_when: false
-  failed_when: false
-
-- name: uninstall x11vnc
-  apt:
-    name: x11vnc
-    state: absent
-    autoremove: yes
-
-- name: remove the x11vnc password file
-  file:
-    path: /etc/x11vnc.pass
-    state: absent
-
 - name: find the session definition
   stat:
     path: "/usr/share/wayland-sessions/{{ vnc_session }}.desktop"
@@ -65,6 +36,8 @@
     - {key: user-session, value: "{{ vnc_session }}"}
     - {key: autologin-session, value: "{{ vnc_session }}"}
     - {key: greeter-session, value: "{{ vnc_greeter }}"}
+    - {key: autologin-user, value: "{{ vnc_autologin_user }}"}
+    - {key: greeter-allow-guest, value: "false"}
   loop_control: {label: "{{ item.key }}"}
   when: vnc_compositor.stat.exists | default(false)
   notify: restart lightdm

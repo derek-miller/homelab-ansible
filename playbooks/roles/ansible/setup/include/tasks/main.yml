@@ -1,5 +1,0 @@
----
-- name: add additional env vars to environment
-  set_fact:
-    ansible_env: "{{ ansible_env | default({}) | combine(additional_env_vars) }}"
-  when: ansible_env is defined and additional_env_vars is defined and additional_env_vars is truthy

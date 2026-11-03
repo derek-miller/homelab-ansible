@@ -75,14 +75,13 @@ _flux_held_nodes: >-
                                  or _flux_volume_label_nodes.get(label) or host}) -%}
   {%- endfor -%}
   {{ out }}
-_flux_label_nodes: "{{ _flux_held_nodes }}"
 # A label gone from the inventory comes off every node.
 _flux_label_placement: >-
   {%- set out = {} -%}
   {%- for label in _flux_labelled_nodes -%}
   {%- set _ = out.update({label: ''}) -%}
   {%- endfor -%}
-  {{ out | combine(_flux_label_nodes) }}
+  {{ out | combine(_flux_held_nodes) }}
 # The kubectl label arguments that leave each label in _flux_place_nodes on its node alone.
 _flux_place_changes: >-
   {%- set out = {} -%}

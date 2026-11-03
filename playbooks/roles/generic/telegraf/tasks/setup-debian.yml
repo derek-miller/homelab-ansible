@@ -6,14 +6,10 @@
     state: absent
     purge: yes
 
-- name: remove old influxdata source files
+- name: remove the keyring package's influxdata source
   file:
-    path: "{{ item }}"
+    path: /etc/apt/sources.list.d/influxdata.list
     state: absent
-  loop:
-    - /etc/apt/sources.list.d/influxdata.list
-    - /usr/share/keyrings/influxdata-archive.gpg
-    - /etc/apt/keyrings/influxdata-archive.gpg
 
 - name: add influxdata repository
   deb822_repository:

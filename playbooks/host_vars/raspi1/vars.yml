@@ -104,7 +104,7 @@ docker_compose_definition:
         - homebridge:/backup/homebridge:ro
         - portainer-agent-data:/backup/portainer-agent-data:ro
 
-lightdm_autologin_user: pi
+vnc_autologin_user: pi
 
 sudoers:
   - user: pi

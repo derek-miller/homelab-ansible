@@ -1,4 +1,4 @@
-PIP_INDEX_URL = https://pypi.python.org/simple
+PIP_INDEX_URL = https://pypi.org/simple
 
 ifeq ($(VIRTUAL_ENV),)
 $(error must run in a virtualenv)
@@ -32,10 +32,6 @@ ansible_setup = ansible -m setup $(ansible_default_flags) $(ansible_flags)
 
 ansible_bootstrap_flags = $(if $(user),--user=$(user)) --ask-pass $(if $(become_pass),--ask-become-pass)
 
-python_version_full := $(wordlist 2,4,$(subst ., ,$(shell python --version 2>&1)))
-python_version_major := $(word 1,${python_version_full})
-python_version_minor := $(word 2,${python_version_full})
-
 .PHONY: all
 all: after-git-pull check
 
@@ -60,6 +56,7 @@ install: requirements.txt playbooks/roles/ansible/remote/files/requirements.txt 
 
 .PHONY: galaxy-install
 galaxy-install: playbooks/roles/requirements.yml playbooks/collections/requirements.yml
+	rm -rf playbooks/roles/galaxy playbooks/collections/ansible_collections
 	mkdir -p playbooks/roles/galaxy
 	ansible-galaxy role install --force -r playbooks/roles/requirements.yml --roles-path playbooks/roles/
 	ansible-galaxy collection install --force -r playbooks/collections/requirements.yml --collections-path playbooks/collections/
@@ -79,10 +76,6 @@ playbooks/roles/ansible/remote/files/requirements.txt: playbooks/roles/ansible/r
 playbooks/roles/generic/tplink-plug-stats/files/requirements.txt: playbooks/roles/generic/tplink-plug-stats/files/requirements.in
 	$(pip_compile) $< -o $@
 
-.PHONY: fmt
-fmt:
-	black . --line-length 100 --target-version py$(python_version_major)$(python_version_minor)
-
 .PHONY: lint
 lint:
 	yamllint --strict .
@@ -90,8 +83,6 @@ lint:
 # Role test suites are plain-stdlib scripts, so they run in the same minimal
 # venv CI's lint job builds. Three review rounds of watchdog findings were all
 # expressible in this suite; it is a gate, not a courtesy.
-# Galaxy roles ship testinfra suites that need a converged container, not just
-# pytest, so no amount of venv work makes them runnable here.
 .PHONY: test
 test:
 	@set -e; found=0; for t in $$(find playbooks/roles -path '*/tests/test_*.py' -not -path 'playbooks/roles/galaxy/*' | sort); do \

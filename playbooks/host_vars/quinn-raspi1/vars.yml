@@ -7,10 +7,6 @@ ansible_host: !vault |
   3537323032353932350a366435376164313462656432626135306131643433613065333633323063
   64343366313465376463653765323638373464356633663063613537616139366562
 
-additional_env_vars: # TODO: Why is this needed?
-  XAUTHORITY: /home/pi/.Xauthority
-  DISPLAY: :0
-
 authorized_keys:
   - key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNxxAEcT71BAXlVhmi76gjI26BkXwjAgcLaPLIMI+i8 dmiller
     user: pi
@@ -108,7 +104,7 @@ docker_compose_definition:
         - homebridge:/backup/homebridge:ro
         - portainer-agent-data:/backup/portainer-agent-data:ro
 
-lightdm_autologin_user: pi
+vnc_autologin_user: pi
 
 sudoers:
   - user: pi

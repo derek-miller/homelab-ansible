@@ -7,10 +7,6 @@ ansible_host: !vault |
   3762663665623065350a313062633631303161316230383761396430373961353961613531653033
   37363430623730386663366335316135616431616561633364656530613735623366
 
-additional_env_vars: # TODO: Why is this needed?
-  XAUTHORITY: /home/pi/.Xauthority
-  DISPLAY: :0
-
 authorized_keys:
   - key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNxxAEcT71BAXlVhmi76gjI26BkXwjAgcLaPLIMI+i8 dmiller
     user: pi
@@ -22,7 +18,7 @@ authorized_keys:
     user: pi
     state: present
 
-lightdm_autologin_user: pi
+vnc_autologin_user: pi
 
 sudoers:
   - user: pi
