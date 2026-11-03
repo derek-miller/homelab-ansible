@@ -100,6 +100,7 @@ spec:
             - name: TZ
               value: America/Chicago
           # The port opens at once, and until YouTrack has started every path gets a 503 starting page.
+          # A clean install's setup wizard never passes this, so reach it with kubectl -n youtrack port-forward.
           readinessProbe:
             httpGet:
               path: /api/config
