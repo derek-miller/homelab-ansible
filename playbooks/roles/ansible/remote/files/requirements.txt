@@ -4,7 +4,7 @@
 #
 #    pip-compile --index-url=https://pypi.org/simple --no-strip-extras --output-file=playbooks/roles/ansible/remote/files/requirements.txt playbooks/roles/ansible/remote/files/requirements.in
 #
-certifi==2026.7.22
+certifi==2026.10.23
     # via requests
 charset-normalizer==3.5.2
     # via requests
