@@ -177,17 +177,6 @@ influxdb3_url: !vault |
   34393966613330326362383038656235336439383266643061333166616133623134393734633331
   3232383532323733370a303130313732343237636234323039346164613031356566373032383232
   38643933323866346337316665303734303131343931383034613036373663623231
-proxmox_discord_webhook_token: !vault |
-  $ANSIBLE_VAULT;1.1;AES256
-  30363566383235323563333038656431663933363631393961323730623435376530623030633666
-  6432316639323730386263633636653233623031336230660a303362383263656463653036306463
-  64373832643066626661356439383932646561636637613563386532613832356464373765343030
-  6664633966346239300a643665616239373836336637633434366236333132373033393630373132
-  66303262663735353762383762356463653964316434626538646362393834366162663966386261
-  35613262633566613062396335313634656264356138623661646361366461666534326534663863
-  64623662353864383562623939323665636138303264306161333564316461376233316132363031
-  35306566343636356561353938663032653964626138623338366234663165386462656666633231
-  3034
 
 # node-red reformats and decides where its share ends up. Mail is unusable here, no relayhost.
 proxmox_notification_targets:
@@ -205,14 +194,14 @@ proxmox_notification_targets:
       Content-Type: application/json
       X-Webhook-Token: "{{ '{{ secrets.token }}' }}"
     secrets:
-      token: "{{ node_red_webhook_token }}"
+      token: "{{ hostvars[groups['proxmox_primary'] | first].node_red_webhook_token }}"
   - name: discord
     url: "https://discord.com/api/webhooks/{{ '{{ secrets.token }}' }}"
     body_file: discord-notification-body.json
     headers:
       Content-Type: application/json
     secrets:
-      token: "{{ proxmox_discord_webhook_token }}"
+      token: "{{ hostvars[groups['proxmox_primary'] | first].proxmox_discord_webhook_token }}"
 
 # The second matcher is the first inverted, so each notification goes out once. Backup logs and
 # forwarded mail outgrow a Discord message, so they stay with node-red, which trims them.
