@@ -13,6 +13,7 @@
     owner: root
     group: root
     mode: 0600
+  register: smb_mount_credentials_result
   no_log: true
 
 - include_tasks: present-linux-share.yml
