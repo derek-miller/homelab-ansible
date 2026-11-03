@@ -80,9 +80,18 @@ spec:
         runAsGroup: 13001
         runAsNonRoot: true
       terminationGracePeriodSeconds: 60
+      # Any new build is an upgrade, which otherwise waits in the Configuration Wizard, with
+      # YouTrack down, until someone confirms it there.
+      initContainers:
+        - name: skip-upgrade-wizard
+          image: jetbrains/youtrack:2026.1.14165
+          args: [configure, -J-Ddisable.configuration.wizard.on.upgrade=true]
+          volumeMounts:
+            - name: conf
+              mountPath: /opt/youtrack/conf
       containers:
         - name: youtrack
-          # YouTrack has no floating tag, so builds are bumped by hand; a new minor runs its upgrade step on start, a build within one doesn't.
+          # YouTrack has no floating tag, so builds are bumped by hand, in this image line and the one above.
           image: jetbrains/youtrack:2026.1.14165
           ports:
             - name: http
@@ -91,11 +100,10 @@ spec:
             - name: TZ
               value: America/Chicago
           # The port opens at once, and until YouTrack has started every path gets a 503 starting page.
-          # The root, unlike /api/, also answers while an upgrade waits in its Configuration Wizard,
-          # which can only be reached while the pod is ready.
+          # A clean install's setup wizard never passes this, so reach it with kubectl -n youtrack port-forward.
           readinessProbe:
             httpGet:
-              path: /
+              path: /api/config
               port: http
           volumeMounts:
             - name: data
