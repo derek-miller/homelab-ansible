@@ -31,6 +31,7 @@ _k3s_minor: "{{ _k3s_installed_release.split('.')[1] | default(0) | int }}"
 # One minor at a time: Kubernetes cannot skip one on the way up.
 _k3s_server_release: >-
   {{ k3s_version if _k3s_exact
+     else _k3s_installed_release if _k3s_channels is failed
      else _k3s_channel_releases['v1.' ~ (_k3s_minor | int + 1)]
        if _k3s_installed_release and (_k3s_channel_releases[k3s_version].split('.')[1] | int) > _k3s_minor | int + 1
      else _k3s_channel_releases[k3s_version] }}

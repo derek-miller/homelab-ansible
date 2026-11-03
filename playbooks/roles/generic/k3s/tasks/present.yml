@@ -43,15 +43,26 @@
   until: _k3s_channels is succeeded
   retries: 3
   delay: 10
+  # A host without k3s has no release to keep.
+  ignore_errors: "{{ _k3s_installed_release | length > 0 }}"
   check_mode: no
   when: k3s_role == 'server' and not _k3s_exact
+
+- name: report keeping the installed k3s release
+  debug:
+    msg: >-
+      The k3s release channels could not be read, so k3s stays on
+      {{ _k3s_installed_release }}; the next deploy tries again.
+  when: _k3s_channels is failed
 
 - name: check k3s_version names a release or a channel
   assert:
     that: _k3s_exact or k3s_version in _k3s_channel_releases
     fail_msg: k3s_version {{ k3s_version }} is neither a release nor a channel on update.k3s.io.
     quiet: yes
-  when: k3s_role == 'server'
+  when:
+    - k3s_role == 'server'
+    - _k3s_channels is not failed
 
 - name: read the k3s release the server runs
   command: >-
