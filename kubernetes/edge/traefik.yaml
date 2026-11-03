@@ -349,6 +349,13 @@ spec:
       homelab.local/edge: "true"
     accessLog:
       enabled: true
+      format: json
+      fields:
+        headers:
+          names:
+            User-Agent: keep
+        queryParameters:
+          defaultMode: drop
     service:
       labels:
         svccontroller.k3s.cattle.io/lbpool: edge
