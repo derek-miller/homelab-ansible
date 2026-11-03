@@ -25,5 +25,5 @@
 - name: start {{ smb_mount_service_name }}.mount
   systemd:
     name: "{{ smb_mount_service_name }}.mount"
-    state: "{{ 'restarted' if systemd_mount_result.changed else 'started' }}"
+    state: "{{ 'restarted' if systemd_mount_result.changed or smb_mount_credentials_result.changed else 'started' }}"
     enabled: yes
