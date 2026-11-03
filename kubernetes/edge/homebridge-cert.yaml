@@ -24,6 +24,7 @@ spec:
       containers:
         - name: dumper
           image: ldez/traefik-certs-dumper
+          imagePullPolicy: IfNotPresent
           command:
             - sh
             - -c
