@@ -41,6 +41,7 @@ spec:
       containers:
         - name: rest-server
           image: restic/rest-server
+          imagePullPolicy: IfNotPresent
           command:
             - rest-server
           args:
