@@ -4,7 +4,7 @@ $ActionResumeRetryCount -1 # infinite retries on insert failure
 $ActionQueueSaveOnShutdown on # save in-memory data if rsyslog shuts down
 
 # forward over tcp with octet framing according to RFC 5425
-if not ($syslogfacility-text == 'authpriv' or $programname startswith 'ansible-') then @@(o)127.0.0.1:{{ telegraf_syslog_port|int }};RSYSLOG_SyslogProtocol23Format
+if not ($syslogfacility-text == 'auth' or $syslogfacility-text == 'authpriv' or $programname startswith 'ansible') then @@(o)127.0.0.1:{{ telegraf_syslog_port|int }};RSYSLOG_SyslogProtocol23Format
 
 # uncomment to use udp according to RFC 5424
-#if not ($syslogfacility-text == 'authpriv' or $programname startswith 'ansible-') then @127.0.0.1:{{ telegraf_syslog_port|int }};RSYSLOG_SyslogProtocol23Format
+#if not ($syslogfacility-text == 'auth' or $syslogfacility-text == 'authpriv' or $programname startswith 'ansible') then @127.0.0.1:{{ telegraf_syslog_port|int }};RSYSLOG_SyslogProtocol23Format
