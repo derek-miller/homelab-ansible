@@ -21,6 +21,7 @@
     --done: #18794e;
     --skipped: #6b6f7a;
     --dead: #c4262e;
+    --held: #7c3aed;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -37,6 +38,7 @@
       --done: #4cc38a;
       --skipped: #9a9daa;
       --dead: #ff6b6f;
+      --held: #b794f6;
     }
   }
   * { box-sizing: border-box; }
@@ -161,6 +163,21 @@
   .badge[data-status="skipped"] { color: var(--skipped); }
   .badge[data-status="dead"] { color: var(--dead); }
   .badge[data-status="discarded"] { color: var(--skipped); text-decoration: line-through; }
+  .badge[data-status="held"] { color: var(--held); }
+  .badge[data-status="dismissed"] { color: var(--skipped); text-decoration: line-through; }
+  .badge[data-status="expired"] { color: var(--skipped); }
+  #stat-held[data-count]:not([data-count="0"]) { color: var(--held); }
+  textarea {
+    display: block;
+    width: 100%;
+    padding: 6px 8px;
+    font: inherit;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    resize: vertical;
+  }
   dialog {
     width: min(56rem, calc(100vw - 32px));
     max-height: calc(100vh - 32px);
@@ -220,12 +237,31 @@
     <div class="stat"><span class="label">Pending</span><span id="stat-pending" class="value">–</span></div>
     <div class="stat"><span class="label">In flight</span><span id="stat-inflight" class="value">–</span></div>
     <div class="stat"><span class="label">Dead</span><span id="stat-dead" class="value">–</span></div>
+    <div class="stat"><span class="label">Held</span><span id="stat-held" class="value">–</span></div>
     <div class="stat"><span class="label">Gateway log</span><span id="stat-log" class="value">–</span></div>
   </div>
   <p id="updated" class="status-line">Loading…</p>
   <p class="notice" role="status" hidden></p>
 </header>
 <main>
+  <section id="held-section" hidden>
+    <h2>Held for approval</h2>
+    <div class="table-wrap">
+      <table id="held">
+        <thead>
+          <tr>
+            <th class="num">ID</th>
+            <th>Received</th>
+            <th>From</th>
+            <th>Thread</th>
+            <th>Type</th>
+            <th>Expires</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
   <section>
     <h2>Sessions</h2>
     <div class="toolbar">
@@ -272,6 +308,9 @@
           <option value="skipped">skipped</option>
           <option value="dead">dead</option>
           <option value="discarded">discarded</option>
+          <option value="held">held</option>
+          <option value="dismissed">dismissed</option>
+          <option value="expired">expired</option>
         </select>
       </label>
       <label>Source
@@ -334,7 +373,13 @@
       <h3>Check</h3>
       <pre id="detail-check"></pre>
     </div>
+    <div id="detail-held">
+      <h3><label for="detail-note">Note to the bot (optional)</label></h3>
+      <textarea id="detail-note" rows="4" maxlength="4000"></textarea>
+    </div>
     <div class="dialog-actions">
+      <button id="detail-approve" type="button">Approve</button>
+      <button id="detail-dismiss" type="button" class="danger">Dismiss</button>
       <button id="detail-replay" type="button">Replay</button>
       <button id="detail-discard" type="button" class="danger">Discard</button>
     </div>
@@ -357,6 +402,7 @@
   };
 
   const state = {
+    held: [],
     sessions: [],
     events: [],
     paged: false,
@@ -364,6 +410,7 @@
     generation: 0,
     selected: new Set(),
     detailId: null,
+    detailHash: null,
     openclawUrl: null,
     sort: { sessions: null, events: { key: "id", desc: true } },
   };
@@ -481,12 +528,54 @@
     return el("a", { href: `${state.openclawUrl}/chat?session=${session}`, target: "_blank", rel: "noopener noreferrer" }, text);
   }
 
+  // ─── Held events ───
+
+  function renderHeld() {
+    $("held-section").hidden = state.held.length === 0;
+    setChildren($("held").tBodies[0], state.held.map((e) =>
+      el("tr", { onclick: () => showDetail(e.id) },
+        el("td", { className: "num" }, el("button", { type: "button", className: "link" }, e.id)),
+        el("td", { title: absolute(e.received_at) }, relative(e.received_at)),
+        el("td", { className: "key" }, e.actor ?? "–"),
+        el("td", { className: "key" }, clip(e.thread_key.replace(/^github:/, ""))),
+        el("td", {}, e.event_type ?? "–"),
+        el("td", { title: absolute(e.due_at) }, relative(e.due_at)))));
+  }
+
+  /** Approve or dismiss a held event, bound to it by a notice's token or the hash of the message shown here */
+  async function decide(id, action, binding) {
+    const [verb, done] = action === "approve" ? ["Approving", "Approved"] : ["Dismissing", "Dismissed"];
+    try {
+      const response = await fetch("/api/held/decide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action, ...binding }),
+      });
+      const text = await response.text();
+      if (response.ok) notify(`${done} event ${id}.`);
+      else if (response.status === 409) notify(`Event ${id} is no longer held: it is ${JSON.parse(text).status}.`, true);
+      else notify(`${verb} event ${id} failed: ${response.status} ${text.slice(0, 200)}`, true);
+    } catch (err) {
+      notify(`${verb} event ${id} failed: ${err.message}`, true);
+    }
+  }
+
+  async function decideDetail(action) {
+    const id = state.detailId;
+    if (action === "dismiss" && !confirm(`Dismiss event ${id}? A dismissed event can't be replayed.`)) return;
+    await decide(id, action, action === "approve" ? { hash: state.detailHash, note: $("detail-note").value } : { hash: state.detailHash });
+    await showDetail(id);
+    await showNewest();
+  }
+
   // ─── Stats and sessions ───
 
   function renderStats(stats) {
     $("stat-pending").textContent = stats.pending;
     $("stat-inflight").textContent = `${stats.inFlight} / ${stats.maxInFlight}`;
     $("stat-dead").textContent = stats.dead;
+    $("stat-held").textContent = stats.held;
+    $("stat-held").dataset.count = stats.held;
     $("stat-log").textContent = stats.logStream;
     $("stat-log").dataset.state = stats.logStream;
   }
@@ -714,7 +803,7 @@
       $("detail-title").textContent = `Event ${event.id}`;
       $("detail-fields").replaceChildren(
         ...Object.entries(event)
-          .filter(([key]) => key !== "message" && key !== "check_json")
+          .filter(([key]) => !["message", "check_json", "hash"].includes(key))
           .flatMap(([key, value]) => [
             el("dt", {}, key),
             el("dd", {}, (key === "session_key" && openclawLink(value, value)) || fieldText(key, value)),
@@ -727,8 +816,11 @@
       $("detail-check-section").hidden = event.check_json == null;
       $("detail-replay").hidden = !REPLAYABLE.includes(event.status);
       $("detail-discard").hidden = !DISCARDABLE.includes(event.status);
+      state.detailHash = event.hash ?? null;
+      for (const id of ["detail-held", "detail-approve", "detail-dismiss"]) $(id).hidden = event.status !== "held";
       if (!$("detail").open) {
         $("detail").querySelector(".notice").hidden = true;
+        $("detail-note").value = "";
         $("detail").showModal();
       }
     } catch (err) {
@@ -770,12 +862,15 @@
     const updated = $("updated");
     try {
       const q = $("sessions-search").value.trim();
-      const [stats, sessions] = await Promise.all([
+      const [stats, held, sessions] = await Promise.all([
         api("/api/stats"),
+        api(`/api/events?status=held&limit=${MAX_PAGE_SIZE}`),
         api(q ? `/api/sessions?${new URLSearchParams({ q })}` : "/api/sessions"),
       ]);
       state.openclawUrl = stats.openclawUrl;
       renderStats(stats);
+      state.held = held;
+      renderHeld();
       // A search typed while this loaded gets its own refresh.
       if (q === $("sessions-search").value.trim()) {
         state.sessions = sessions;
@@ -834,7 +929,22 @@
   $("detail-raw").addEventListener("change", applyRawToggle);
   $("detail-replay").addEventListener("click", () => changeDetail("replay"));
   $("detail-discard").addEventListener("click", () => changeDetail("discard"));
+  $("detail-approve").addEventListener("click", () => decideDetail("approve"));
+  $("detail-dismiss").addEventListener("click", () => decideDetail("dismiss"));
 
+  /** A held-event notice links here to approve or dismiss the event, or to open it for a note */
+  async function followNoticeLink() {
+    const params = new URLSearchParams(location.search);
+    const action = ["approve", "dismiss", "held"].find((key) => /^\d+$/.test(params.get(key) ?? ""));
+    if (!action) return;
+    history.replaceState(null, "", location.pathname);
+    const id = Number(params.get(action));
+    if (action !== "held") await decide(id, action, { token: params.get("t") ?? "" });
+    await showDetail(id);
+    if (action === "held") $("detail-note").focus();
+  }
+
+  followNoticeLink();
   poll();
 </script>
 </body>

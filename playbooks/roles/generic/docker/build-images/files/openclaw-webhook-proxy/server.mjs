@@ -6,7 +6,9 @@
  * session's queued events to the OpenClaw hooks API as one turn once that
  * session has no turn in flight, and follows the gateway log to learn when
  * the turn has ended. It also serves an admin page at / with a JSON API under
- * /api/ for watching the inbox and replaying or discarding events.
+ * /api/ for watching the inbox and replaying or discarding events. A GitHub event
+ * from someone outside the source's allowlist, other than a bot, is held until an
+ * approver approves or dismisses it there.
  *
  * Always required:
  *   OPENCLAW_HOOKS_TOKEN     — bearer token for the OpenClaw hooks API
@@ -23,8 +25,10 @@
  *                              past it is given up on (default: 3600)
  *   BATCH_WINDOW_MS          — how long an event waits for related events (default: 10000)
  *   INBOX_PATH               — SQLite inbox file (default: /data/inbox.db)
- *   DISCORD_WEBHOOK_URL      — Discord webhook told when a session's events give up (optional)
+ *   DISCORD_WEBHOOK_URL      — Discord webhook told when a session's events give up or an event is held (optional)
  *   OPENCLAW_UI_URL          — OpenClaw Control UI base URL the admin page links sessions to (optional)
+ *   ADMIN_URL                — the admin page's base URL, which held-event notices link to (no notices without it)
+ *   ADMIN_APPROVERS          — comma-separated sign-in emails that may approve, dismiss, replay and discard events
  *
  * At least one hook source must be configured:
  *
@@ -34,7 +38,8 @@
  *   GITHUB_<NAME>_HOOK_PATH       — URL path prefix for this source's webhooks
  *   GITHUB_<NAME>_WEBHOOK_SECRET  — the webhook secret shared with GitHub
  *   GITHUB_<NAME>_GUARDRAILS_FILE — path to file containing GitHub guardrails text, read for each turn
- *   GITHUB_<NAME>_ALLOW_USERS     — comma-separated usernames to allow (allowlist mode; mutually exclusive with GITHUB_<NAME>_IGNORE_USERS)
+ *   GITHUB_<NAME>_ALLOW_USERS     — comma-separated usernames to allow; other users' events are held for approval and bots'
+ *                                   are skipped (allowlist mode; mutually exclusive with GITHUB_<NAME>_IGNORE_USERS)
  *   GITHUB_<NAME>_IGNORE_USERS    — comma-separated usernames to skip (ignorelist mode; mutually exclusive with GITHUB_<NAME>_ALLOW_USERS)
  *   GITHUB_<NAME>_SELF_USERS      — comma-separated commit-author names for this agent's own bots; all-green CI batches on their commits are dropped (optional)
  *
@@ -48,7 +53,7 @@
  */
 
 import { createServer } from "node:http";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
@@ -95,6 +100,8 @@ const INBOX_PATH = process.env.INBOX_PATH || "/data/inbox.db";
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "";
 const OPENCLAW_UI_URL = (process.env.OPENCLAW_UI_URL || "").replace(/\/+$/, "");
 const YOUTRACK_BASE_URL = process.env.YOUTRACK_BASE_URL || "";
+const ADMIN_URL = (process.env.ADMIN_URL || "").replace(/\/+$/, "");
+const ADMIN_APPROVERS = envList("ADMIN_APPROVERS");
 
 const MAX_BATCH_SIZE = 50;
 // The gateway's /hooks body limit is 256 KiB.
@@ -107,6 +114,9 @@ const RETRY_BACKOFF_MS = 5 * 60_000;
 const BUSY_RETRY_MS = 60_000;
 const BACKSTOP_MS = OPENCLAW_TIMEOUT_SECONDS * 1000 + 5 * 60_000;
 const RETENTION_MS = 30 * 24 * 60 * 60_000;
+const HOLD_MS = 7 * 24 * 60 * 60_000;
+const NOTICE_TEXT_CHARS = 1500;
+const MAX_NOTE_CHARS = 4000;
 const CAPACITY_ERROR = "Too many Claude CLI live sessions";
 
 /** "up" while the gateway log is streaming; nothing is sent otherwise */
@@ -912,23 +922,38 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS events_status_session ON events (status, session_key);
   CREATE INDEX IF NOT EXISTS events_thread ON events (thread_key);
 `);
+if (db.prepare("PRAGMA user_version").get().user_version === 0) {
+  db.exec(`
+    BEGIN;
+    ALTER TABLE events ADD COLUMN actor TEXT;
+    ALTER TABLE events ADD COLUMN token_hash TEXT;
+    ALTER TABLE events ADD COLUMN notice_id TEXT;
+    ALTER TABLE events ADD COLUMN decided_by TEXT;
+    ALTER TABLE events ADD COLUMN decided_at INTEGER;
+    ALTER TABLE events ADD COLUMN note TEXT;
+    PRAGMA user_version = 1;
+    COMMIT;
+  `);
+}
 // A send cut off by a restart has no run id for a completion line to match.
 db.exec(`UPDATE events SET status = 'pending' WHERE status = 'sent' AND run_id IS NULL`);
 
 // status: pending → sent → done; skipped, dead once out of attempts, or discarded.
+// A held event's due_at is when it expires; approving it makes it pending, or it ends dismissed or expired.
 const insertEvent = db.prepare(`
   INSERT INTO events (received_at, source, thread_key, session_key, delivery_id,
-                      event_type, detail, message, check_json, status, due_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`);
+                      event_type, detail, message, check_json, status, due_at, actor, token_hash)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`);
 const moveThreadToKey = db.prepare(`
-  UPDATE events SET session_key = ? WHERE thread_key = ? AND status = 'pending'`);
+  UPDATE events SET session_key = ? WHERE thread_key = ? AND status IN ('pending', 'held')`);
 const latestTicketKey = db.prepare(`
   SELECT session_key FROM events
   WHERE thread_key = ? AND session_key LIKE 'ticket:%' ORDER BY id DESC LIMIT 1`);
 const inboxStats = db.prepare(`
   SELECT COUNT(*) FILTER (WHERE status = 'pending') AS pending,
          COUNT(DISTINCT session_key) FILTER (WHERE status = 'sent') AS inFlight,
-         COUNT(*) FILTER (WHERE status = 'dead') AS dead
+         COUNT(*) FILTER (WHERE status = 'dead') AS dead,
+         COUNT(*) FILTER (WHERE status = 'held') AS held
   FROM events`);
 const sourceNames = JSON.stringify(SOURCES.map((s) => s.name));
 const nextDueKey = db.prepare(`
@@ -973,7 +998,8 @@ const failRows = db.prepare(`
   WHERE status = 'sent' AND id IN (SELECT value FROM json_each(?))
   RETURNING session_key, status`);
 const pruneRows = db.prepare(`
-  DELETE FROM events WHERE status IN ('done', 'skipped', 'dead', 'discarded') AND received_at < ?`);
+  DELETE FROM events WHERE status IN ('done', 'skipped', 'dead', 'discarded', 'dismissed', 'expired')
+    AND received_at < ?`);
 const sessionSummary = db.prepare(`
   SELECT session_key,
          COUNT(*) FILTER (WHERE status = 'pending') AS pending,
@@ -987,7 +1013,7 @@ const sessionSummary = db.prepare(`
   ORDER BY pending + sent + dead = 0, last_received DESC LIMIT 200`);
 const listEvents = db.prepare(`
   SELECT id, received_at, source, thread_key, session_key, delivery_id, event_type, detail,
-         status, due_at, attempts, run_id, sent_at, last_error
+         status, due_at, attempts, run_id, sent_at, last_error, actor, decided_by
   FROM events
   WHERE (:status IS NULL OR status = :status) AND (:source IS NULL OR source = :source)
     AND (:session IS NULL OR session_key = :session) AND (:before IS NULL OR id < :before)
@@ -1009,11 +1035,22 @@ const discardRows = db.prepare(`
   UPDATE events SET status = 'discarded'
   WHERE status IN ('pending', 'dead') AND id IN (SELECT value FROM json_each(?))
   RETURNING id`);
+const approveRow = db.prepare(`
+  UPDATE events SET status = 'pending', due_at = :now, decided_by = :by, decided_at = :now, note = :note
+  WHERE id = :id AND status = 'held' AND due_at > :now
+  RETURNING *`);
+const dismissRow = db.prepare(`
+  UPDATE events SET status = 'dismissed', decided_by = :by, decided_at = :now
+  WHERE id = :id AND status = 'held' AND due_at > :now
+  RETURNING *`);
+const expireRows = db.prepare(`
+  UPDATE events SET status = 'expired' WHERE status = 'held' AND due_at <= ? RETURNING *`);
+const setNoticeId = db.prepare(`UPDATE events SET notice_id = ? WHERE id = ?`);
 
-/** Queue one accepted event; throws if the inbox cannot take it */
-function enqueue(source, threadKey, sessionKey, deliveryId, eventEntry, dueNow) {
+/** Queue one accepted event, or hold one for approval; returns its id and throws if the inbox cannot take it */
+function enqueue(source, threadKey, sessionKey, deliveryId, eventEntry, dueNow, held = null) {
   const now = Date.now();
-  insertEvent.run(
+  return insertEvent.get(
     now,
     source.name,
     threadKey,
@@ -1023,8 +1060,18 @@ function enqueue(source, threadKey, sessionKey, deliveryId, eventEntry, dueNow) 
     eventEntry.detail,
     eventEntry.formattedMessage,
     eventEntry.check ? JSON.stringify(eventEntry.check) : null,
-    dueNow ? 0 : now + BATCH_WINDOW_MS
-  );
+    held ? "held" : "pending",
+    held ? now + HOLD_MS : dueNow ? 0 : now + BATCH_WINDOW_MS,
+    held?.actor ?? null,
+    held?.tokenHash ?? null
+  ).id;
+}
+
+const sha256 = (text) => createHash("sha256").update(text).digest("hex");
+
+function sameHex(a, b) {
+  return typeof a === "string" && typeof b === "string" && a.length === b.length &&
+    timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
 const idList = (rows) => JSON.stringify(rows.map((row) => row.id));
@@ -1093,8 +1140,8 @@ function sendJson(res, status, value) {
   res.end(body);
 }
 
-/** Read the event ids from a {"ids": [...]} body; answers the request itself and returns null when it can't */
-async function readIds(req, res) {
+/** Read a JSON object body; answers the request itself and returns null when it can't */
+async function readJson(req, res) {
   const contentType = (req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
   if (contentType !== "application/json") {
     res.writeHead(415);
@@ -1103,18 +1150,68 @@ async function readIds(req, res) {
   }
   const raw = await readBody(req, res, MAX_ADMIN_BODY_BYTES);
   if (!raw) return null;
-  let ids;
+  let body;
   try {
-    ids = JSON.parse(raw.toString())?.ids;
+    body = JSON.parse(raw.toString());
   } catch {
-    ids = null;
+    body = null;
   }
+  if (body === null || typeof body !== "object") {
+    res.writeHead(400);
+    res.end("Body must be a JSON object");
+    return null;
+  }
+  return body;
+}
+
+/** Read the event ids from a {"ids": [...]} body; answers the request itself and returns null when it can't */
+async function readIds(req, res) {
+  const body = await readJson(req, res);
+  if (!body) return null;
+  const ids = body.ids;
   if (!Array.isArray(ids) || !ids.every(Number.isInteger)) {
     res.writeHead(400);
     res.end('Body must be {"ids": [<event id>, ...]}');
     return null;
   }
   return ids;
+}
+
+/** The signed-in approver's email, or null once it has answered 403 */
+function approver(req, res) {
+  const email = (req.headers["x-auth-request-email"] || "").trim().toLowerCase();
+  if (email && ADMIN_APPROVERS.includes(email)) return email;
+  res.writeHead(403);
+  res.end(`${email || "This sign-in"} can't change the inbox`);
+  return null;
+}
+
+/** Approve or dismiss one held event, bound to it by the notice's token or the hash of the message the page showed */
+async function decideHeld(req, res, by) {
+  const body = await readJson(req, res);
+  if (!body) return;
+  const { id, action, token, hash, note } = body;
+  if (!Number.isInteger(id) || !["approve", "dismiss"].includes(action) ||
+      (note != null && (typeof note !== "string" || note.length > MAX_NOTE_CHARS))) {
+    res.writeHead(400);
+    res.end(`Body must be {"id", "action": "approve" | "dismiss", "token" or "hash", "note"?} with a note of at most ${MAX_NOTE_CHARS} characters`);
+    return;
+  }
+  const row = eventById.get(id);
+  if (!row || !(token != null ? sameHex(sha256(String(token)), row.token_hash) : sameHex(hash, sha256(row.message)))) {
+    res.writeHead(403);
+    res.end("That link or page doesn't match a held event");
+    return;
+  }
+  const params = { id, by, now: Date.now(), note: note?.trim() || null };
+  const decided = action === "approve" ? approveRow.get(params) : dismissRow.get({ id, by, now: params.now });
+  if (!decided) {
+    sendJson(res, 409, { status: row.status === "held" ? "expired" : row.status });
+    return;
+  }
+  logInfo(`${action === "approve" ? "Approved" : "Dismissed"} held event ${id} from ${row.actor} (${by})`);
+  closeNotice(decided);
+  sendJson(res, 200, { status: decided.status });
 }
 
 /** Serve the admin page and its API; `path` is the raw request path */
@@ -1128,7 +1225,8 @@ async function handleAdmin(req, res, path) {
       res.end("No such event");
       return;
     }
-    sendJson(res, 200, row);
+    const { token_hash, ...event } = row;
+    sendJson(res, 200, row.status === "held" ? { ...event, hash: sha256(row.message) } : event);
     return;
   }
 
@@ -1169,7 +1267,7 @@ async function handleAdmin(req, res, path) {
       }));
       return;
     case "/api/replay": {
-      if (!allowMethod(req, res, "POST")) return;
+      if (!allowMethod(req, res, "POST") || !approver(req, res)) return;
       const ids = await readIds(req, res);
       if (!ids) return;
       const replayed = replayRows.all(Date.now(), JSON.stringify(ids)).length;
@@ -1178,12 +1276,18 @@ async function handleAdmin(req, res, path) {
       return;
     }
     case "/api/discard": {
-      if (!allowMethod(req, res, "POST")) return;
+      if (!allowMethod(req, res, "POST") || !approver(req, res)) return;
       const ids = await readIds(req, res);
       if (!ids) return;
       const discarded = discardRows.all(JSON.stringify(ids)).length;
       logInfo(`Discarded ${discarded} event(s) from the admin page`);
       sendJson(res, 200, { discarded });
+      return;
+    }
+    case "/api/held/decide": {
+      if (!allowMethod(req, res, "POST")) return;
+      const by = approver(req, res);
+      if (by) await decideHeld(req, res, by);
       return;
     }
     default:
@@ -1362,7 +1466,8 @@ const server = createServer(async (req, res) => {
       source.allowUsers,
       source.ignoreUsers
     );
-    if (!processGitHub) {
+    const held = !processGitHub && githubReason === "not in allowlist" && !actor.toLowerCase().endsWith("[bot]");
+    if (!processGitHub && !held) {
       console.log(
         `[${new Date().toISOString()}] Skipping GitHub event from ${actor || "(no actor)"} (${githubReason})`
       );
@@ -1394,6 +1499,8 @@ const server = createServer(async (req, res) => {
       formattedMessage: eventMessage,
       check: getCheckMeta(event, payload),
     };
+    const token = held ? randomBytes(16).toString("hex") : null;
+    let id;
 
     try {
       // A PR or issue stays on the newest ticket key it has resolved, and its
@@ -1403,7 +1510,8 @@ const server = createServer(async (req, res) => {
       } else if (thread.numbered) {
         sessionKey = latestTicketKey.get(threadKey)?.session_key ?? sessionKey;
       }
-      enqueue(source, threadKey, sessionKey, delivery, eventEntry, isDueImmediately(event, payload));
+      id = enqueue(source, threadKey, sessionKey, delivery, eventEntry, isDueImmediately(event, payload),
+        held ? { actor, tokenHash: sha256(token) } : null);
     } catch (err) {
       logWarn(`Failed to queue GitHub ${event} (delivery: ${delivery}): ${err.message}`);
       res.writeHead(500);
@@ -1411,9 +1519,13 @@ const server = createServer(async (req, res) => {
       return;
     }
     logDebug(`GitHub ${event} (${detail}): thread ${thread.id} → session ${sessionKey}`);
+    if (held) {
+      logInfo(`Holding GitHub ${event} from ${actor} for approval (event ${id})`);
+      if (DISCORD_WEBHOOK_URL && ADMIN_URL) noticeHeld(id, token, event, payload);
+    }
 
     res.writeHead(200);
-    res.end("OK");
+    res.end(held ? "OK (held for approval)" : "OK");
     return;
   }
 
@@ -1584,7 +1696,17 @@ function wrapUntrusted(body) {
   ].join("\n");
 }
 
-/** Build the combined message for one turn: the events wrapped, then the rules as written */
+/** Say which of a turn's events an approver let through from outside the allowlist, with their notes */
+function approvalLines(rows) {
+  return rows.flatMap((row, i) => {
+    if (!row.decided_by) return [];
+    const which = rows.length === 1 ? "The event above" : `Event ${i + 1}`;
+    const line = `${which} is from ${row.actor}, who is not on the allowlist. ${row.decided_by} read it and approved passing it to you.`;
+    return [row.note ? `${line} Their note on it:\n${row.note}` : line];
+  });
+}
+
+/** Build the combined message for one turn: the events wrapped, any approvals, then the rules as written */
 function buildMessage(guardrails, rows) {
   const events =
     rows.length === 1
@@ -1592,21 +1714,88 @@ function buildMessage(guardrails, rows) {
       : rows
           .map((e, i) => `--- Event ${i + 1} of ${rows.length}: ${e.event_type} (${e.detail}) ---\n${e.message}`)
           .join("\n\n");
+  const approvals = approvalLines(rows).map((line) => `${line}\n\n`).join("");
   // The Control UI shows only a message's first 8,000 characters, and the rules run longer.
-  return `${wrapUntrusted(events)}\n\n${guardrails}`;
+  return `${wrapUntrusted(events)}\n\n${approvals}${guardrails}`;
+}
+
+/** Post a message to the Discord webhook, or edit the one with `messageId`; returns the message's id */
+async function postDiscord(message, messageId = null) {
+  const url = new URL(DISCORD_WEBHOOK_URL);
+  if (messageId) url.pathname += `/messages/${messageId}`;
+  else url.searchParams.set("wait", "true");
+  url.searchParams.set("with_components", "true");
+  const response = await fetch(url, {
+    method: messageId ? "PATCH" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...message, allowed_mentions: { parse: [] } }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error(`Discord webhook returned ${response.status}`);
+  return (await response.json()).id;
 }
 
 async function notifyDiscord(text) {
   try {
-    const response = await fetch(DISCORD_WEBHOOK_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: text.slice(0, 2000) }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) logWarn(`Discord webhook returned ${response.status}`);
+    await postDiscord({ content: text.slice(0, 2000) });
   } catch (err) {
     logWarn(`Discord webhook failed: ${err.message}`);
+  }
+}
+
+/** Cut text to at most `max` UTF-16 units, ending in "…" when cut */
+function clip(text, max) {
+  if (text.length <= max) return text;
+  let out = "";
+  for (const ch of text) {
+    if (out.length + ch.length > max - 1) break;
+    out += ch;
+  }
+  return `${out}…`;
+}
+
+/** A held event's Discord notice: the outside text in an embed, which never pings, with its masked links opened up */
+function heldNotice(row, token, event, payload) {
+  const subject = payload.pull_request ?? payload.issue;
+  const item = payload.comment ?? payload.review ?? subject;
+  const user = (payload.comment ?? payload.review)?.user ?? payload.sender;
+  const repo = payload.repository?.full_name ?? "unknown";
+  const link = (label, query) => ({ type: 2, style: 5, label, url: `${ADMIN_URL}/?${query}` });
+  return {
+    content: `**Held for approval** · expires <t:${Math.floor(row.due_at / 1000)}:R>`,
+    embeds: [{
+      author: { name: row.actor, url: user?.html_url, icon_url: user?.avatar_url },
+      title: clip(subject ? `${repo}#${subject.number}: ${subject.title}` : repo, 256),
+      url: item?.html_url ?? subject?.html_url,
+      description: clip((item?.body ?? "").replaceAll("](", "] ("), NOTICE_TEXT_CHARS) || undefined,
+      footer: { text: [event, payload.action, payload.review?.state].filter(Boolean).join(" · ") },
+      timestamp: new Date(row.received_at).toISOString(),
+      color: 0x7c3aed,
+    }],
+    components: [{ type: 1, components: [
+      link("Approve", `approve=${row.id}&t=${token}`),
+      link("Approve with note", `held=${row.id}`),
+      link("Dismiss", `dismiss=${row.id}&t=${token}`),
+    ] }],
+  };
+}
+
+async function noticeHeld(id, token, event, payload) {
+  try {
+    setNoticeId.run(await postDiscord(heldNotice(eventById.get(id), token, event, payload)), id);
+  } catch (err) {
+    logWarn(`Discord notice for held event ${id} failed: ${err.message}`);
+  }
+}
+
+/** Say on a held event's notice what became of it, and drop its links */
+async function closeNotice(row) {
+  if (!row.notice_id || !DISCORD_WEBHOOK_URL) return;
+  const outcome = { dismissed: "Dismissed", expired: "Expired" }[row.status] ?? (row.note ? "Approved with a note" : "Approved");
+  try {
+    await postDiscord({ content: `**${outcome}**`, components: [] }, row.notice_id);
+  } catch (err) {
+    logWarn(`Updating the Discord notice for event ${row.id} failed: ${err.message}`);
   }
 }
 
@@ -1673,6 +1862,7 @@ async function tick() {
   try {
     const now = Date.now();
     pruneRows.run(now - RETENTION_MS);
+    for (const row of expireRows.all(now)) closeNotice(row);
     if (logStream === "up") {
       const overdue = Map.groupBy(overdueRows.all(now - BACKSTOP_MS), (row) => row.session_key);
       for (const rows of overdue.values()) fail(rows, "no completion line");
