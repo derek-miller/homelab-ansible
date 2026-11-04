@@ -1696,14 +1696,10 @@ function wrapUntrusted(body) {
   ].join("\n");
 }
 
-/** Say which of a turn's events an approver let through from outside the allowlist, with their notes */
-function approvalLines(rows) {
-  return rows.flatMap((row, i) => {
-    if (!row.decided_by) return [];
-    const which = rows.length === 1 ? "The event above" : `Event ${i + 1}`;
-    const line = `${which} is from ${row.actor}, who is not on the allowlist. ${row.decided_by} read it and approved passing it to you.`;
-    return [row.note ? `${line} Their note on it:\n${row.note}` : line];
-  });
+/** Say that an approver let `row`, the event called `which`, through from outside the allowlist, with their note */
+function approvalLine(row, which) {
+  const line = `${which} is from ${row.actor}, who is not on the allowlist. ${row.decided_by} read it and approved passing it to you.`;
+  return row.note ? `${line} Their note on it:\n${row.note}` : line;
 }
 
 /** Build the combined message for one turn: the events wrapped, any approvals, then the rules as written */
@@ -1714,7 +1710,9 @@ function buildMessage(guardrails, rows) {
       : rows
           .map((e, i) => `--- Event ${i + 1} of ${rows.length}: ${e.event_type} (${e.detail}) ---\n${e.message}`)
           .join("\n\n");
-  const approvals = approvalLines(rows).map((line) => `${line}\n\n`).join("");
+  const approvals = rows
+    .map((row, i) => row.decided_by ? `${approvalLine(row, rows.length === 1 ? "The event above" : `Event ${i + 1}`)}\n\n` : "")
+    .join("");
   // The Control UI shows only a message's first 8,000 characters, and the rules run longer.
   return `${wrapUntrusted(events)}\n\n${approvals}${guardrails}`;
 }
@@ -1834,6 +1832,7 @@ async function dispatch() {
     let size = Buffer.byteLength(JSON.stringify(guardrails));
     for (const row of pendingRows.all(sessionKey, source.name)) {
       size += Buffer.byteLength(JSON.stringify(row.message));
+      if (row.decided_by) size += Buffer.byteLength(JSON.stringify(approvalLine(row, "The event above")));
       if (rows.length > 0 && size > MAX_MESSAGE_BYTES) break;
       rows.push(row);
     }
