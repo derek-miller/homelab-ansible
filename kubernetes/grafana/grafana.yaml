@@ -85,10 +85,16 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/grafana
+            - name: alerting
+              mountPath: /etc/grafana/provisioning/alerting
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: data
+        - name: alerting
+          configMap:
+            name: alerting
 ---
 apiVersion: v1
 kind: Service
