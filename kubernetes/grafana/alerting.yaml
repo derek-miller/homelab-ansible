@@ -1,0 +1,1425 @@
+---
+# Grafana provisions these at every start, and its UI can't edit what they define.
+# In rules.yaml and notifications.yaml a literal $ is written $$, since Grafana expands env vars there;
+# templates.yaml is read as is. DISCORD_ALERTS_WEBHOOK_URL comes from the Secret grafana.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alerting
+  namespace: grafana
+data:
+  rules.yaml: |
+    apiVersion: 1
+    groups:
+        - orgId: 1
+          name: backup
+          folder: Alerting
+          interval: 1m
+          rules:
+            - uid: efuvojpiqusxse
+              title: Volume Backup Stale
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT directory, (EXTRACT(EPOCH FROM now()) - MAX(newest_file_timestamp)/1000000000) AS value FROM volume_backups WHERE time >= now() - interval '15 minutes' GROUP BY directory HAVING MAX("count") > 0
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 172800
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 30m
+              annotations:
+                description: The newest backup in {{ $$labels.directory }} is more than 2 days old
+                summary: '{{ $$labels.directory }} has no recent backup'
+              isPaused: false
+            - uid: cfuvojpq3k1kwc
+              title: Volume Backup Empty
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT directory, MAX("count") AS value FROM volume_backups WHERE time >= now() - interval '15 minutes' GROUP BY directory
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 30m
+              annotations:
+                description: '{{ $$labels.directory }} holds no backups: no archives, or no restic snapshots'
+                summary: '{{ $$labels.directory }} contains no backups'
+              isPaused: false
+            - uid: ffuvojpuqv8qoa
+              title: Volume Backup Metrics Absent
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 3600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT CASE WHEN MAX(time) >= now() - interval '15 minutes' THEN 1 ELSE 0 END AS value FROM volume_backups WHERE time >= now() - interval '1 hour'
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 3600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: Alerting
+              execErrState: Alerting
+              for: 15m
+              annotations:
+                description: The volume_backups measurement has received nothing for 15 minutes
+                summary: No volume backup metrics are being reported
+              isPaused: false
+            - uid: eg3bz48m92ps0d
+              title: Backup Failed (k3s)
+              condition: C
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT namespace, EXTRACT(EPOCH FROM now()) - EXTRACT(EPOCH FROM COALESCE(MAX(CASE WHEN reason = 'Succeeded' THEN to_timestamp(completed) END), to_timestamp(0))) AS value FROM kubernetes_backup_status WHERE time >= now() - interval '15 minutes' GROUP BY namespace
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT namespace, CASE WHEN MAX(CASE WHEN reason <> 'Succeeded' THEN to_timestamp(completed) END) > COALESCE(MAX(CASE WHEN reason = 'Succeeded' THEN to_timestamp(completed) END), to_timestamp(0)) THEN 1 ELSE 0 END AS value FROM kubernetes_backup_status WHERE time >= now() - interval '15 minutes' GROUP BY namespace
+                    refId: B
+                - refId: C
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    expression: $$A > 111600 || $$B > 0
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: C
+                    type: math
+              noDataState: Alerting
+              execErrState: Error
+              for: 5m
+              annotations:
+                description: The newest k8up Backup in {{ $$labels.namespace }} ended Failed, or none has succeeded for 31 hours (last good one {{ humanizeDuration $$values.A.Value }} ago). `sudo k3s kubectl -n {{ $$labels.namespace }} get backups,jobs` shows which job failed.
+                summary: '{{ $$labels.namespace }} has no good backup'
+              isPaused: false
+        - orgId: 1
+          name: control4
+          folder: Alerting
+          interval: 1m
+          rules:
+            - uid: afsdvbdmwtw5cd
+              title: Director API Unavailable
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT controller, MAX(CASE WHEN result = 'success' THEN 1 ELSE 0 END) AS value FROM http_response WHERE time >= now() - interval '2 minutes' GROUP BY controller
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 5m
+              annotations:
+                description: The Director API on {{ $$labels.controller }} has not reported director=connected for at least 5 minutes
+                summary: '{{ $$labels.controller }} Director API is unavailable'
+              isPaused: false
+            - uid: cfuoxnfls4qo0c
+              title: Low Battery (Warning)
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: bfhp16p6r8l4wf
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT room_name, device_name, MIN(level) AS value FROM battery WHERE time >= now() - interval '15 minutes' GROUP BY room_name, device_name
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 20
+                                - 30
+                            type: within_range
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 15m
+              annotations:
+                description: The battery in {{ $$labels.device_name }} ({{ $$labels.room_name }}) is in the warning range (20-30) for at least 15 minutes
+                summary: '{{ $$labels.device_name }} in {{ $$labels.room_name }} has a low (warning) battery'
+              labels:
+                severity: warning
+              isPaused: false
+            - uid: afuoxo0keyfb4c
+              title: ESPHome Device Offline
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: bfhp16p6r8l4wf
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT room_name, device_name, MIN(connected) AS value FROM connectivity WHERE time >= now() - interval '2 minutes' GROUP BY room_name, device_name
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 15m
+              annotations:
+                description: '{{ $$labels.device_name }} ({{ $$labels.room_name }}) has reported Connected=0 for at least 15 minutes'
+                summary: '{{ $$labels.device_name }} in {{ $$labels.room_name }} is offline'
+              isPaused: false
+            - uid: cfurg5v0pse80b
+              title: Low Battery (Critical)
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: bfhp16p6r8l4wf
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT room_name, device_name, MIN(level) AS value FROM battery WHERE time >= now() - interval '15 minutes' GROUP BY room_name, device_name
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 20
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 15m
+              annotations:
+                description: The battery in {{ $$labels.device_name }} ({{ $$labels.room_name }}) has been below 20 for at least 15 minutes
+                summary: '{{ $$labels.device_name }} in {{ $$labels.room_name }} has a critical battery'
+              labels:
+                severity: critical
+              isPaused: false
+        - orgId: 1
+          name: cpu
+          folder: Alerting
+          interval: 1m
+          rules:
+            - uid: bfr7ei4b8msxse
+              title: Prolonged High CPU
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT host, AVG(usage_active) AS value FROM cpu WHERE cpu = 'cpu-total' AND time >= now() - interval '5 minutes' GROUP BY host
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 90
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 15m
+              annotations:
+                description: '{{ $$labels.host }} has averaged over 90% CPU usage for at least 15 minutes'
+                summary: '{{ $$labels.host }} CPU sustained above 90%'
+              isPaused: false
+        - orgId: 1
+          name: deadman
+          folder: Alerting
+          interval: 1m
+          rules:
+            - uid: afdv3mmegwyrka
+              title: Host Deadman
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 86400
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT host, CASE WHEN max(time) >= now() - interval '90 seconds' THEN 1 ELSE 0 END as value FROM system WHERE time >= now() - interval '24 hours' GROUP BY host
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: Alerting
+              execErrState: Error
+              for: 2m
+              annotations:
+                description: No Telegraf data received from {{ $$labels.host }} in the last 90 seconds
+                summary: '{{ $$labels.host }} is unreachable'
+              isPaused: false
+        - orgId: 1
+          name: disk
+          folder: Alerting
+          interval: 1m
+          rules:
+            - uid: afk24romjhblsd
+              title: Root Disk Full
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT host, MAX(used_percent) AS value FROM disk WHERE path = '/' AND time >= now() - interval '5 minutes' GROUP BY host
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 85
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 15m
+              annotations:
+                description: Root fs on {{ $$labels.host }} is above 85% full
+                summary: '{{ $$labels.host }} root disk usage above threshold'
+              isPaused: false
+            - uid: ffr7ehxg869z4e
+              title: Disk Space Low (Non-Root)
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT host, path, MAX(used_percent) AS value FROM disk WHERE path != '/' AND fstype IN ('ext4','apfs','exfat') AND path NOT LIKE '/System/Volumes%' AND path NOT LIKE '/Volumes/.timemachine%' AND path NOT LIKE '/Volumes/com.apple.TimeMachine%' AND time >= now() - interval '5 minutes' GROUP BY host, path
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 85
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 15m
+              annotations:
+                description: Filesystem {{ $$labels.path }} on {{ $$labels.host }} is above 85% full
+                summary: '{{ $$labels.host }} disk usage above threshold on {{ $$labels.path }}'
+              isPaused: false
+            - uid: eg10kxgyq9am8e
+              title: InfluxDB Data Disk Growing Fast
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 21600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    dataset: iox
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawQuery: true
+                    rawSql: SELECT host, path, (last_value(used ORDER BY time) - first_value(used ORDER BY time)) / 1073741824.0 AS value FROM disk WHERE host = 'rackvm4' AND path = '/mnt/data' AND time >= now() - interval '6 hours' GROUP BY host, path
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 21600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 15
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 15m
+              annotations:
+                description: '{{ $$labels.path }} on {{ $$labels.host }} (InfluxDB data) has grown by more than 15 GB in the last 6 hours. Normal growth is under 1 GB per 6 hours; fast growth has meant the compactor is leaking files.'
+                summary: '{{ $$labels.path }} on {{ $$labels.host }} is growing unusually fast'
+              isPaused: false
+        - orgId: 1
+          name: docker
+          folder: Alerting
+          interval: 1m
+          rules:
+            - uid: eg10kxguwwvlsb
+              title: Sustained Container CPU
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 21600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    dataset: iox
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawQuery: true
+                    rawSql: SELECT host, coalesce("com.docker.swarm.service.name", container_name) AS container_name, AVG(usage_percent) AS value FROM docker_container_cpu WHERE cpu = 'cpu-total' AND time >= now() - interval '6 hours' GROUP BY host, 2 HAVING count(*) > 1000
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 21600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 95
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 15m
+              annotations:
+                description: '{{ $$labels.container_name }} on {{ $$labels.host }} has averaged over 95% of one CPU core for the last 6 hours.'
+                summary: '{{ $$labels.container_name }} on {{ $$labels.host }} has been using a full CPU core for hours'
+              isPaused: false
+            - uid: ffr7eiq03e48wf
+              title: Container Unhealthy
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT host, container_name, MAX(CASE WHEN health_status = 'unhealthy' THEN 1 ELSE 0 END) AS value FROM docker_container_health WHERE time >= now() - interval '5 minutes' GROUP BY host, container_name
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 2m
+              annotations:
+                description: Docker healthcheck for {{ $$labels.container_name }} on {{ $$labels.host }} is reporting unhealthy
+                summary: '{{ $$labels.container_name }} on {{ $$labels.host }} is unhealthy'
+              isPaused: false
+            - uid: dfr7ej4ppd3i8b
+              title: Container OOM Killed
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT host, container_name, MAX(CASE WHEN oomkilled THEN 1 ELSE 0 END) AS value FROM docker_container_status WHERE time >= now() - interval '10 minutes' GROUP BY host, container_name
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 1m
+              annotations:
+                description: '{{ $$labels.container_name }} on {{ $$labels.host }} was killed by the OOM killer in the last 10 minutes'
+                summary: '{{ $$labels.container_name }} on {{ $$labels.host }} was OOM-killed'
+              isPaused: false
+            - uid: dfr7jpvs3gxdsd
+              title: Container Crash Loop (Compose)
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 1800
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT host, container_name, (MAX(restart_count) - MIN(restart_count)) AS value FROM docker_container_status WHERE "com.docker.swarm.service.name" IS NULL AND time >= now() - interval '30 minutes' GROUP BY host, container_name
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 1800
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 1m
+              annotations:
+                description: '{{ $$labels.container_name }} on {{ $$labels.host }} has restarted multiple times in the last 30 minutes'
+                summary: '{{ $$labels.container_name }} on {{ $$labels.host }} is crash-looping'
+              isPaused: false
+        - orgId: 1
+          name: k3s
+          folder: Alerting
+          interval: 1m
+          rules:
+            - uid: fg2aoiohuwtmof
+              title: Container Unhealthy (k3s)
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 60
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT host, namespace, pod_name, container_name, MIN(CASE WHEN readiness = 'unready' AND state = 'running' THEN 1 ELSE 0 END) AS value FROM kubernetes_pod_container_status WHERE time >= now() - interval '1 minute' GROUP BY host, namespace, pod_name, container_name
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 60
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 5m
+              annotations:
+                description: The readiness probe for {{ $$labels.container_name }} in pod {{ $$labels.pod_name }} on {{ $$labels.host }} has been failing for 5 minutes
+                summary: '{{ $$labels.namespace }}/{{ $$labels.container_name }} on {{ $$labels.host }} is unhealthy'
+              isPaused: false
+            - uid: dg2aoixzp0l4wc
+              title: Container Crash Loop (k3s)
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 1800
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT host, namespace, pod_name, container_name, (MAX(restarts_total) - MIN(restarts_total)) AS value FROM kubernetes_pod_container_status WHERE time >= now() - interval '30 minutes' GROUP BY host, namespace, pod_name, container_name
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 1800
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 1m
+              annotations:
+                description: '{{ $$labels.container_name }} in pod {{ $$labels.pod_name }} on {{ $$labels.host }} has restarted multiple times in the last 30 minutes'
+                summary: '{{ $$labels.namespace }}/{{ $$labels.container_name }} on {{ $$labels.host }} is crash-looping'
+              isPaused: false
+            - uid: eg2aoj7z2wo3kc
+              title: Container OOM Killed (k3s)
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: ffdu753me8hdse
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT host, regexp_replace(message, '^.*,task=([^,]+),.*$$', '\1') AS process, COUNT(*) AS value FROM syslog WHERE appname = 'kernel' AND message LIKE '%oom-kill:%task_memcg=/kubepods%' AND time >= now() - interval '10 minutes' GROUP BY host, process
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 1m
+              annotations:
+                description: The kernel OOM-killed {{ $$labels.process }} in a k3s pod on {{ $$labels.host }} in the last 10 minutes; kubectl describe pod shows which one under Last State
+                summary: '{{ $$labels.process }} in a k3s pod on {{ $$labels.host }} was OOM-killed'
+              isPaused: false
+            - uid: eg2aojhlkbmrkd
+              title: Sustained Container CPU (k3s)
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 21600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT host, namespace, container_name, AVG(cpu_usage_nanocores) / 1e7 AS value FROM kubernetes_pod_container WHERE time >= now() - interval '6 hours' AND namespace <> 'ci' GROUP BY host, namespace, container_name HAVING count(*) > 1000
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 21600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 95
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 15m
+              annotations:
+                description: '{{ $$labels.namespace }}/{{ $$labels.container_name }} on {{ $$labels.host }} has averaged over 95% of one CPU core for the last 6 hours.'
+                summary: '{{ $$labels.namespace }}/{{ $$labels.container_name }} on {{ $$labels.host }} has been using a full CPU core for hours'
+              isPaused: false
+            - uid: eg2aojqxunim8c
+              title: k3s Metrics Absent
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 86400
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT host, CASE WHEN max(time) >= now() - interval '90 seconds' THEN 1 ELSE 0 END AS value FROM kubernetes_node WHERE time >= now() - interval '24 hours' AND host IN (SELECT DISTINCT host FROM system WHERE time >= now() - interval '90 seconds') GROUP BY host
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 86400
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 2m
+              annotations:
+                description: 'Telegraf on {{ $$labels.host }} is up but has read nothing from its kubelet for 90 seconds: k3s is stopped there, the API server is down, or Telegraf''s k3s token no longer works'
+                summary: '{{ $$labels.host }} sends no k3s metrics'
+              isPaused: false
+            - uid: fg2tir5g50l4wc
+              title: Node Not Ready (k3s)
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT node_name, MAX(CASE WHEN status_condition = 1 THEN 1 ELSE 0 END) AS value FROM kubernetes_node_status WHERE time >= now() - interval '5 minutes' AND condition = 'Ready' GROUP BY node_name
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 1m
+              annotations:
+                description: 'k3s has not reported {{ $$labels.node_name }} Ready for 5 minutes: its k3s agent is stopped or wedged, or the node is under pressure. Its pods aren''t moved until it has been gone 5 minutes, and those with a volume there can''t move at all.'
+                summary: '{{ $$labels.node_name }} is not ready in k3s'
+              isPaused: false
+            - uid: bg2tirht9f7cwf
+              title: Workload Unavailable (k3s)
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 900
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT namespace, concat('Deployment/', deployment_name) AS workload, MIN(replicas_unavailable) AS value FROM kubernetes_deployment_status WHERE time >= now() - interval '10 minutes' GROUP BY namespace, deployment_name HAVING MIN(time) < now() - interval '9 minutes' AND MAX(time) > now() - interval '2 minutes' UNION ALL SELECT namespace, concat('StatefulSet/', statefulset_name) AS workload, MIN(spec_replicas - replicas_ready) AS value FROM kubernetes_statefulset_status WHERE time >= now() - interval '10 minutes' GROUP BY namespace, statefulset_name HAVING MIN(time) < now() - interval '9 minutes' AND MAX(time) > now() - interval '2 minutes' UNION ALL SELECT namespace, concat('DaemonSet/', daemonset_name) AS workload, MIN(number_unavailable) AS value FROM kubernetes_daemonset_status WHERE time >= now() - interval '10 minutes' GROUP BY namespace, daemonset_name HAVING MIN(time) < now() - interval '9 minutes' AND MAX(time) > now() - interval '2 minutes'
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 900
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 1m
+              annotations:
+                description: '{{ $$labels.workload }} in {{ $$labels.namespace }} has been short of ready replicas for 10 minutes: a pod that can''t be scheduled, can''t pull its image, can''t mount its volume or never passes its readiness probe. kubectl describe on its pods says which.'
+                summary: '{{ $$labels.namespace }}/{{ $$labels.workload }} is short of replicas'
+              isPaused: false
+            - uid: dg2tirr25e29sa
+              title: k3s API Unreachable
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 3600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT CASE WHEN MAX(time) >= now() - interval '3 minutes' THEN 1 ELSE 0 END AS value FROM kubernetes_node_status WHERE time >= now() - interval '1 hour'
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 3600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: Alerting
+              execErrState: Alerting
+              for: 2m
+              annotations:
+                description: 'rackvm1''s Telegraf has read nothing from the k3s API for 3 minutes: k3s is down on rackvm1, or Telegraf''s k3s token no longer works. Host Deadman fires as well if rackvm1 itself is down.'
+                summary: The k3s API is unreachable
+              isPaused: false
+        - orgId: 1
+          name: memory
+          folder: Alerting
+          interval: 1m
+          rules:
+            - uid: ffr7eibi43z0gb
+              title: Prolonged Memory Pressure
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT host, AVG(used_percent) AS value FROM mem WHERE time >= now() - interval '5 minutes' GROUP BY host
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 90
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 15m
+              annotations:
+                description: '{{ $$labels.host }} has averaged over 90% memory usage for at least 15 minutes'
+                summary: '{{ $$labels.host }} memory usage sustained above 90%'
+              isPaused: false
+            - uid: dfr7eiib958n4d
+              title: Heavy Swap Usage
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: |-
+                        SELECT s.host AS host,
+                               CASE WHEN m.avail_pct < 15 THEN s.swap_pct ELSE 0 END AS value
+                        FROM (SELECT host, AVG(used_percent) AS swap_pct
+                              FROM swap WHERE time >= now() - interval '5 minutes' GROUP BY host) s
+                        JOIN (SELECT host, AVG(available_percent) AS avail_pct
+                              FROM mem  WHERE time >= now() - interval '5 minutes' GROUP BY host) m
+                          ON s.host = m.host
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 20
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 15m
+              annotations:
+                description: '{{ $$labels.host }} has averaged above 20% swap with under 15% memory available for at least 15 minutes'
+                summary: '{{ $$labels.host }} is swapping heavily'
+              isPaused: false
+        - orgId: 1
+          name: power
+          folder: Alerting
+          interval: 1m
+          rules:
+            - uid: efr7ejcf3l5vkd
+              title: UPS On Battery
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT ups, MAX(CASE WHEN status NOT LIKE 'OL%' THEN 1 ELSE 0 END) AS value FROM ups WHERE time >= now() - interval '5 minutes' GROUP BY ups
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 1m
+              annotations:
+                description: UPS {{ $$labels.ups }} is running on battery, indicating a utility power loss
+                summary: UPS {{ $$labels.ups }} is on battery power
+              isPaused: false
+        - orgId: 1
+          name: process
+          folder: Alerting
+          interval: 1m
+          rules:
+            - uid: ag344j6vhkao0b
+              title: Process Missing
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT host, process, MAX(pid_count) AS value FROM procstat_lookup WHERE time >= now() - interval '1 minute' GROUP BY host, process
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 5m
+              annotations:
+                description: '{{ $$labels.host }} has had no {{ $$labels.process }} process running for at least 5 minutes'
+                summary: '{{ $$labels.process }} on {{ $$labels.host }} is not running'
+              isPaused: false
+        - orgId: 1
+          name: thermal
+          folder: Alerting
+          interval: 1m
+          rules:
+            - uid: bfr7ejj10wzk0f
+              title: Sustained High CPU Temperature
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    dataset: iox
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawQuery: true
+                    rawSql: SELECT host, AVG(temp) AS value FROM temp WHERE sensor = 'cpu_thermal' AND time >= now() - interval '10 minutes' AND host != 'raspi1' GROUP BY host
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 80
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                          unloadEvaluator:
+                            params:
+                                - 75
+                            type: lt
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 15m
+              annotations:
+                description: '{{ $$labels.host }} CPU temperature has averaged above 80C (Pi soft-throttle point) for at least 15 minutes; clears below 75C'
+                summary: '{{ $$labels.host }} CPU running hot'
+              isPaused: false
+  notifications.yaml: |
+    apiVersion: 1
+    contactPoints:
+        - orgId: 1
+          name: Discord
+          receivers:
+            - uid: discord-alerts
+              type: discord
+              settings:
+                url: ${DISCORD_ALERTS_WEBHOOK_URL}
+                title: '{{ template "discord_pretty.title" . }}'
+                message: '{{ template "discord_pretty.message" . }}'
+                use_discord_username: false
+              disableResolveMessage: false
+    policies:
+        - orgId: 1
+          receiver: Discord
+          group_by:
+            - grafana_folder
+            - alertname
+          group_wait: 30s
+          group_interval: 5m
+          repeat_interval: 4h
+  templates.yaml: |
+    apiVersion: 1
+    templates:
+        - orgId: 1
+          name: discord_pretty
+          template: |-
+              {{ define "discord_pretty.title" }}{{ if eq .Status "firing" }}🔥{{ else }}✅{{ end }} {{ if .CommonLabels.alertname }}{{ .CommonLabels.alertname }}{{ else }}Alert{{ end }}{{ if .CommonLabels.rulename }} · {{ .CommonLabels.rulename }}{{ end }}{{ end }}
+
+              {{ define "discord_pretty.message" }}{{ $firing := .Alerts.Firing }}{{ $resolved := .Alerts.Resolved }}{{ if gt (len $firing) 0 }}**Status:** Firing ({{ len $firing }}){{ else if gt (len $resolved) 0 }}**Status:** Resolved ({{ len $resolved }}){{ else }}**Status:** {{ .Status }}{{ end }}
+              {{ if .CommonLabels.grafana_folder }}**Folder:** {{ .CommonLabels.grafana_folder }}{{ end }}{{ if .CommonLabels.severity }}
+              **Severity:** {{ .CommonLabels.severity }}{{ end }}{{ if .CommonLabels.instance }}
+              **Target:** `{{ .CommonLabels.instance }}`{{ else if .CommonLabels.job }}
+              **Target:** `{{ .CommonLabels.job }}`{{ else if .CommonLabels.datasource_uid }}
+              **Datasource:** `{{ .CommonLabels.datasource_uid }}`{{ end }}
+              {{ $a := index .Alerts 0 }}{{ if $a.Annotations.summary }}
+              **Summary:** {{ $a.Annotations.summary }}{{ end }}{{ if $a.Annotations.description }}
+              **Details:** {{ $a.Annotations.description }}{{ end }}
+
+              [View alert]({{ .ExternalURL }}alerting/list){{ if $a.SilenceURL }} • [Silence]({{ $a.SilenceURL }}){{ end }}{{ if $a.DashboardURL }} • [Dashboard]({{ $a.DashboardURL }}){{ end }}{{ if $a.PanelURL }} • [Panel]({{ $a.PanelURL }}){{ end }}{{ end }}
