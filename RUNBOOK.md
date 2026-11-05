@@ -51,7 +51,7 @@ k3s runs on the rackvms: one server on rackvm1 (`[k3s_server]`) and agents in `[
 make run tags=k3s
 ```
 
-The server goes first, then the agents one at a time, and each waits for its node to report Ready. Once the agents are up, the server scales k3s's CoreDNS to `k3s_coredns_replicas`, 2, and k3s's own manifest puts the two pods on different nodes, so cluster DNS survives losing one. kubectl runs as root on rackvm1: `sudo kubectl get nodes`.
+The server goes first, then the agents one at a time, and each waits for its node to report Ready. Once the agents are up, the server scales k3s's CoreDNS to `k3s_coredns_replicas`, 2, and k3s's own manifest puts the two pods on different nodes, so cluster DNS survives losing one. kubectl runs as root on rackvm1: `sudo kubectl get nodes`. The API server calls each node's kubelet directly on TCP 10250 (`egress-selector-mode: disabled`) for exec, logs and k8up's backup commands, not through k3s's agent tunnel, whose stream breaks a long exec partway, so rackvm1 must reach every node there.
 
 **Upgrading.** `k3s_version` in `generic/k3s/defaults/main.yml` names a k3s release channel, `stable` by default, and each deploy moves the server to that channel's release, at most one minor at a time since Kubernetes can't skip one. Agents install whatever the server runs. The binary is checked against the release's `sha256sum-amd64.txt`, then k3s restarts, the server before the agents; pods keep running through a k3s restart. To hold back, set `k3s_version` to a minor channel such as `v1.36` or an exact release such as `v1.36.5+k3s1`. The deploy refuses any release that would go back a minor or skip one, exact or not.
 
