@@ -87,6 +87,9 @@ openclaw_discord:
   allowBots: true
   replyToMode: first
   historyLimit: 50
+  # Webhook posts count toward OpenClaw's bot-pair loop guard, and webhooks never answer, so a burst must not trip it.
+  botLoopProtection:
+    maxEventsPerWindow: 60
   guilds: "{{ {vault_openclaw_discord_guild_id: {'channels': {vault_openclaw_discord_alerts_channel_id: openclaw_discord_alerts_channel}}} }}"
 
 openclaw_discord_alerts_channel:

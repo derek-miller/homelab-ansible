@@ -892,7 +892,6 @@ function getGitHubEventDetail(event, payload) {
   }
 }
 
-/** Return a human-readable { eventType, detail } for a YouTrack batch event header */
 /** Whether an ignored user's event files an alert ticket or sets it to Open or Reopened; its other changes stay skipped */
 function isAlertTicketHandoff(payload) {
   if (payload.comment || !(payload.issue?.summary || "").startsWith("Alert: ")) return false;
@@ -903,6 +902,7 @@ function isAlertTicketHandoff(payload) {
     ["open", "reopened"].includes((extractFieldValue(f.newValue) || "").toLowerCase()));
 }
 
+/** Return a human-readable { eventType, detail } for a YouTrack batch event header */
 function getYouTrackEventDetail(payload) {
   const issueId = payload.issue?.idReadable || payload.issue?.id || "unknown";
   const action = payload.action || "event";
