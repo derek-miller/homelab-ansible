@@ -42,6 +42,12 @@ rules:
       - daemonsets
     verbs:
       - list
+  - apiGroups:
+      - k8up.io
+    resources:
+      - backups
+    verbs:
+      - list
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
