@@ -38,6 +38,8 @@ data:
   backup.sh: |
     #!/bin/sh
     set -e
+    # --force overwrites the files it writes but leaves an earlier backup's other files in place.
+    rm -rf /var/lib/influxdb3/homelab/backups/nightly
     influxdb3 create backup --name nightly --force >/dev/null
     while :; do
       sleep 10
