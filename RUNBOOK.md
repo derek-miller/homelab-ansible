@@ -303,6 +303,16 @@ YouTrack writes its own scheduled backups into its `backups` claim (Database Bac
 
 Portainer does the same: Settings → Backup writes an archive into its claim's `scheduled-backups/` every day at 02:00, and `backup-freshness` in `portainer` watches that folder.
 
+## Alerts channel triage
+
+OpenClaw reads every message in the Discord alerts channel and answers under each notice. Its rules are that channel's `systemPrompt`, `vault_openclaw_discord_alerts_prompt` in rackmini1's vault, which `make run tags=openclaw` applies with the rest of `openclaw_discord`. The channel's session keeps the prompt it started with, so a changed prompt applies from its next reset: daily at 04:00, or at once after `/new` in the channel.
+
+**Planned work.** Before something that will fire alerts, post `maintenance: <what>` in the channel; the bot answers the matching alerts "Expected" and files nothing. Replying `expected` to an alert does the same afterwards, and sets the alert's ticket, if it filed one, to Won't fix.
+
+**Tickets.** An alert worth fixing becomes an HL issue tagged `alert`, summarised `Alert: <sender> · <alert name>` and assigned to openclaw, and each later occurrence is a comment on it. The webhook proxy drops openclaw's own YouTrack changes, so the bot never answers itself, except an `Alert: ` issue's creation or a change of its State to Open or Reopened: that event starts the bot's work on the ticket, under the "Alert tickets" rules in the proxy's `youtrack.md`. YouTrack's agent-automations workflow therefore sends openclaw's changes too, and the proxy does the filtering.
+
+**The proxy's own notices.** Its give-ups post to the alerts channel through `DISCORD_WEBHOOK_URL`. Held-event approvals post through `APPROVAL_DISCORD_WEBHOOK_URL` to a channel of their own, so outside GitHub text never reaches the triage.
+
 ## Bringing up a new host
 
 1. Add the host to `playbooks/hosts` under its groups (a k3s node also under `[node_labels]`) and give it `playbooks/host_vars/<host>/`.
@@ -327,7 +337,7 @@ Some macOS state cannot be set from an Ansible run, and the reason differs per c
 - **Remote Login access list** — set System Settings > General > Sharing > Remote Login to "Only these users" before `make bootstrap`. The bootstrap adds the `ansible` account to that list, and while Remote Login admits all users the list's group doesn't exist, so the bootstrap stops at `Group com.apple.access_ssh does not exist`.
 - **Plex "Open at Login"** — the menu-bar toggle adds a macOS login item, which the role can't set or check. After `generic/plex` installs the cask, launch Plex once via VNC or console, tick the box and claim the server.
 - **Homebridge config** — `config.json` (plugins, HomeKit pairings, its TLS paths, `bridge.bind`) is application state, not repo state, so a replacement Mac needs its Homebridge backup restored.
-- **OpenClaw** — install it with npm and onboard it with the gateway on the LAN at port 18789, then run `openclaw gateway install`, or restore `~/.openclaw` from a backup. Until then a run fails at the `openclaw` play, which sets only the `hooks` block in `openclaw.json` (`openclaw_hooks`, the block the webhook proxy posts to); the rest of that file is application state. The hooks token and timeout are each in two places, `vault_openclaw_hooks_token` and `openclaw_hooks_timeout_seconds` in rackmini1's host_vars, and `OPENCLAW_HOOKS_TOKEN` and `OPENCLAW_TIMEOUT_SECONDS` in `kubernetes/webhooks/openclaw-webhook-proxy.vault.yaml`, so change both. A deploy moves the proxy to them first and OpenClaw about two minutes later, `make run tags=flux,openclaw` within seconds; a turn sent in between fails and is retried five minutes later.
+- **OpenClaw** — install it with npm and onboard it with the gateway on the LAN at port 18789, then run `openclaw gateway install`, or restore `~/.openclaw` from a backup. Until then a run fails at the `openclaw` play, which sets only the `hooks` block in `openclaw.json` (`openclaw_hooks`, the block the webhook proxy posts to) and the keys of `channels.discord` that `openclaw_discord` names (see [Alerts channel triage](#alerts-channel-triage)); the rest of that file is application state. The hooks token and timeout are each in two places, `vault_openclaw_hooks_token` and `openclaw_hooks_timeout_seconds` in rackmini1's host_vars, and `OPENCLAW_HOOKS_TOKEN` and `OPENCLAW_TIMEOUT_SECONDS` in `kubernetes/webhooks/openclaw-webhook-proxy.vault.yaml`, so change both. A deploy moves the proxy to them first and OpenClaw about two minutes later, `make run tags=flux,openclaw` within seconds; a turn sent in between fails and is retried five minutes later.
 - **FileVault login on reboot** — after a power cycle the Mac sits at the login screen until a human logs in, because user LaunchAgents only run post-login. No workaround; design-accepted.
 
 ## Restoring volumes from a backup archive
