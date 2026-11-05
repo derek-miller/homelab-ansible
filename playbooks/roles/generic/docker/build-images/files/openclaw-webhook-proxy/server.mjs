@@ -26,6 +26,7 @@
  *   BATCH_WINDOW_MS          — how long an event waits for related events (default: 10000)
  *   INBOX_PATH               — SQLite inbox file (default: /data/inbox.db)
  *   DISCORD_WEBHOOK_URL      — Discord webhook told when a session's events give up or an event is held (optional)
+ *   APPROVAL_DISCORD_WEBHOOK_URL — Discord webhook for held-event notices instead (default: DISCORD_WEBHOOK_URL)
  *   OPENCLAW_UI_URL          — OpenClaw Control UI base URL the admin page links sessions to (optional)
  *   ADMIN_URL                — the admin page's base URL, which held-event notices link to (no notices without it)
  *   ADMIN_APPROVERS          — comma-separated sign-in emails that may approve, dismiss, replay and discard events
@@ -98,6 +99,7 @@ const OPENCLAW_TIMEOUT_SECONDS = parseInt(process.env.OPENCLAW_TIMEOUT_SECONDS |
 const BATCH_WINDOW_MS = parseInt(process.env.BATCH_WINDOW_MS || "10000", 10);
 const INBOX_PATH = process.env.INBOX_PATH || "/data/inbox.db";
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "";
+const APPROVAL_DISCORD_WEBHOOK_URL = process.env.APPROVAL_DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL;
 const OPENCLAW_UI_URL = (process.env.OPENCLAW_UI_URL || "").replace(/\/+$/, "");
 const YOUTRACK_BASE_URL = process.env.YOUTRACK_BASE_URL || "";
 const ADMIN_URL = (process.env.ADMIN_URL || "").replace(/\/+$/, "");
@@ -891,6 +893,16 @@ function getGitHubEventDetail(event, payload) {
 }
 
 /** Return a human-readable { eventType, detail } for a YouTrack batch event header */
+/** Whether an ignored user's event files an alert ticket or sets it to Open or Reopened; its other changes stay skipped */
+function isAlertTicketHandoff(payload) {
+  if (payload.comment || !(payload.issue?.summary || "").startsWith("Alert: ")) return false;
+  if (payload.action === "created") return true;
+  const fields = payload.updatedFields || payload.changedFields;
+  return Array.isArray(fields) && fields.some((f) =>
+    /^(state|status)$/i.test(f.name || f.id || "") &&
+    ["open", "reopened"].includes((extractFieldValue(f.newValue) || "").toLowerCase()));
+}
+
 function getYouTrackEventDetail(payload) {
   const issueId = payload.issue?.idReadable || payload.issue?.id || "unknown";
   const action = payload.action || "event";
@@ -1521,7 +1533,7 @@ const server = createServer(async (req, res) => {
     logDebug(`GitHub ${event} (${detail}): thread ${thread.id} → session ${sessionKey}`);
     if (held) {
       logInfo(`Holding GitHub ${event} from ${actor} for approval (event ${id})`);
-      if (DISCORD_WEBHOOK_URL && ADMIN_URL) noticeHeld(id, token, event, payload);
+      if (APPROVAL_DISCORD_WEBHOOK_URL && ADMIN_URL) noticeHeld(id, token, event, payload);
     }
 
     res.writeHead(200);
@@ -1571,7 +1583,9 @@ const server = createServer(async (req, res) => {
       source.allowUsers,
       source.ignoreUsers
     );
-    if (!processYouTrack) {
+    const handoff = !processYouTrack && youtrackReason === "ignored user" && isAlertTicketHandoff(payload);
+    if (handoff) logInfo(`Passing YouTrack ${action} on ${issueId} from ${updaterLogin}: an alert ticket handed to the agent`);
+    if (!processYouTrack && !handoff) {
       console.log(
         `[${new Date().toISOString()}] Skipping YouTrack event from ${updaterLogin || "(no actor)"} (${youtrackReason})`
       );
@@ -1717,9 +1731,9 @@ function buildMessage(guardrails, rows) {
   return `${wrapUntrusted(events)}\n\n${approvals}${guardrails}`;
 }
 
-/** Post a message to the Discord webhook, or edit the one with `messageId`; returns the message's id */
-async function postDiscord(message, messageId = null) {
-  const url = new URL(DISCORD_WEBHOOK_URL);
+/** Post a message to a Discord webhook, or edit the one with `messageId` it posted; returns the message's id */
+async function postDiscord(webhookUrl, message, messageId = null) {
+  const url = new URL(webhookUrl);
   if (messageId) url.pathname += `/messages/${messageId}`;
   else url.searchParams.set("wait", "true");
   url.searchParams.set("with_components", "true");
@@ -1735,7 +1749,7 @@ async function postDiscord(message, messageId = null) {
 
 async function notifyDiscord(text) {
   try {
-    await postDiscord({ content: text.slice(0, 2000) });
+    await postDiscord(DISCORD_WEBHOOK_URL, { content: text.slice(0, 2000) });
   } catch (err) {
     logWarn(`Discord webhook failed: ${err.message}`);
   }
@@ -1780,7 +1794,7 @@ function heldNotice(row, token, event, payload) {
 
 async function noticeHeld(id, token, event, payload) {
   try {
-    setNoticeId.run(await postDiscord(heldNotice(eventById.get(id), token, event, payload)), id);
+    setNoticeId.run(await postDiscord(APPROVAL_DISCORD_WEBHOOK_URL, heldNotice(eventById.get(id), token, event, payload)), id);
   } catch (err) {
     logWarn(`Discord notice for held event ${id} failed: ${err.message}`);
   }
@@ -1788,10 +1802,10 @@ async function noticeHeld(id, token, event, payload) {
 
 /** Say on a held event's notice what became of it, and drop its links */
 async function closeNotice(row) {
-  if (!row.notice_id || !DISCORD_WEBHOOK_URL) return;
+  if (!row.notice_id || !APPROVAL_DISCORD_WEBHOOK_URL) return;
   const outcome = { dismissed: "Dismissed", expired: "Expired" }[row.status] ?? (row.note ? "Approved with a note" : "Approved");
   try {
-    await postDiscord({ content: `**${outcome}**`, components: [] }, row.notice_id);
+    await postDiscord(APPROVAL_DISCORD_WEBHOOK_URL, { content: `**${outcome}**`, components: [] }, row.notice_id);
   } catch (err) {
     logWarn(`Updating the Discord notice for event ${row.id} failed: ${err.message}`);
   }

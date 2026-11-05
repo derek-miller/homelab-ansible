@@ -4,3 +4,6 @@ openclaw_config: "/Users/{{ openclaw_user }}/.openclaw/openclaw.json"
 
 # Merged into openclaw.json's hooks; any other key there stays the app's.
 openclaw_hooks: {}
+
+# Merged recursively into openclaw.json's channels.discord; any other key there stays the app's.
+openclaw_discord: {}

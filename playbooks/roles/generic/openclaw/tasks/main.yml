@@ -14,3 +14,13 @@
     openclaw_current_hooks: "{{ (openclaw_current.content | b64decode | from_json).hooks | default({}) }}"
   when: openclaw_current_hooks | combine(openclaw_hooks) != openclaw_current_hooks
   no_log: true
+
+- name: set the OpenClaw Discord channel
+  command:
+    argv: [openclaw, config, patch, --stdin]
+    stdin: "{{ {'channels': {'discord': openclaw_discord}} | to_json }}"
+  become_user: "{{ openclaw_user }}"
+  vars:
+    openclaw_current_discord: "{{ ((openclaw_current.content | b64decode | from_json).channels | default({})).discord | default({}) }}"
+  when: openclaw_current_discord | combine(openclaw_discord, recursive=True) != openclaw_current_discord
+  no_log: true
