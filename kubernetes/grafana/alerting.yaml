@@ -1,7 +1,8 @@
 ---
 # Grafana provisions these at every start, and its UI can't edit what they define.
-# In rules.yaml and notifications.yaml a literal $ is written $$, since Grafana expands env vars there;
-# templates.yaml is read as is. DISCORD_ALERTS_WEBHOOK_URL comes from the Secret grafana.
+# Grafana expands env vars in notifications.yaml and in a rule's title, labels and condition, where a
+# literal $ is written $$. Annotations, queries and templates.yaml are read as is.
+# DISCORD_ALERTS_WEBHOOK_URL comes from the Secret grafana.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -56,8 +57,8 @@ data:
               execErrState: Error
               for: 30m
               annotations:
-                description: The newest backup in {{ $$labels.directory }} is more than 2 days old
-                summary: '{{ $$labels.directory }} has no recent backup'
+                description: The newest backup in {{ $labels.directory }} is more than 2 days old
+                summary: '{{ $labels.directory }} has no recent backup'
               isPaused: false
             - uid: cfuvojpq3k1kwc
               title: Volume Backup Empty
@@ -99,8 +100,8 @@ data:
               execErrState: Error
               for: 30m
               annotations:
-                description: '{{ $$labels.directory }} holds no backups: no archives, or no restic snapshots'
-                summary: '{{ $$labels.directory }} contains no backups'
+                description: '{{ $labels.directory }} holds no backups: no archives, or no restic snapshots'
+                summary: '{{ $labels.directory }} contains no backups'
               isPaused: false
             - uid: ffuvojpuqv8qoa
               title: Volume Backup Metrics Absent
@@ -179,7 +180,7 @@ data:
                     to: 0
                   datasourceUid: __expr__
                   model:
-                    expression: $$A > 111600 || $$B > 0
+                    expression: $A > 111600 || $B > 0
                     intervalMs: 1000
                     maxDataPoints: 43200
                     refId: C
@@ -188,8 +189,8 @@ data:
               execErrState: Error
               for: 5m
               annotations:
-                description: The newest k8up Backup in {{ $$labels.namespace }} ended Failed, or none has succeeded for 31 hours (last good one {{ humanizeDuration $$values.A.Value }} ago). `sudo k3s kubectl -n {{ $$labels.namespace }} get backups,jobs` shows which job failed.
-                summary: '{{ $$labels.namespace }} has no good backup'
+                description: The newest k8up Backup in {{ $labels.namespace }} ended Failed, or none has succeeded for 31 hours (last good one {{ humanizeDuration $values.A.Value }} ago). `sudo k3s kubectl -n {{ $labels.namespace }} get backups,jobs` shows which job failed.
+                summary: '{{ $labels.namespace }} has no good backup'
               isPaused: false
         - orgId: 1
           name: control4
@@ -236,8 +237,8 @@ data:
               execErrState: Error
               for: 5m
               annotations:
-                description: The Director API on {{ $$labels.controller }} has not reported director=connected for at least 5 minutes
-                summary: '{{ $$labels.controller }} Director API is unavailable'
+                description: The Director API on {{ $labels.controller }} has not reported director=connected for at least 5 minutes
+                summary: '{{ $labels.controller }} Director API is unavailable'
               isPaused: false
             - uid: cfuoxnfls4qo0c
               title: Low Battery (Warning)
@@ -280,8 +281,8 @@ data:
               execErrState: Error
               for: 15m
               annotations:
-                description: The battery in {{ $$labels.device_name }} ({{ $$labels.room_name }}) is in the warning range (20-30) for at least 15 minutes
-                summary: '{{ $$labels.device_name }} in {{ $$labels.room_name }} has a low (warning) battery'
+                description: The battery in {{ $labels.device_name }} ({{ $labels.room_name }}) is in the warning range (20-30) for at least 15 minutes
+                summary: '{{ $labels.device_name }} in {{ $labels.room_name }} has a low (warning) battery'
               labels:
                 severity: warning
               isPaused: false
@@ -325,8 +326,8 @@ data:
               execErrState: Error
               for: 15m
               annotations:
-                description: '{{ $$labels.device_name }} ({{ $$labels.room_name }}) has reported Connected=0 for at least 15 minutes'
-                summary: '{{ $$labels.device_name }} in {{ $$labels.room_name }} is offline'
+                description: '{{ $labels.device_name }} ({{ $labels.room_name }}) has reported Connected=0 for at least 15 minutes'
+                summary: '{{ $labels.device_name }} in {{ $labels.room_name }} is offline'
               isPaused: false
             - uid: cfurg5v0pse80b
               title: Low Battery (Critical)
@@ -368,8 +369,8 @@ data:
               execErrState: Error
               for: 15m
               annotations:
-                description: The battery in {{ $$labels.device_name }} ({{ $$labels.room_name }}) has been below 20 for at least 15 minutes
-                summary: '{{ $$labels.device_name }} in {{ $$labels.room_name }} has a critical battery'
+                description: The battery in {{ $labels.device_name }} ({{ $labels.room_name }}) has been below 20 for at least 15 minutes
+                summary: '{{ $labels.device_name }} in {{ $labels.room_name }} has a critical battery'
               labels:
                 severity: critical
               isPaused: false
@@ -418,8 +419,8 @@ data:
               execErrState: Error
               for: 15m
               annotations:
-                description: '{{ $$labels.host }} has averaged over 90% CPU usage for at least 15 minutes'
-                summary: '{{ $$labels.host }} CPU sustained above 90%'
+                description: '{{ $labels.host }} has averaged over 90% CPU usage for at least 15 minutes'
+                summary: '{{ $labels.host }} CPU sustained above 90%'
               isPaused: false
         - orgId: 1
           name: deadman
@@ -466,8 +467,8 @@ data:
               execErrState: Error
               for: 2m
               annotations:
-                description: No Telegraf data received from {{ $$labels.host }} in the last 90 seconds
-                summary: '{{ $$labels.host }} is unreachable'
+                description: No Telegraf data received from {{ $labels.host }} in the last 90 seconds
+                summary: '{{ $labels.host }} is unreachable'
               isPaused: false
         - orgId: 1
           name: disk
@@ -514,8 +515,8 @@ data:
               execErrState: Error
               for: 15m
               annotations:
-                description: Root fs on {{ $$labels.host }} is above 85% full
-                summary: '{{ $$labels.host }} root disk usage above threshold'
+                description: Root fs on {{ $labels.host }} is above 85% full
+                summary: '{{ $labels.host }} root disk usage above threshold'
               isPaused: false
             - uid: ffr7ehxg869z4e
               title: Disk Space Low (Non-Root)
@@ -557,8 +558,8 @@ data:
               execErrState: Error
               for: 15m
               annotations:
-                description: Filesystem {{ $$labels.path }} on {{ $$labels.host }} is above 85% full
-                summary: '{{ $$labels.host }} disk usage above threshold on {{ $$labels.path }}'
+                description: Filesystem {{ $labels.path }} on {{ $labels.host }} is above 85% full
+                summary: '{{ $labels.host }} disk usage above threshold on {{ $labels.path }}'
               isPaused: false
             - uid: eg10kxgyq9am8e
               title: InfluxDB Data Disk Growing Fast
@@ -602,8 +603,8 @@ data:
               execErrState: Error
               for: 15m
               annotations:
-                description: '{{ $$labels.path }} on {{ $$labels.host }} (InfluxDB data) has grown by more than 15 GB in the last 6 hours. Normal growth is under 1 GB per 6 hours; fast growth has meant the compactor is leaking files.'
-                summary: '{{ $$labels.path }} on {{ $$labels.host }} is growing unusually fast'
+                description: '{{ $labels.path }} on {{ $labels.host }} (InfluxDB data) has grown by more than 15 GB in the last 6 hours. Normal growth is under 1 GB per 6 hours; fast growth has meant the compactor is leaking files.'
+                summary: '{{ $labels.path }} on {{ $labels.host }} is growing unusually fast'
               isPaused: false
         - orgId: 1
           name: docker
@@ -652,8 +653,8 @@ data:
               execErrState: Error
               for: 15m
               annotations:
-                description: '{{ $$labels.container_name }} on {{ $$labels.host }} has averaged over 95% of one CPU core for the last 6 hours.'
-                summary: '{{ $$labels.container_name }} on {{ $$labels.host }} has been using a full CPU core for hours'
+                description: '{{ $labels.container_name }} on {{ $labels.host }} has averaged over 95% of one CPU core for the last 6 hours.'
+                summary: '{{ $labels.container_name }} on {{ $labels.host }} has been using a full CPU core for hours'
               isPaused: false
             - uid: ffr7eiq03e48wf
               title: Container Unhealthy
@@ -695,8 +696,8 @@ data:
               execErrState: Error
               for: 2m
               annotations:
-                description: Docker healthcheck for {{ $$labels.container_name }} on {{ $$labels.host }} is reporting unhealthy
-                summary: '{{ $$labels.container_name }} on {{ $$labels.host }} is unhealthy'
+                description: Docker healthcheck for {{ $labels.container_name }} on {{ $labels.host }} is reporting unhealthy
+                summary: '{{ $labels.container_name }} on {{ $labels.host }} is unhealthy'
               isPaused: false
             - uid: dfr7ej4ppd3i8b
               title: Container OOM Killed
@@ -738,8 +739,8 @@ data:
               execErrState: Error
               for: 1m
               annotations:
-                description: '{{ $$labels.container_name }} on {{ $$labels.host }} was killed by the OOM killer in the last 10 minutes'
-                summary: '{{ $$labels.container_name }} on {{ $$labels.host }} was OOM-killed'
+                description: '{{ $labels.container_name }} on {{ $labels.host }} was killed by the OOM killer in the last 10 minutes'
+                summary: '{{ $labels.container_name }} on {{ $labels.host }} was OOM-killed'
               isPaused: false
             - uid: dfr7jpvs3gxdsd
               title: Container Crash Loop (Compose)
@@ -781,8 +782,8 @@ data:
               execErrState: Error
               for: 1m
               annotations:
-                description: '{{ $$labels.container_name }} on {{ $$labels.host }} has restarted multiple times in the last 30 minutes'
-                summary: '{{ $$labels.container_name }} on {{ $$labels.host }} is crash-looping'
+                description: '{{ $labels.container_name }} on {{ $labels.host }} has restarted multiple times in the last 30 minutes'
+                summary: '{{ $labels.container_name }} on {{ $labels.host }} is crash-looping'
               isPaused: false
         - orgId: 1
           name: k3s
@@ -829,8 +830,8 @@ data:
               execErrState: Error
               for: 5m
               annotations:
-                description: The readiness probe for {{ $$labels.container_name }} in pod {{ $$labels.pod_name }} on {{ $$labels.host }} has been failing for 5 minutes
-                summary: '{{ $$labels.namespace }}/{{ $$labels.container_name }} on {{ $$labels.host }} is unhealthy'
+                description: The readiness probe for {{ $labels.container_name }} in pod {{ $labels.pod_name }} on {{ $labels.host }} has been failing for 5 minutes
+                summary: '{{ $labels.namespace }}/{{ $labels.container_name }} on {{ $labels.host }} is unhealthy'
               isPaused: false
             - uid: dg2aoixzp0l4wc
               title: Container Crash Loop (k3s)
@@ -872,8 +873,8 @@ data:
               execErrState: Error
               for: 1m
               annotations:
-                description: '{{ $$labels.container_name }} in pod {{ $$labels.pod_name }} on {{ $$labels.host }} has restarted multiple times in the last 30 minutes'
-                summary: '{{ $$labels.namespace }}/{{ $$labels.container_name }} on {{ $$labels.host }} is crash-looping'
+                description: '{{ $labels.container_name }} in pod {{ $labels.pod_name }} on {{ $labels.host }} has restarted multiple times in the last 30 minutes'
+                summary: '{{ $labels.namespace }}/{{ $labels.container_name }} on {{ $labels.host }} is crash-looping'
               isPaused: false
             - uid: eg2aoj7z2wo3kc
               title: Container OOM Killed (k3s)
@@ -889,7 +890,7 @@ data:
                     format: table
                     intervalMs: 1000
                     maxDataPoints: 43200
-                    rawSql: SELECT host, regexp_replace(message, '^.*,task=([^,]+),.*$$', '\1') AS process, COUNT(*) AS value FROM syslog WHERE appname = 'kernel' AND message LIKE '%oom-kill:%task_memcg=/kubepods%' AND time >= now() - interval '10 minutes' GROUP BY host, process
+                    rawSql: SELECT host, regexp_replace(message, '^.*,task=([^,]+),.*$', '\1') AS process, COUNT(*) AS value FROM syslog WHERE appname = 'kernel' AND message LIKE '%oom-kill:%task_memcg=/kubepods%' AND time >= now() - interval '10 minutes' GROUP BY host, process
                     refId: A
                 - refId: B
                   relativeTimeRange:
@@ -915,8 +916,8 @@ data:
               execErrState: Error
               for: 1m
               annotations:
-                description: The kernel OOM-killed {{ $$labels.process }} in a k3s pod on {{ $$labels.host }} in the last 10 minutes; kubectl describe pod shows which one under Last State
-                summary: '{{ $$labels.process }} in a k3s pod on {{ $$labels.host }} was OOM-killed'
+                description: The kernel OOM-killed {{ $labels.process }} in a k3s pod on {{ $labels.host }} in the last 10 minutes; kubectl describe pod shows which one under Last State
+                summary: '{{ $labels.process }} in a k3s pod on {{ $labels.host }} was OOM-killed'
               isPaused: false
             - uid: eg2aojhlkbmrkd
               title: Sustained Container CPU (k3s)
@@ -958,8 +959,8 @@ data:
               execErrState: Error
               for: 15m
               annotations:
-                description: '{{ $$labels.namespace }}/{{ $$labels.container_name }} on {{ $$labels.host }} has averaged over 95% of one CPU core for the last 6 hours.'
-                summary: '{{ $$labels.namespace }}/{{ $$labels.container_name }} on {{ $$labels.host }} has been using a full CPU core for hours'
+                description: '{{ $labels.namespace }}/{{ $labels.container_name }} on {{ $labels.host }} has averaged over 95% of one CPU core for the last 6 hours.'
+                summary: '{{ $labels.namespace }}/{{ $labels.container_name }} on {{ $labels.host }} has been using a full CPU core for hours'
               isPaused: false
             - uid: eg2aojqxunim8c
               title: k3s Metrics Absent
@@ -1001,8 +1002,8 @@ data:
               execErrState: Error
               for: 2m
               annotations:
-                description: 'Telegraf on {{ $$labels.host }} is up but has read nothing from its kubelet for 90 seconds: k3s is stopped there, the API server is down, or Telegraf''s k3s token no longer works'
-                summary: '{{ $$labels.host }} sends no k3s metrics'
+                description: 'Telegraf on {{ $labels.host }} is up but has read nothing from its kubelet for 90 seconds: k3s is stopped there, the API server is down, or Telegraf''s k3s token no longer works'
+                summary: '{{ $labels.host }} sends no k3s metrics'
               isPaused: false
             - uid: fg2tir5g50l4wc
               title: Node Not Ready (k3s)
@@ -1044,8 +1045,8 @@ data:
               execErrState: Error
               for: 1m
               annotations:
-                description: 'k3s has not reported {{ $$labels.node_name }} Ready for 5 minutes: its k3s agent is stopped or wedged, or the node is under pressure. Its pods aren''t moved until it has been gone 5 minutes, and those with a volume there can''t move at all.'
-                summary: '{{ $$labels.node_name }} is not ready in k3s'
+                description: 'k3s has not reported {{ $labels.node_name }} Ready for 5 minutes: its k3s agent is stopped or wedged, or the node is under pressure. Its pods aren''t moved until it has been gone 5 minutes, and those with a volume there can''t move at all.'
+                summary: '{{ $labels.node_name }} is not ready in k3s'
               isPaused: false
             - uid: bg2tirht9f7cwf
               title: Workload Unavailable (k3s)
@@ -1087,8 +1088,8 @@ data:
               execErrState: Error
               for: 1m
               annotations:
-                description: '{{ $$labels.workload }} in {{ $$labels.namespace }} has been short of ready replicas for 10 minutes: a pod that can''t be scheduled, can''t pull its image, can''t mount its volume or never passes its readiness probe. kubectl describe on its pods says which.'
-                summary: '{{ $$labels.namespace }}/{{ $$labels.workload }} is short of replicas'
+                description: '{{ $labels.workload }} in {{ $labels.namespace }} has been short of ready replicas for 10 minutes: a pod that can''t be scheduled, can''t pull its image, can''t mount its volume or never passes its readiness probe. kubectl describe on its pods says which.'
+                summary: '{{ $labels.namespace }}/{{ $labels.workload }} is short of replicas'
               isPaused: false
             - uid: dg2tirr25e29sa
               title: k3s API Unreachable
@@ -1178,8 +1179,8 @@ data:
               execErrState: Error
               for: 15m
               annotations:
-                description: '{{ $$labels.host }} has averaged over 90% memory usage for at least 15 minutes'
-                summary: '{{ $$labels.host }} memory usage sustained above 90%'
+                description: '{{ $labels.host }} has averaged over 90% memory usage for at least 15 minutes'
+                summary: '{{ $labels.host }} memory usage sustained above 90%'
               isPaused: false
             - uid: dfr7eiib958n4d
               title: Heavy Swap Usage
@@ -1228,8 +1229,8 @@ data:
               execErrState: Error
               for: 15m
               annotations:
-                description: '{{ $$labels.host }} has averaged above 20% swap with under 15% memory available for at least 15 minutes'
-                summary: '{{ $$labels.host }} is swapping heavily'
+                description: '{{ $labels.host }} has averaged above 20% swap with under 15% memory available for at least 15 minutes'
+                summary: '{{ $labels.host }} is swapping heavily'
               isPaused: false
         - orgId: 1
           name: power
@@ -1276,8 +1277,8 @@ data:
               execErrState: Error
               for: 1m
               annotations:
-                description: UPS {{ $$labels.ups }} is running on battery, indicating a utility power loss
-                summary: UPS {{ $$labels.ups }} is on battery power
+                description: UPS {{ $labels.ups }} is running on battery, indicating a utility power loss
+                summary: UPS {{ $labels.ups }} is on battery power
               isPaused: false
         - orgId: 1
           name: process
@@ -1324,8 +1325,8 @@ data:
               execErrState: Error
               for: 5m
               annotations:
-                description: '{{ $$labels.host }} has had no {{ $$labels.process }} process running for at least 5 minutes'
-                summary: '{{ $$labels.process }} on {{ $$labels.host }} is not running'
+                description: '{{ $labels.host }} has had no {{ $labels.process }} process running for at least 5 minutes'
+                summary: '{{ $labels.process }} on {{ $labels.host }} is not running'
               isPaused: false
         - orgId: 1
           name: thermal
@@ -1378,8 +1379,8 @@ data:
               execErrState: Error
               for: 15m
               annotations:
-                description: '{{ $$labels.host }} CPU temperature has averaged above 80C (Pi soft-throttle point) for at least 15 minutes; clears below 75C'
-                summary: '{{ $$labels.host }} CPU running hot'
+                description: '{{ $labels.host }} CPU temperature has averaged above 80C (Pi soft-throttle point) for at least 15 minutes; clears below 75C'
+                summary: '{{ $labels.host }} CPU running hot'
               isPaused: false
   notifications.yaml: |
     apiVersion: 1
