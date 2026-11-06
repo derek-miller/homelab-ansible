@@ -72,6 +72,18 @@
   #stat-log[data-state="up"] { color: var(--done); }
   #stat-log[data-state="down"] { color: var(--dead); }
   #stat-log[data-state="disconnected"] { color: var(--sent); }
+  #stat-breaker[data-state="closed"] { color: var(--done); }
+  #stat-breaker[data-state="open"] { color: var(--dead); }
+  #stat-breaker[data-state="half_open"] { color: var(--sent); }
+  .breaker { margin: 10px 0 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+  .breaker[data-state="open"], .breaker[data-state="half_open"] {
+    background: var(--panel);
+    border: 1px solid var(--dead);
+    border-radius: 8px;
+    padding: 8px 12px;
+  }
+  .breaker[data-state="half_open"] { border-color: var(--sent); }
+  #breaker-text { flex: 1 1 20rem; overflow-wrap: anywhere; }
   .status-line { margin: 10px 0 0; color: var(--muted); font-size: 0.8125rem; }
   .notice { margin: 10px 0 0; }
   .error { color: var(--dead); }
@@ -239,6 +251,11 @@
     <div class="stat"><span class="label">Dead</span><span id="stat-dead" class="value">–</span></div>
     <div class="stat"><span class="label">Held</span><span id="stat-held" class="value">–</span></div>
     <div class="stat"><span class="label">Gateway log</span><span id="stat-log" class="value">–</span></div>
+    <div class="stat"><span class="label">Sending</span><span id="stat-breaker" class="value">–</span></div>
+  </div>
+  <div id="breaker" class="breaker">
+    <span id="breaker-text"></span>
+    <button type="button" id="breaker-action" hidden></button>
   </div>
   <p id="updated" class="status-line">Loading…</p>
   <p class="notice" role="status" hidden></p>
@@ -578,6 +595,49 @@
     $("stat-held").dataset.count = stats.held;
     $("stat-log").textContent = stats.logStream;
     $("stat-log").dataset.state = stats.logStream;
+    renderBreaker(stats.breaker);
+  }
+
+  function renderBreaker(b) {
+    state.breaker = b;
+    $("stat-breaker").textContent = { closed: "on", open: "paused", half_open: "testing" }[b.state];
+    $("stat-breaker").dataset.state = b.state;
+    $("breaker").dataset.state = b.state;
+    let text = "";
+    if (b.state === "open" && b.pausedBy) {
+      text = `Paused by ${b.pausedBy} ${relative(b.since)}. It stays paused until resumed.`;
+    } else if (b.state === "open") {
+      const next = b.nextProbeAt > Date.now() ? relative(b.nextProbeAt) : "any moment";
+      text = `Paused ${relative(b.since)} (${b.reason}). Next test ${next}.`;
+    } else if (b.state === "half_open") {
+      text = b.probeSentAt
+        ? `Testing the account: a turn went out ${relative(b.probeSentAt)}. Paused ${relative(b.since)} (${b.reason}).`
+        : `Testing the account with the next event that comes due. Paused ${relative(b.since)} (${b.reason}).`;
+    }
+    $("breaker-text").textContent = text;
+    const action = $("breaker-action");
+    action.textContent = b.state === "closed" ? "Pause sending" : "Resume sending";
+    action.className = b.state === "closed" ? "link" : "";
+    action.hidden = false;
+  }
+
+  async function breakerAction() {
+    const pause = state.breaker?.state === "closed";
+    const question = pause
+      ? "Pause sending events to OpenClaw? Nothing is sent until you resume."
+      : "Resume sending events to OpenClaw now?";
+    if (!confirm(question)) return;
+    try {
+      await api(`/api/breaker/${pause ? "pause" : "resume"}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      notify(pause ? "Paused sending." : "Resumed sending.");
+    } catch (err) {
+      notify(`${pause ? "Pausing" : "Resuming"} failed: ${err.message}`, true);
+    }
+    await refresh();
   }
 
   function renderSources() {
@@ -898,6 +958,7 @@
     setTimeout(poll, REFRESH_MS);
   }
 
+  $("breaker-action").addEventListener("click", breakerAction);
   $("sessions-search").addEventListener("input", debounced(refresh));
   $("sessions-show").addEventListener("change", renderSessions);
   $("filter-session").addEventListener("input", debounced(filtersChanged));

@@ -313,6 +313,8 @@ OpenClaw reads every message in the Discord alerts channel and answers under eac
 
 **The proxy's own notices.** Its give-ups post to the alerts channel through `DISCORD_WEBHOOK_URL`. Held-event approvals post through `APPROVAL_DISCORD_WEBHOOK_URL` to a channel of their own, so outside GitHub text never reaches the triage.
 
+**Pausing on account limits.** When every model refuses a turn for the account's sake (a usage or billing limit, a lost login, or an Anthropic overload or 5xx), the proxy stops sending, puts the turn back without spending one of its attempts, and posts one notice through `APPROVAL_DISCORD_WEBHOOK_URL`, so the triage never sees it. Five minutes later it sends one due turn as a test. If that turn isn't refused within two minutes, or completes, sending resumes; if it is refused, or can't be sent, or never starts, the next test waits twice as long, up to an hour. Once the account is switched or paid, Resume on the inbox page's Sending line resumes at once, and Pause there stops sending until resumed. A turn sent before a resume can't pause it again, and a turn refused again after turns sent since its last refusal have got through is taken as the turn's own trouble and spends its attempts like any failure. While paused, give-up notices stay quiet and held events can still be approved. The texts it recognises are `ACCOUNT_FAILURES` in the proxy's `server.mjs`; check them against the gateway log after an OpenClaw or Claude CLI upgrade.
+
 ## Bringing up a new host
 
 1. Add the host to `playbooks/hosts` under its groups (a k3s node also under `[node_labels]`) and give it `playbooks/host_vars/<host>/`.

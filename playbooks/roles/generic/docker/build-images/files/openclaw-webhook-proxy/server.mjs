@@ -10,6 +10,11 @@
  * from someone outside the source's allowlist, other than a bot, is held until an
  * approver approves or dismisses it there.
  *
+ * A turn that every model refuses for the account's sake (a usage or billing limit, a
+ * lost login, an Anthropic outage) pauses all sending. The breaker then sends one turn at
+ * growing intervals and resumes once one gets through; an approver can also pause or
+ * resume it from the admin page.
+ *
  * Always required:
  *   OPENCLAW_HOOKS_TOKEN     — bearer token for the OpenClaw hooks API
  *   OPENCLAW_HOOKS_URL       — full URL to the OpenClaw hook mapping that leaves the untrusted
@@ -26,7 +31,7 @@
  *   BATCH_WINDOW_MS          — how long an event waits for related events (default: 10000)
  *   INBOX_PATH               — SQLite inbox file (default: /data/inbox.db)
  *   DISCORD_WEBHOOK_URL      — Discord webhook told when a session's events give up or an event is held (optional)
- *   APPROVAL_DISCORD_WEBHOOK_URL — Discord webhook for held-event notices instead (default: DISCORD_WEBHOOK_URL)
+ *   APPROVAL_DISCORD_WEBHOOK_URL — Discord webhook for held-event and pause notices instead (default: DISCORD_WEBHOOK_URL)
  *   OPENCLAW_UI_URL          — OpenClaw Control UI base URL the admin page links sessions to (optional)
  *   ADMIN_URL                — the admin page's base URL, which held-event notices link to (no notices without it)
  *   ADMIN_APPROVERS          — comma-separated sign-in emails that may approve, dismiss, replay and discard events
@@ -120,9 +125,26 @@ const HOLD_MS = 7 * 24 * 60 * 60_000;
 const NOTICE_TEXT_CHARS = 1500;
 const MAX_NOTE_CHARS = 4000;
 const CAPACITY_ERROR = "Too many Claude CLI live sessions";
+const PROBE_FIRST_MS = 5 * 60_000;
+const PROBE_MAX_MS = 60 * 60_000;
+const PROBE_QUIET_MS = 2 * 60_000;
+// Refusals that mean the account or Anthropic, not the turn. OpenClaw's own "(rate_limit)" tag
+// also marks the gateway's capacity error and any text containing "429", so it isn't used.
+const ACCOUNT_FAILURES = [
+  ["usage limit", /usage limits?|hit your [^|]*?(?:limit|budget)|(?:reached|exceeded) your (?![^|]*?rate limit)[^|]*?limit|(?:weekly|\d{1,3}-hour|opus|sonnet) limit reached|out of (?:extra )?usage|credit balance is too low|past due|can['’]t use your claude subscription|spend(?:ing)? (?:cap|limit)/i],
+  ["signed out", /not logged in|authentication_failed|invalid (?:x-)?api[ -]key|oauth token (?:has )?expired/i],
+  ["Anthropic outage", /\boverloaded\b|api error: 5\d\d\b/i],
+];
 
 /** "up" while the gateway log is streaming; nothing is sent otherwise */
 let logStream = "down";
+let logStreamUpSince = null;
+
+function setLogStream(state) {
+  if (state === "up" && logStream !== "up") logStreamUpSince = Date.now();
+  if (state !== "up") logStreamUpSince = null;
+  logStream = state;
+}
 
 // ─── Hook sources ───────────────────────────────────────────────────
 
@@ -947,6 +969,29 @@ if (db.prepare("PRAGMA user_version").get().user_version === 0) {
     COMMIT;
   `);
 }
+if (db.prepare("PRAGMA user_version").get().user_version === 1) {
+  db.exec(`
+    BEGIN;
+    CREATE TABLE breaker (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      state TEXT NOT NULL,
+      since INTEGER,
+      reason TEXT,
+      paused_by TEXT,
+      probes INTEGER NOT NULL DEFAULT 0,
+      next_probe_at INTEGER,
+      probe_run_id TEXT,
+      probe_session TEXT,
+      probe_sent_at INTEGER,
+      notice_id TEXT,
+      closed_at INTEGER NOT NULL
+    );
+    INSERT INTO breaker (id, state, closed_at) VALUES (1, 'closed', 0);
+    ALTER TABLE events ADD COLUMN refused_at INTEGER;
+    PRAGMA user_version = 2;
+    COMMIT;
+  `);
+}
 // A send cut off by a restart has no run id for a completion line to match.
 db.exec(`UPDATE events SET status = 'pending' WHERE status = 'sent' AND run_id IS NULL`);
 
@@ -977,8 +1022,10 @@ const dueSource = db.prepare(`
   SELECT source FROM events
   WHERE status = 'pending' AND session_key = ? AND source IN (SELECT value FROM json_each(?))
   ORDER BY due_at, id LIMIT 1`);
+// A new event joins its session's batch early; a failed one waits out its backoff.
 const pendingRows = db.prepare(`
   SELECT * FROM events WHERE status = 'pending' AND session_key = ? AND source = ?
+    AND (attempts = 0 OR due_at <= ?)
   ORDER BY id LIMIT ${MAX_BATCH_SIZE}`);
 const markSkipped = db.prepare(`
   UPDATE events SET status = 'skipped' WHERE id IN (SELECT value FROM json_each(?))`);
@@ -989,8 +1036,8 @@ const setRunId = db.prepare(`
   UPDATE events SET run_id = ? WHERE id IN (SELECT value FROM json_each(?))`);
 const markDone = db.prepare(`
   UPDATE events SET status = 'done' WHERE run_id = ? AND status IN ('sent', 'pending')
-  RETURNING session_key`);
-const sentByRun = db.prepare(`SELECT id FROM events WHERE status = 'sent' AND run_id = ?`);
+  RETURNING session_key, sent_at`);
+const sentByRun = db.prepare(`SELECT id, sent_at, refused_at FROM events WHERE status = 'sent' AND run_id = ?`);
 const sentRunIdByPrefix = db.prepare(`
   SELECT run_id FROM events
   WHERE status = 'sent' AND substr(run_id, 1, length(?)) = ? AND lower(session_key) = ? LIMIT 1`);
@@ -1002,6 +1049,10 @@ const overdueRows = db.prepare(`
 const requeueRows = db.prepare(`
   UPDATE events SET status = 'pending', due_at = ?
   WHERE status = 'sent' AND id IN (SELECT value FROM json_each(?))
+  RETURNING session_key`);
+const refusedRows = db.prepare(`
+  UPDATE events SET status = 'pending', due_at = :now, last_error = :error, refused_at = :now
+  WHERE status = 'sent' AND id IN (SELECT value FROM json_each(:ids))
   RETURNING session_key`);
 const failRows = db.prepare(`
   UPDATE events SET attempts = attempts + 1, last_error = ?,
@@ -1036,7 +1087,7 @@ const eventById = db.prepare(`SELECT * FROM events WHERE id = ?`);
 // A replayed PR or issue event follows its thread's newest ticket key, as a new one would.
 const replayRows = db.prepare(`
   UPDATE events SET status = 'pending', attempts = 0, due_at = ?, run_id = NULL, sent_at = NULL,
-    last_error = NULL,
+    last_error = NULL, refused_at = NULL,
     session_key = COALESCE((SELECT t.session_key FROM events t
                             WHERE t.thread_key = events.thread_key AND t.session_key LIKE 'ticket:%'
                               AND events.thread_key LIKE 'github:%#%' AND events.thread_key NOT LIKE '%@%'
@@ -1058,6 +1109,19 @@ const dismissRow = db.prepare(`
 const expireRows = db.prepare(`
   UPDATE events SET status = 'expired' WHERE status = 'held' AND due_at <= ? RETURNING *`);
 const setNoticeId = db.prepare(`UPDATE events SET notice_id = ? WHERE id = ?`);
+const writeBreaker = db.prepare(`
+  UPDATE breaker SET state = :state, since = :since, reason = :reason, paused_by = :paused_by,
+    probes = :probes, next_probe_at = :next_probe_at, probe_run_id = :probe_run_id,
+    probe_session = :probe_session, probe_sent_at = :probe_sent_at, notice_id = :notice_id,
+    closed_at = :closed_at
+  WHERE id = 1`);
+const { id: _breakerId, ...storedBreaker } = db.prepare(`SELECT * FROM breaker`).get();
+let breaker = storedBreaker;
+
+function setBreaker(changes) {
+  breaker = { ...breaker, ...changes };
+  writeBreaker.run(breaker);
+}
 
 /** Queue one accepted event, or hold one for approval; returns its id and throws if the inbox cannot take it */
 function enqueue(source, threadKey, sessionKey, deliveryId, eventEntry, dueNow, held = null) {
@@ -1261,7 +1325,21 @@ async function handleAdmin(req, res, path) {
       return;
     case "/api/stats":
       if (!allowMethod(req, res, "GET")) return;
-      sendJson(res, 200, { ...inboxStats.get(), maxInFlight: OPENCLAW_MAX_IN_FLIGHT, logStream, openclawUrl: OPENCLAW_UI_URL || null });
+      sendJson(res, 200, {
+        ...inboxStats.get(),
+        maxInFlight: OPENCLAW_MAX_IN_FLIGHT,
+        logStream,
+        openclawUrl: OPENCLAW_UI_URL || null,
+        breaker: {
+          state: breaker.state,
+          since: breaker.since,
+          reason: breaker.reason,
+          pausedBy: breaker.paused_by,
+          probes: breaker.probes,
+          nextProbeAt: breaker.next_probe_at,
+          probeSentAt: breaker.probe_sent_at,
+        },
+      });
       return;
     case "/api/sessions":
       if (!allowMethod(req, res, "GET")) return;
@@ -1302,6 +1380,16 @@ async function handleAdmin(req, res, path) {
       if (by) await decideHeld(req, res, by);
       return;
     }
+    case "/api/breaker/pause":
+    case "/api/breaker/resume": {
+      if (!allowMethod(req, res, "POST")) return;
+      const by = approver(req, res);
+      if (!by || !(await readJson(req, res))) return;
+      if (path.endsWith("/pause")) pauseBreaker(by);
+      else closeBreaker(`resumed by ${by}`);
+      sendJson(res, 200, { state: breaker.state });
+      return;
+    }
     default:
       res.writeHead(404);
       res.end("Not found");
@@ -1322,7 +1410,7 @@ const server = createServer(async (req, res) => {
       return;
     }
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", logStream, ...stats }));
+    res.end(JSON.stringify({ status: "ok", logStream, breaker: breaker.state, ...stats }));
     return;
   }
 
@@ -1822,7 +1910,7 @@ function fail(rows, error) {
   if (dead === 0) return;
   const text = `${dead} event(s) for ${sessionKey} gave up after ${MAX_ATTEMPTS} attempts: ${error}`;
   logWarn(text);
-  if (DISCORD_WEBHOOK_URL) notifyDiscord(text);
+  if (DISCORD_WEBHOOK_URL && breaker.state === "closed") notifyDiscord(text);
 }
 
 /** Put a turn's events back in the queue without counting an attempt */
@@ -1832,9 +1920,167 @@ function requeueBusy(rows, reason) {
   logInfo(`Session ${requeued[0].session_key} busy (${reason}); ${requeued.length} event(s) requeued`);
 }
 
-/** Send due sessions' events, one turn per session, while under the in-flight cap */
+// ─── Circuit breaker ─────────────────────────────────────────────────
+
+/** The account reason for the first model's refusal in a failed turn's summary, if every model's was one */
+function accountFailure(summary) {
+  if (!summary) return null;
+  const attempts = summary.replace(/^All models failed \(\d+\):\s*/, "").split(" | ");
+  const kinds = attempts.map((text) => ACCOUNT_FAILURES.find(([, pattern]) => pattern.test(text))?.[0]);
+  return kinds.every(Boolean) ? kinds[0] : null;
+}
+
+const discordTime = (ms) => `<t:${Math.floor(ms / 1000)}:R>`;
+
+function duration(ms) {
+  const minutes = Math.round(ms / 60_000);
+  return minutes < 90 ? `${minutes} min` : `${(minutes / 60).toFixed(1)} h`;
+}
+
+let noticeQueue = Promise.resolve();
+
+/** Post one Discord notice per pause and edit it as the pause changes; `last` closes it */
+function noticeBreaker(content, last = false) {
+  if (!APPROVAL_DISCORD_WEBHOOK_URL) return;
+  const link = { type: 2, style: 5, label: "Open the inbox", url: `${ADMIN_URL}/` };
+  const message = { content: content.slice(0, 2000), components: last || !ADMIN_URL ? [] : [{ type: 1, components: [link] }] };
+  noticeQueue = noticeQueue.then(async () => {
+    try {
+      const id = await postDiscord(APPROVAL_DISCORD_WEBHOOK_URL, message, breaker.notice_id);
+      setBreaker({ notice_id: last ? null : id });
+    } catch (err) {
+      logWarn(`Discord notice for the breaker failed: ${err.message}`);
+      if (last) setBreaker({ notice_id: null });
+    }
+  });
+}
+
+/** Stop sending after a refusal; from half_open, wait twice as long before the next test */
+function openBreaker(kind, summary) {
+  const now = Date.now();
+  const retest = breaker.state === "half_open";
+  const probes = retest ? breaker.probes + 1 : 0;
+  const nextProbeAt = now + Math.min(PROBE_FIRST_MS * 2 ** probes, PROBE_MAX_MS);
+  setBreaker({
+    state: "open",
+    since: retest ? breaker.since : now,
+    reason: `${kind}: ${clip(summary, 1000)}`,
+    paused_by: null,
+    probes,
+    next_probe_at: nextProbeAt,
+    probe_run_id: null,
+    probe_session: null,
+    probe_sent_at: null,
+  });
+  logWarn(`Paused sending (${kind}${retest ? ", test turn refused" : ""}); next test ${new Date(nextProbeAt).toISOString()}`);
+  noticePaused();
+}
+
+function noticePaused(note = "") {
+  const split = breaker.reason.indexOf(": ");
+  const kind = breaker.reason.slice(0, split);
+  const first = breaker.reason.slice(split + 2).replace(/^All models failed \(\d+\):\s*/, "").split(" | ")[0];
+  const flat = (text) => text.replace(/\s+/g, " ").replaceAll("](", "] (");
+  noticeBreaker(
+    `**Paused sending to OpenClaw** · ${kind} · since ${discordTime(breaker.since)}\n` +
+    `> ${clip(flat(first), 300)}\n` +
+    (note ? `${clip(flat(note), 300)}\n` : "") +
+    `Next test ${discordTime(breaker.next_probe_at)}, or resume from the inbox once the account is fixed.`
+  );
+}
+
+function pauseBreaker(by) {
+  const now = Date.now();
+  setBreaker({
+    state: "open",
+    since: breaker.state === "closed" ? now : breaker.since,
+    reason: `paused by ${by}`,
+    paused_by: by,
+    next_probe_at: null,
+    probe_run_id: null,
+    probe_session: null,
+    probe_sent_at: null,
+  });
+  logInfo(`Paused sending (${by})`);
+  noticeBreaker(`**Paused sending to OpenClaw** by ${by} · since ${discordTime(breaker.since)}`);
+}
+
+/** Send again; turns sent before now can no longer pause it */
+function closeBreaker(how) {
+  if (breaker.state === "closed") return;
+  const now = Date.now();
+  const paused = now - breaker.since;
+  setBreaker({
+    state: "closed",
+    since: now,
+    reason: null,
+    paused_by: null,
+    probes: 0,
+    next_probe_at: null,
+    probe_run_id: null,
+    probe_session: null,
+    probe_sent_at: null,
+    closed_at: now,
+  });
+  logInfo(`Resumed sending: ${how}`);
+  noticeBreaker(`**Resumed sending to OpenClaw** · ${how} · paused ${duration(paused)}`, true);
+}
+
+let lastCompletedSentAt = 0;
+
+function clearProbe() {
+  setBreaker({ probe_run_id: null, probe_session: null, probe_sent_at: null });
+}
+
+/**
+ * A turn every model refused for the account's sake: requeue it without an attempt and pause, unless the
+ * refusal is old news or, while sending works, the turn's own doing
+ */
+function refused(rows, kind, summary, runId) {
+  // Turns sent after its last refusal have completed since, so the refusal is about this turn.
+  const before = rows.filter((row) => row.refused_at != null);
+  if (breaker.state === "closed" && kind !== "Anthropic outage" && before.length > 0 &&
+      before.every((row) => row.refused_at < lastCompletedSentAt)) {
+    fail(rows, summary);
+    return;
+  }
+  const requeued = refusedRows.all({ now: Date.now(), error: clip(summary, 2000), ids: idList(rows) });
+  if (requeued.length === 0) return;
+  logInfo(`Turn for ${requeued[0].session_key} refused (${kind}); ${requeued.length} event(s) requeued`);
+  // The log stream replays old lines, and a turn sent before the last resume says nothing about the account now.
+  if (Math.min(...rows.map((row) => row.sent_at)) < breaker.closed_at) return;
+  if (breaker.state === "closed" || (breaker.state === "half_open" && runId === breaker.probe_run_id)) {
+    openBreaker(kind, summary);
+  }
+}
+
+/** A test that never reached the account says nothing about it: test again after the next interval */
+function retestLater(why) {
+  const now = Date.now();
+  const probes = breaker.probes + 1;
+  const nextProbeAt = now + Math.min(PROBE_FIRST_MS * 2 ** probes, PROBE_MAX_MS);
+  setBreaker({ state: "open", probes, next_probe_at: nextProbeAt, probe_run_id: null, probe_session: null, probe_sent_at: null });
+  logWarn(`Test turn ${why}; next test ${new Date(nextProbeAt).toISOString()}`);
+  noticePaused(`The last test turn ${why}.`);
+}
+
+/** Move an open breaker to half_open when its test is due, and close one whose test went unrefused */
+function advanceBreaker(now) {
+  // Between sends, a test with no run id was cut off by a restart.
+  if (breaker.state === "half_open" && breaker.probe_sent_at && !breaker.probe_run_id) clearProbe();
+  if (breaker.state === "open" && breaker.next_probe_at && now >= breaker.next_probe_at) {
+    setBreaker({ state: "half_open", probe_run_id: null, probe_session: null, probe_sent_at: null });
+    logInfo("Testing the account with the next due turn");
+  } else if (breaker.state === "half_open" && breaker.probe_run_id && logStreamUpSince != null &&
+             now - Math.max(breaker.probe_sent_at, logStreamUpSince) >= PROBE_QUIET_MS) {
+    closeBreaker(`a test turn ran ${PROBE_QUIET_MS / 60_000} min unrefused`);
+  }
+}
+
+/** Send due sessions' events, one turn per session, while under the in-flight cap; only one turn while testing */
 async function dispatch() {
-  while (inboxStats.get().inFlight < OPENCLAW_MAX_IN_FLIGHT) {
+  while ((breaker.state === "closed" || (breaker.state === "half_open" && !breaker.probe_sent_at)) &&
+         inboxStats.get().inFlight < OPENCLAW_MAX_IN_FLIGHT) {
     const now = Date.now();
     const next = nextDueKey.get(sourceNames, now);
     if (!next) return;
@@ -1844,7 +2090,7 @@ async function dispatch() {
     const guardrails = readGuardrails(source);
     const rows = [];
     let size = Buffer.byteLength(JSON.stringify(guardrails));
-    for (const row of pendingRows.all(sessionKey, source.name)) {
+    for (const row of pendingRows.all(sessionKey, source.name, now)) {
       size += Buffer.byteLength(JSON.stringify(row.message));
       if (row.decided_by) size += Buffer.byteLength(JSON.stringify(approvalLine(row, "The event above")));
       if (rows.length > 0 && size > MAX_MESSAGE_BYTES) break;
@@ -1861,13 +2107,21 @@ async function dispatch() {
     }
 
     markSent.run(now, idList(rows));
+    const probe = breaker.state === "half_open";
+    // Claimed before the call so that a pause, resume or log line during it wins.
+    if (probe) setBreaker({ probe_session: sessionKey.toLowerCase(), probe_sent_at: now });
+    const claimed = () => probe && breaker.state === "half_open" && breaker.probe_sent_at === now;
     try {
       const runId = await forwardToOpenClaw(buildMessage(guardrails, rows), source.label, sessionKey);
       setRunId.run(runId, idList(rows));
-      logInfo(`Sent ${rows.length} ${source.name} event(s) to ${sessionKey} (run ${runId})`);
+      const testing = claimed();
+      logInfo(`Sent ${rows.length} ${source.name} event(s) to ${sessionKey} (run ${runId})${testing ? " to test the account" : ""}`);
+      if (testing) setBreaker({ probe_run_id: runId });
     } catch (err) {
+      if (claimed()) retestLater(`could not be sent: ${err.message}`);
       fail(rows, err.message);
     }
+    if (probe) return;
   }
 }
 
@@ -1879,6 +2133,7 @@ async function tick() {
     if (logStream === "up") {
       const overdue = Map.groupBy(overdueRows.all(now - BACKSTOP_MS), (row) => row.session_key);
       for (const rows of overdue.values()) fail(rows, "no completion line");
+      advanceBreaker(now);
       await dispatch();
     }
   } catch (err) {
@@ -1913,7 +2168,7 @@ function startLogStream() {
     });
   }
   child.on("close", (code, signal) => {
-    logStream = "down";
+    setLogStream("down");
     logWarn(`Gateway log stream exited (${signal ?? `code ${code}`}); restarting in 10s`);
     setTimeout(startLogStream, 10_000);
   });
@@ -1929,11 +2184,11 @@ function handleLogLine(line) {
   }
   if (record.type === "notice" || record.type === "error") {
     logInfo(`[gateway log] ${record.message}${record.error ? `: ${record.error}` : ""}`);
-    if (record.message.includes("gateway disconnected")) logStream = "disconnected";
-    else if (record.message.includes("gateway reconnected")) logStream = "up";
+    if (record.message.includes("gateway disconnected")) setLogStream("disconnected");
+    else if (record.message.includes("gateway reconnected")) setLogStream("up");
     return;
   }
-  logStream = "up";
+  setLogStream("up");
   if (record.type !== "log" || record.subsystem !== "gateway/hooks") return;
 
   // The message joins all of the call's arguments, so it carries their fields too.
@@ -1943,20 +2198,38 @@ function handleLogLine(line) {
   const prefix = fields.runId?.endsWith("***") ? fields.runId.slice(0, -3) : null;
   const sessionKey = fields.sessionKey?.toLowerCase() ?? null;
   const runId = (prefix ? sentRunIdByPrefix.get(prefix, prefix, sessionKey)?.run_id : fields.runId) ?? null;
+  const probe = runId != null && breaker.state === "half_open" && runId === breaker.probe_run_id;
   if (text.includes("hook agent run completed without announcement")) {
     const done = markDone.all(runId);
-    if (done.length > 0) logInfo(`Turn for ${done[0].session_key} done (run ${runId})`);
+    if (done.length > 0) {
+      lastCompletedSentAt = Math.max(lastCompletedSentAt, ...done.map((row) => row.sent_at ?? 0));
+      logInfo(`Turn for ${done[0].session_key} done (run ${runId})`);
+    }
+    if (probe) closeBreaker("a test turn completed");
   } else if (text.includes("hook agent run returned non-ok status")) {
     const rows = sentByRun.all(runId);
-    if (text.includes(CAPACITY_ERROR)) requeueBusy(rows, "gateway at capacity");
-    else fail(rows, fields.summary ?? fields.status);
+    const kind = text.includes(CAPACITY_ERROR) ? null : accountFailure(fields.summary);
+    if (text.includes(CAPACITY_ERROR)) {
+      requeueBusy(rows, "gateway at capacity");
+      if (probe) clearProbe();
+    } else if (kind) {
+      refused(rows, kind, fields.summary, runId);
+    } else {
+      if (probe) closeBreaker("a test turn got through and failed on its own");
+      fail(rows, fields.summary ?? fields.status);
+    }
   } else if (text.includes("hook agent failed: ")) {
     // Names the session but not the run, so only our sends just before it can be the one refused.
     const key = text.match(/Session "agent:[^:"]+:([^"]+)"/)?.[1];
     if (!key) return;
     const at = Date.parse(record.time);
     const rows = sentByKey.all(key.toLowerCase(), at - 65_000, at + 5_000);
-    if (text.includes("while starting work. Retry.")) requeueBusy(rows, "session claimed");
+    const busy = text.includes("while starting work. Retry.");
+    if (rows.length > 0 && breaker.state === "half_open" && key.toLowerCase() === breaker.probe_session) {
+      if (busy) clearProbe();
+      else retestLater("never started");
+    }
+    if (busy) requeueBusy(rows, "session claimed");
     else fail(rows, text.slice(text.indexOf("hook agent failed: ")));
   }
 }
