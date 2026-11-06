@@ -1251,7 +1251,7 @@ data:
                     format: table
                     intervalMs: 1000
                     maxDataPoints: 43200
-                    rawSql: SELECT ups, MIN(CASE WHEN status LIKE '%OB%' AND status NOT LIKE '%CAL%' THEN 1 ELSE 0 END) AS value FROM ups WHERE time >= now() - interval '2 minutes' GROUP BY ups
+                    rawSql: SELECT ups, MIN(CASE WHEN status LIKE '%OB%' AND status NOT LIKE '%CAL%' THEN 1 ELSE 0 END) AS value FROM ups WHERE time >= now() - interval '2 minutes' AND status <> '' GROUP BY ups
                     refId: A
                 - refId: B
                   relativeTimeRange:
