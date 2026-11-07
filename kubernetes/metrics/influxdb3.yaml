@@ -51,8 +51,8 @@ data:
     fi
     # --force overwrites the files it writes but leaves an earlier backup's other files in place,
     # so the new backup goes into an empty folder and the last one waits beside it until it completes.
-    rm -rf "$d/nightly.prev"
-    if [ -d "$d/nightly" ]; then mv "$d/nightly" "$d/nightly.prev"; fi
+    # A nightly.prev left by a run that was cut off is the last completed backup, so it wins over nightly.
+    if [ -d "$d/nightly.prev" ]; then rm -rf "$d/nightly"; elif [ -d "$d/nightly" ]; then mv "$d/nightly" "$d/nightly.prev"; fi
     influxdb3 create backup --name nightly --force >/dev/null || keep_last "create backup exited $?"
     while :; do
       sleep 10
