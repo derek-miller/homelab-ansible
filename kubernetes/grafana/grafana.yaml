@@ -88,6 +88,18 @@ spec:
             - name: alerting
               mountPath: /etc/grafana/provisioning/alerting
               readOnly: true
+            - name: dashboard-providers
+              mountPath: /etc/grafana/provisioning/dashboards
+              readOnly: true
+            - name: dashboards-finite-labs
+              mountPath: /etc/grafana/dashboards/finite-labs
+              readOnly: true
+            - name: dashboards-home
+              mountPath: /etc/grafana/dashboards/home
+              readOnly: true
+            - name: dashboards-homelab
+              mountPath: /etc/grafana/dashboards/homelab
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -95,6 +107,18 @@ spec:
         - name: alerting
           configMap:
             name: alerting
+        - name: dashboard-providers
+          configMap:
+            name: dashboard-providers
+        - name: dashboards-finite-labs
+          configMap:
+            name: dashboards-finite-labs
+        - name: dashboards-home
+          configMap:
+            name: dashboards-home
+        - name: dashboards-homelab
+          configMap:
+            name: dashboards-homelab
 ---
 apiVersion: v1
 kind: Service
