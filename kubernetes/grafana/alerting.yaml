@@ -847,7 +847,8 @@ data:
                     format: table
                     intervalMs: 1000
                     maxDataPoints: 43200
-                    rawSql: SELECT host, namespace, pod_name, container_name, (MAX(restarts_total) - MIN(restarts_total)) AS value FROM kubernetes_pod_container_status WHERE time >= now() - interval '30 minutes' GROUP BY host, namespace, pod_name, container_name
+                    # Adds up each rise in the counter, so a pod recreated under the same name, back at 0, isn't a crash loop.
+                    rawSql: SELECT host, namespace, pod_name, container_name, SUM(CASE WHEN d > 0 THEN d ELSE 0 END) AS value FROM (SELECT host, namespace, pod_name, container_name, restarts_total - LAG(restarts_total) OVER (PARTITION BY host, namespace, pod_name, container_name ORDER BY time) AS d FROM kubernetes_pod_container_status WHERE time >= now() - interval '30 minutes') GROUP BY host, namespace, pod_name, container_name
                     refId: A
                 - refId: B
                   relativeTimeRange:
