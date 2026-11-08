@@ -39,7 +39,7 @@
   ## output, and will flush this buffer on a successful write. Oldest metrics
   ## are dropped first when this buffer fills.
   ## This buffer only fills when writes fail to output plugin(s).
-  metric_buffer_limit = 10000
+  metric_buffer_limit = {{ telegraf_metric_buffer_limit }}
 
   ## Collection jitter is used to jitter the collection by a random amount.
   ## Each plugin will sleep for a random time within jitter before collecting.
@@ -2993,11 +2993,6 @@
   ## regardless of status.
   ##
   # interfaces = ["eth0"]
-  ##
-  ## On linux systems telegraf also collects protocol stats.
-  ## Setting ignore_protocol_stats to true will skip reporting of protocol metrics.
-  ##
-  ignore_protocol_stats = true
   ##
 
 

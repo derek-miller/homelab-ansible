@@ -31,3 +31,6 @@ raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:
   - pi
 raspberry_pi_swap_size_mb: 0
+
+# Under 1 GiB of RAM: a smaller buffer while InfluxDB is unreachable.
+telegraf_metric_buffer_limit: 50000
