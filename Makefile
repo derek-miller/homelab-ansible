@@ -163,6 +163,7 @@ vault_label_check = bad=; \
 	done; \
 	for file in $$(git ls-files -- 'playbooks/group_vars/*' 'playbooks/host_vars/*'); do \
 		case "$$file" in */infra.yml) want=infra ;; *) want=app ;; esac; \
+		git show :"$$file" | head -n 1 | grep -q '^\$$ANSIBLE_VAULT;' && continue; \
 		if git show :"$$file" | grep -o '\$$ANSIBLE_VAULT;[^ ]*' | grep -v -x '\$$ANSIBLE_VAULT;1\.2;AES256;'"$$want" | grep -q .; then \
 			echo "$$file: every !vault value must be encrypted with the $$want vault ID" >&2; bad=1; \
 		fi; \
