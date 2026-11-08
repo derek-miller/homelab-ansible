@@ -41,10 +41,15 @@ jobs:
           python-version: "3.13"
           cache: pip
 
-      - name: Write vault password
+      - name: Write vault passwords
         env:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
-        run: printf '%s\n' "$VAULT_PASS" > .vault_pass
+          VAULT_PASS_INFRA: ${{ secrets.VAULT_PASS_INFRA }}
+          VAULT_PASS_APP: ${{ secrets.VAULT_PASS_APP }}
+        run: |
+          if [ -n "$VAULT_PASS" ]; then printf '%s\n' "$VAULT_PASS" > .vault_pass; fi
+          if [ -n "$VAULT_PASS_INFRA" ]; then printf '%s\n' "$VAULT_PASS_INFRA" > .vault_pass_infra; fi
+          if [ -n "$VAULT_PASS_APP" ]; then printf '%s\n' "$VAULT_PASS_APP" > .vault_pass_app; fi
 
       - name: Install dependencies
         run: |
@@ -75,4 +80,4 @@ jobs:
       # Post steps run after this, so none of them can read the vault password or key.
       - name: Remove secrets
         if: always()
-        run: rm -f .vault_pass .ssh/ansible-id_ed25519
+        run: rm -f .vault_pass .vault_pass_infra .vault_pass_app .ssh/ansible-id_ed25519

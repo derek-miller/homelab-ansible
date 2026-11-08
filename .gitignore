@@ -6,6 +6,7 @@
 /.python-version
 /.ssh/
 /.vault_pass
+/.vault_pass_*
 /.venv/
 /playbooks/collections/ansible_collections/
 /playbooks/roles/galaxy/

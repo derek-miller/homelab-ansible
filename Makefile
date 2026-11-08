@@ -16,7 +16,10 @@ playbook_file_maybe = playbooks/$(playbook).yml
 override playbook_file = $(or $(wildcard $(playbook_file_maybe)),$(error could not find playbook file $(playbook_file_maybe)))
 
 vault_files ?= $(shell find playbooks kubernetes -type f -path '*vault*' -not -path 'playbooks/collections/*' -not -path 'playbooks/roles/galaxy/*')
-vault_flag = --vault-id=.vault_pass
+vault_tiers := infra app
+vault_flag = $(strip $(foreach t,$(vault_tiers),$(if $(wildcard .vault_pass_$(t)),--vault-id=$(t)@.vault_pass_$(t))) $(if $(wildcard .vault_pass),--vault-id=.vault_pass))
+# Encrypting each file to its own tier, and checking labels, waits until every vault file has been re-keyed to one.
+vault_tiered ?= no
 base ?= HEAD
 
 ansible_default_flags = --inventory=$(inventory_file) $(vault_flag)
@@ -134,6 +137,37 @@ vault_marker := $$ANSIBLE_VAULT;
 vault_files_encrypted = $(if $(vault_files),$(shell grep --files-with-matches '$(vault_marker)' $(vault_files)))
 vault_files_decrypted = $(if $(vault_files),$(shell grep --files-without-match '$(vault_marker)' $(vault_files)))
 vault_files_decrypted_staged = $(if $(vault_files),$(shell git grep --cached --files-without-match '$(vault_marker)' $(vault_files)))
+# The labels $(vault_flag) loads; an unlabelled --vault-id is Ansible's "default".
+vault_ids = $(foreach f,$(filter --vault-id=%,$(vault_flag)),$(if $(findstring @,$(f)),$(firstword $(subst @, ,$(patsubst --vault-id=%,%,$(f)))),default))
+vault_id_loaded = printf ' %s ' '$(vault_ids)' | grep -q " $(1) "
+# In a shell loop over $$file: skip a file whose header names a password that isn't loaded, so one file can't stop the rest.
+vault_skip_unloaded = label=$$(head -n 1 "$$file" | cut -d ';' -f 4); \
+	if [ -n "$$label" ] && ! $(call vault_id_loaded,$$label); then \
+		echo "Skipping $$file: $$label tier, its password isn't loaded" >&2; continue; \
+	fi;
+vault_encrypt_tiered = for file in $(vault_files_decrypted); do \
+		case "$$file" in *infra*) tier=infra ;; *) tier=app ;; esac; \
+		if $(call vault_id_loaded,$$tier); then \
+			ansible-vault encrypt -v $(vault_flag) --encrypt-vault-id=$$tier "$$file" || exit 1; \
+		else \
+			echo "Skipping $$file: $$tier tier, its password isn't loaded" >&2; \
+		fi; \
+	done
+# Labels are plaintext, so these need no password: whole-file vaults and !vault values in infra.yml carry infra,
+# and everything else carries app.
+vault_label_check = bad=; \
+	for file in $$(git grep --cached -l '^\$$ANSIBLE_VAULT;' -- $(vault_files)); do \
+		case "$$file" in *infra*) want=infra ;; *) want=app ;; esac; \
+		[ "$$(git show :"$$file" | head -n 1)" = '$$ANSIBLE_VAULT;1.2;AES256;'"$$want" ] \
+			|| { echo "$$file: must be encrypted with the $$want vault ID" >&2; bad=1; }; \
+	done; \
+	for file in $$(git ls-files -- 'playbooks/group_vars/*' 'playbooks/host_vars/*'); do \
+		case "$$file" in */infra.yml) want=infra ;; *) want=app ;; esac; \
+		if git show :"$$file" | grep -o '\$$ANSIBLE_VAULT;[^ ]*' | grep -v -x '\$$ANSIBLE_VAULT;1\.2;AES256;'"$$want" | grep -q .; then \
+			echo "$$file: every !vault value must be encrypted with the $$want vault ID" >&2; bad=1; \
+		fi; \
+	done; \
+	[ -z "$$bad" ]
 
 .PHONY: vault-ls
 vault-ls:
@@ -152,11 +186,15 @@ vault-ls-decrypted:
 
 .PHONY: vault-decrypt
 vault-decrypt:
-	$(if $(vault_files_encrypted),ansible-vault decrypt -v $(vault_flag) $(vault_files_encrypted))
+	@files=; for file in $(vault_files_encrypted); do \
+		$(vault_skip_unloaded) \
+		files="$$files $$file"; \
+	done; \
+	if [ -n "$$files" ]; then ansible-vault decrypt -v $(vault_flag) $$files; fi
 
 .PHONY: vault-encrypt
 vault-encrypt: vault-revert-unchanged
-	$(if $(vault_files_decrypted),ansible-vault encrypt -v $(vault_flag) $(vault_files_decrypted))
+	$(if $(vault_files_decrypted),$(if $(filter yes,$(vault_tiered)),$(vault_encrypt_tiered),ansible-vault encrypt -v $(vault_flag) $(if $(word 2,$(vault_ids)),--encrypt-vault-id=default) $(vault_files_decrypted)))
 
 .PHONY: vault-revert-unchanged
 vault-revert-unchanged:
@@ -179,6 +217,7 @@ vault-check:
 	$(if $(vault_files_decrypted_staged),\
 		cat hooks/nope >&2; echo 'must encrypt vault files by running make vault-encrypt' >&2; exit 1;\
 	)
+	$(if $(filter yes,$(vault_tiered)),@$(vault_label_check))
 
 .PHONY: vault-diff
 vault-diff:
@@ -187,17 +226,24 @@ vault-diff:
 	@for file in $(vault_files); do \
 		head_tmp=$$(mktemp); \
 		curr_tmp=$$(mktemp); \
-		git show $(base):"$$file" > "$$head_tmp" 2>/dev/null \
-			&& ansible-vault decrypt $(vault_flag) "$$head_tmp" 2>/dev/null \
-			|| : > "$$head_tmp"; \
+		unreadable=; \
+		if ! git show $(base):"$$file" > "$$head_tmp" 2>/dev/null; then \
+			: > "$$head_tmp"; \
+		elif grep -q '$(vault_marker)' "$$head_tmp" && ! ansible-vault decrypt $(vault_flag) "$$head_tmp" 2>/dev/null; then \
+			unreadable=$$(head -n 1 "$$head_tmp" | cut -d ';' -f 4); unreadable=$${unreadable:-unlabelled}; \
+		fi; \
 		if [ ! -f "$$file" ]; then \
 			: > "$$curr_tmp"; \
 		elif grep -q '$(vault_marker)' "$$file" 2>/dev/null; then \
-			ansible-vault view $(vault_flag) "$$file" > "$$curr_tmp" 2>/dev/null; \
+			ansible-vault view $(vault_flag) "$$file" > "$$curr_tmp" 2>/dev/null \
+				|| { unreadable=$$(head -n 1 "$$file" | cut -d ';' -f 4); unreadable=$${unreadable:-unlabelled}; }; \
 		else \
 			cat "$$file" > "$$curr_tmp" 2>/dev/null; \
 		fi; \
-		if ! diff -qw "$$head_tmp" "$$curr_tmp" > /dev/null 2>&1; then \
+		if [ -n "$$unreadable" ]; then \
+			git show $(base):"$$file" 2>/dev/null | cmp -s - "$$file" \
+				|| echo "$$file: changed, $$unreadable tier, not readable with these passwords"; \
+		elif ! diff -qw "$$head_tmp" "$$curr_tmp" > /dev/null 2>&1; then \
 			diff -uw --label "a/$$file" --label "b/$$file" "$$head_tmp" "$$curr_tmp" || true; \
 		fi; \
 		rm -f "$$head_tmp" "$$curr_tmp"; \
