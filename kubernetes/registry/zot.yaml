@@ -1,5 +1,5 @@
 ---
-# Images the build hosts make, served through the edge Traefik; the routes and the accounts are in zot.vault.yaml.
+# Images the build hosts make, served through the edge Traefik; the routes are in zot.vault.yaml, and the accounts in infra.vault.yaml.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

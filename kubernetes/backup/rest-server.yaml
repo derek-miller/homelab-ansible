@@ -1,5 +1,5 @@
 ---
-# The share, its credentials and the logins are in rest-server.vault.yaml.
+# The share, its credentials and the logins are in infra.vault.yaml.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

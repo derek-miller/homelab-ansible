@@ -1,6 +1,6 @@
 ---
 # Queues GitHub and YouTrack webhooks for OpenClaw on rackmini1. Its routes, settings, rules, SSH key and egress rule
-# to rackmini1 are in openclaw-webhook-proxy.vault.yaml.
+# to rackmini1 are in openclaw-webhook-proxy.vault.yaml, and its hooks token and webhook secrets in infra.vault.yaml.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -48,6 +48,8 @@ spec:
           envFrom:
             - secretRef:
                 name: openclaw-webhook-proxy
+            - secretRef:
+                name: openclaw-webhook-proxy-keys
           readinessProbe:
             httpGet:
               path: /health

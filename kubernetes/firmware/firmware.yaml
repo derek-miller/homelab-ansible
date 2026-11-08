@@ -1,7 +1,7 @@
 ---
 # The Zigbee firmware index (github.com/finitelabs/zigbee-firmware-index): its
 # admin page, behind the Finite Labs sign-in, and its daily publish to R2. The
-# Ingress, the keys and the admin list are in firmware.vault.yaml.
+# Ingress and the admin list are in firmware.vault.yaml, and the keys in infra.vault.yaml.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

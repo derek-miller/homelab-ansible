@@ -1,5 +1,5 @@
 ---
-# Polls the UDM and writes to InfluxDB. Its address and keys are in metrics.vault.yaml.
+# Polls the UDM and writes to InfluxDB. Its address and keys are in infra.vault.yaml, and its egress rule in metrics.vault.yaml.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

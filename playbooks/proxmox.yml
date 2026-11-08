@@ -21,7 +21,7 @@
 
     - name: copy the ansible private key out of the vault
       copy:
-        src: "vault/{{ key_name }}"
+        src: "vault/infra/{{ key_name }}"
         dest: "{{ playbook_dir }}/../.ssh/{{ key_name }}"
         mode: 0600
   tags:

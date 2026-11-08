@@ -1,5 +1,5 @@
 ---
-# Keycloak's database. Its password is in identity.vault.yaml.
+# Keycloak's database. Its password is in infra.vault.yaml.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

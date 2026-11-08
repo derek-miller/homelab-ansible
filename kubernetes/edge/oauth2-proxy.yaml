@@ -1,7 +1,7 @@
 ---
 # The house sign-ins, one per Keycloak realm, behind the oauth-verify
-# middlewares in traefik.yaml. Each one's client, domain and /oauth2/ routes are
-# in oauth2-proxy.vault.yaml.
+# middlewares in traefik.yaml. Each one's domain and /oauth2/ routes are in
+# oauth2-proxy.vault.yaml, and its client in infra.vault.yaml.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:

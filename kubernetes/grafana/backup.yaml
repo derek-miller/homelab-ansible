@@ -1,5 +1,5 @@
 ---
-# The login and the repository's password are in backup.vault.yaml.
+# The login and the repository's password are in infra.vault.yaml.
 apiVersion: k8up.io/v1
 kind: Schedule
 metadata:

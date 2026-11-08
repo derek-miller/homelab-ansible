@@ -1,5 +1,5 @@
 ---
-# Keycloak, the house sign-in. Its hostname and database password are in identity.vault.yaml, with its Ingress.
+# Keycloak, the house sign-in. Its hostname and Ingress are in identity.vault.yaml, and its database password in infra.vault.yaml.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

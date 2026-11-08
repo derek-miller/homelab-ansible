@@ -245,7 +245,8 @@ spec:
     mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
     operation: copy
 ---
-# The domain, the ACME email and the dashboard's host are in traefik.vault.yaml's traefik-values.
+# The domain, the ACME email and the dashboard's host are in traefik.vault.yaml's traefik-values, and the Cloudflare
+# token in infra.vault.yaml.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:

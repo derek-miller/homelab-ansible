@@ -1,5 +1,5 @@
 ---
-# The runners finitelabs/control4-zigbee3 asks for with `runs-on: rack`; the token is in rack.vault.yaml.
+# The runners finitelabs/control4-zigbee3 asks for with `runs-on: rack`; the token is in infra.vault.yaml.
 # The chart's minor must match the controller's in kubernetes/platform/arc/.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
