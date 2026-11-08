@@ -7,8 +7,9 @@ _flux_manifests:
   - flux-sync
 
 _flux_kubeconfig: /etc/rancher/k3s/k3s.yaml
-# A dry-run stages apart, so it never clears the folder a real deploy is using.
-_flux_work: "/run/flux{{ '-check' if ansible_check_mode else '' }}"
+# A dry-run stages in its own folder inside a real deploy's, so it never clears the
+# real deploy's apps, and the next real deploy clears whatever a dry-run left.
+_flux_work: "/run/flux{{ '/check' if ansible_check_mode else '' }}"
 _flux_registry_cluster_address: zot.zot.svc.cluster.local:5000
 _flux_registry_auth: "{{ (flux_registry_user ~ ':' ~ flux_registry_password) | b64encode }}"
 _flux_image_registry_auths: >-
