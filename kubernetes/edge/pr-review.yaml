@@ -1,0 +1,1041 @@
+---
+# Shows a pull request's diff with its vault files decrypted in the viewer's browser. Its Ingress is in
+# pr-review.vault.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pr-review-site
+  namespace: edge
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="referrer" content="no-referrer">
+    <title>PR review</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" defer></script>
+    </head>
+    <body>
+    <main>
+      <h1>PR review</h1>
+      <p class="lede">A pull request's diff, with its vault files and inline vault values decrypted here in your browser. The password stays in this tab's memory and is forgotten after 30 minutes idle.</p>
+      <form id="form" autocomplete="off">
+        <label>Pull request <input id="pr" placeholder="317, or a GitHub pull request URL" required></label>
+        <label>Vault password <input id="password" type="password" autocomplete="off"></label>
+        <button type="submit">Show diff</button>
+        <button type="button" class="plain" id="pulls">Open pull requests</button>
+      </form>
+      <p id="held" hidden>Password held until <span id="held-until"></span>. <button type="button" id="forget">Forget now</button></p>
+      <p id="status" role="status"></p>
+    </main>
+    <div id="toolbar" hidden>
+      <div class="seg" role="group" aria-label="Layout"><button type="button" data-layout="unified">Unified</button><button type="button" data-layout="split">Split</button></div>
+      <label class="check"><input type="checkbox" id="only-vault"> Vault files only</label>
+      <label class="check"><input type="checkbox" id="hide-same"> Hide files with no change</label>
+      <button type="button" class="plain" id="collapse">Collapse all</button>
+      <button type="button" class="plain" id="expand">Expand all</button>
+    </div>
+    <div id="results"></div>
+    </body>
+    </html>
+  app.js: |
+    'use strict';
+
+    const DEFAULT_REPO = 'derek-miller/homelab-ansible';
+    const IDLE_MS = 30 * 60 * 1000;
+    const CONTEXT = 3;
+    const MAX_EDIT_DISTANCE = 1000;
+
+    const utf8 = new TextEncoder();
+
+    function hexToBytes(hex) {
+      if (hex.length % 2 || /[^0-9a-fA-F]/.test(hex)) throw new Error('not a vault: bad hex');
+      const out = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+      return out;
+    }
+
+    function bytesToHex(bytes) {
+      return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function sha256(text) {
+      return bytesToHex(new Uint8Array(await crypto.subtle.digest('SHA-256', utf8.encode(text)))).slice(0, 12);
+    }
+
+    // Ansible Vault 1.1/1.2: PBKDF2-SHA256 (10000 rounds) gives an AES-256 key, an
+    // HMAC-SHA256 key and a CTR counter; the HMAC covers the ciphertext.
+    function parseVault(text) {
+      const lines = text.trim().split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const header = lines[0].split(';');
+      if (header[0] !== '$ANSIBLE_VAULT' || header[2] !== 'AES256') throw new Error('not a vault: unknown header');
+      const inner = new TextDecoder().decode(hexToBytes(lines.slice(1).join(''))).split('\n');
+      if (inner.length < 3) throw new Error('not a vault: bad body');
+      return {
+        salt: hexToBytes(inner[0]),
+        hmac: hexToBytes(inner[1]),
+        ciphertext: hexToBytes(inner[2]),
+      };
+    }
+
+    async function openWith(vault, password) {
+      const base = await crypto.subtle.importKey('raw', utf8.encode(password), 'PBKDF2', false, ['deriveBits']);
+      const bits = new Uint8Array(await crypto.subtle.deriveBits(
+        { name: 'PBKDF2', hash: 'SHA-256', salt: vault.salt, iterations: 10000 }, base, 80 * 8));
+      const macKey = await crypto.subtle.importKey('raw', bits.slice(32, 64), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+      if (!(await crypto.subtle.verify('HMAC', macKey, vault.hmac, vault.ciphertext))) return null;
+      const aesKey = await crypto.subtle.importKey('raw', bits.slice(0, 32), 'AES-CTR', false, ['decrypt']);
+      const padded = new Uint8Array(await crypto.subtle.decrypt(
+        { name: 'AES-CTR', counter: bits.slice(64, 80), length: 128 }, aesKey, vault.ciphertext));
+      const pad = padded[padded.length - 1];
+      if (!pad || pad > 16) throw new Error('vault: bad padding');
+      return padded.slice(0, padded.length - pad);
+    }
+
+    async function openVault(text, password) {
+      return openWith(parseVault(text), password);
+    }
+
+    function asText(bytes) {
+      try {
+        const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+        return text.includes('\0') ? null : text;
+      } catch {
+        return null;
+      }
+    }
+
+    // Private keys stay hidden: each becomes one line naming its hash, so a change still shows.
+    async function hideKeys(text) {
+      const pem = /^([ \t]*)-----BEGIN ([A-Z0-9 ]*PRIVATE KEY)-----[\s\S]*?-----END \2-----[ \t]*$/gm;
+      const age = /^([ \t]*)(AGE-SECRET-KEY-1[0-9A-Z]+)[ \t]*$/gm;
+      for (const re of [pem, age]) {
+        const found = [...text.matchAll(re)];
+        for (const m of found) {
+          const what = re === pem ? m[2].toLowerCase() : 'age secret key';
+          text = text.replace(m[0], `${m[1]}<${what}, sha256 ${await sha256(m[0].trim())}>`);
+        }
+      }
+      return text;
+    }
+
+    const INLINE = /^(\s*)(\S.*?)?!vault\s*\|[-+]?\s*$/;
+
+    async function expandInline(text, password, stats) {
+      const lines = text.split('\n');
+      const out = [];
+      for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(INLINE);
+        if (!m) {
+          out.push(lines[i]);
+          continue;
+        }
+        const lead = (m[2] || '').match(/^(?:-[ \t]+)*/)[0];
+        const indent = m[1].length + ((m[2] || '').length > lead.length ? lead.length : 0);
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim() && lines[j].search(/\S/) > indent) j++;
+        const block = lines.slice(i + 1, j);
+        const prefix = m[1] + (m[2] || '');
+        i = j - 1;
+        if (!block.length || !block[0].trim().startsWith('$ANSIBLE_VAULT;')) {
+          out.push(lines[i - block.length], ...block);
+          continue;
+        }
+        let bytes = null, error = '';
+        try {
+          bytes = await openVault(block.join('\n'), password);
+        } catch (e) {
+          error = e.message;
+        }
+        const value = bytes && asText(bytes);
+        if (value === null || value === undefined) {
+          stats.locked++;
+          out.push(`${prefix}!vault |  # not decrypted${error ? ': ' + error : ''}`, ...block);
+          continue;
+        }
+        stats.inline++;
+        const pad = ' '.repeat(indent + 2);
+        const plain = await hideKeys(value);
+        const kept = plain.endsWith('\n');
+        const shown = kept ? plain.slice(0, -1) : plain;
+        out.push(`${prefix}!vault |${kept ? '' : '-'} # decrypted`, ...shown.split('\n').map(l => (l ? pad + l : '')));
+      }
+      return out.join('\n');
+    }
+
+    async function reveal(text, password, stats) {
+      if (text === null) return { lines: [], note: '' };
+      if (text.startsWith('$ANSIBLE_VAULT;')) {
+        let bytes;
+        try {
+          bytes = await openVault(text, password);
+        } catch (e) {
+          stats.locked++;
+          return { lines: text.split('\n'), note: e.message };
+        }
+        if (!bytes) {
+          stats.locked++;
+          return { lines: text.split('\n'), note: 'vault, wrong password' };
+        }
+        stats.files++;
+        const plain = asText(bytes);
+        if (plain === null) {
+          const digest = bytesToHex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))).slice(0, 12);
+          return { lines: [`<binary, ${bytes.length} bytes, sha256 ${digest}>`], note: 'vault, binary' };
+        }
+        return { lines: (await hideKeys(plain)).split('\n'), note: 'vault, decrypted' };
+      }
+      return { lines: (await expandInline(text, password, stats)).split('\n'), note: '' };
+    }
+
+    // Myers' O(ND) line diff; past MAX_EDIT_DISTANCE it gives up and shows all old lines, then all new.
+    function diff(a, b) {
+      let start = 0;
+      while (start < a.length && start < b.length && a[start] === b[start]) start++;
+      let endA = a.length, endB = b.length;
+      while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) { endA--; endB--; }
+      const x0 = a.slice(start, endA), y0 = b.slice(start, endB);
+      const middle = myers(x0, y0) || [...x0.map((_, i) => ['-', i, -1]), ...y0.map((_, j) => ['+', -1, j])];
+      const ops = [];
+      for (let i = 0; i < start; i++) ops.push([' ', i, i]);
+      for (const [t, i, j] of middle) ops.push([t, i < 0 ? -1 : i + start, j < 0 ? -1 : j + start]);
+      for (let i = endA, j = endB; i < a.length; i++, j++) ops.push([' ', i, j]);
+      return ops;
+    }
+
+    function myers(a, b) {
+      const n = a.length, m = b.length, max = n + m, off = max + 1;
+      const v = new Int32Array(2 * max + 3);
+      const trace = [];
+      for (let d = 0; d <= max; d++) {
+        if (d > MAX_EDIT_DISTANCE) return null;
+        trace.push(v.slice());
+        for (let k = -d; k <= d; k += 2) {
+          let x = (k === -d || (k !== d && v[off + k - 1] < v[off + k + 1])) ? v[off + k + 1] : v[off + k - 1] + 1;
+          let y = x - k;
+          while (x < n && y < m && a[x] === b[y]) { x++; y++; }
+          v[off + k] = x;
+          if (x >= n && y >= m) return backtrack(trace, n, m, off);
+        }
+      }
+      return null;
+    }
+
+    function backtrack(trace, n, m, off) {
+      const ops = [];
+      let x = n, y = m;
+      for (let d = trace.length - 1; d >= 0; d--) {
+        const v = trace[d];
+        const k = x - y;
+        const prevK = (k === -d || (k !== d && v[off + k - 1] < v[off + k + 1])) ? k + 1 : k - 1;
+        const prevX = d ? v[off + prevK] : 0;
+        const prevY = d ? prevX - prevK : 0;
+        while (x > prevX && y > prevY) { x--; y--; ops.push([' ', x, y]); }
+        if (d) {
+          if (x === prevX) ops.push(['+', -1, y - 1]);
+          else ops.push(['-', x - 1, -1]);
+        }
+        x = prevX;
+        y = prevY;
+      }
+      return ops.reverse();
+    }
+
+    function hunks(ops) {
+      const out = [];
+      let current = null;
+      let lastChange = -Infinity;
+      ops.forEach((op, idx) => {
+        if (op[0] === ' ') return;
+        const from = Math.max(0, idx - CONTEXT);
+        if (current && from <= lastChange + CONTEXT + 1) {
+          current.end = idx;
+        } else {
+          if (current) out.push(current);
+          current = { start: from, end: idx };
+        }
+        lastChange = idx;
+      });
+      if (current) out.push(current);
+      return out.map(h => ops.slice(h.start, Math.min(ops.length, h.end + CONTEXT + 1)));
+    }
+
+    function sealed(text) {
+      return typeof text === 'string' && text.startsWith('$ANSIBLE_VAULT;');
+    }
+
+    function plaintextHead(filename, oldText, newText) {
+      return newText !== null && !sealed(newText) &&
+        (sealed(oldText) || /(^|\/)[^/]*\.vault\.ya?ml$|(^|\/)vault\.ya?ml$|(^|\/)files\/vault\//.test(filename));
+    }
+
+    function vaultLooking(file) {
+      return /(^|\/)[^/]*vault[^/]*$|(^|\/)vault\//.test(file.filename) ||
+        /\$ANSIBLE_VAULT;|!vault\s*\||^[ +-]\s*[0-9a-f]{60,}\s*$/m.test(file.patch || '');
+    }
+
+    function opsToRows(ops, a, b) {
+      const rows = [];
+      for (const group of hunks(ops)) {
+        const old = group.filter(o => o[0] !== '+');
+        const neu = group.filter(o => o[0] !== '-');
+        rows.push({ kind: 'hunk', text: `@@ -${old.length ? old[0][1] + 1 : 0},${old.length} +${neu.length ? neu[0][2] + 1 : 0},${neu.length} @@` });
+        for (const [t, i, j] of group) {
+          if (t === ' ') rows.push({ kind: 'ctx', a: i + 1, b: j + 1, text: a[i] });
+          else if (t === '-') rows.push({ kind: 'del', a: i + 1, text: a[i] });
+          else rows.push({ kind: 'add', b: j + 1, text: b[j] });
+        }
+      }
+      return rows;
+    }
+
+    function patchToRows(patch) {
+      const rows = [];
+      let a = 0, b = 0;
+      for (const line of patch.split('\n')) {
+        const h = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+        if (h) {
+          a = Number(h[1]);
+          b = Number(h[2]);
+          rows.push({ kind: 'hunk', text: line });
+        } else if (line && !line.startsWith('\\')) {
+          const text = line.slice(1);
+          if (line[0] === '+') rows.push({ kind: 'add', b: b++, text });
+          else if (line[0] === '-') rows.push({ kind: 'del', a: a++, text });
+          else rows.push({ kind: 'ctx', a: a++, b: b++, text });
+        }
+      }
+      return rows;
+    }
+
+    // Each run of changed lines becomes its deletions, then its additions.
+    function blocks(rows) {
+      const out = [];
+      let dels = [], adds = [];
+      const flush = () => {
+        if (dels.length || adds.length) out.push({ kind: 'change', dels, adds });
+        dels = [];
+        adds = [];
+      };
+      for (const row of rows) {
+        if (row.kind === 'del') dels.push(row);
+        else if (row.kind === 'add') adds.push(row);
+        else {
+          flush();
+          out.push(row);
+        }
+      }
+      flush();
+      return out;
+    }
+
+    // Which removed line sits beside which added one. Blocks of equal size pair in order; otherwise each removed
+    // line takes the most similar added line after the last one taken, if they share enough words.
+    function pairUp(dels, adds) {
+      if (dels.length === adds.length) return dels.map((d, i) => [d, adds[i]]);
+      const words = s => new Set(s.match(/[A-Za-z0-9_]+/g) || []);
+      const similar = (x, y) => {
+        const a = words(x), b = words(y);
+        let common = 0;
+        for (const w of a) if (b.has(w)) common++;
+        return a.size && b.size ? common / Math.max(a.size, b.size) : 0;
+      };
+      const out = [];
+      let next = 0;
+      for (const d of dels) {
+        let best = -1, score = 0.3;
+        for (let k = next; k < adds.length; k++) {
+          const s = similar(d.text, adds[k].text);
+          if (s > score) { score = s; best = k; }
+        }
+        if (best < 0) {
+          out.push([d, null]);
+          continue;
+        }
+        while (next < best) out.push([null, adds[next++]]);
+        out.push([d, adds[next++]]);
+      }
+      while (next < adds.length) out.push([null, adds[next++]]);
+      return out;
+    }
+
+    const TOKEN = /\s+|[A-Za-z0-9_]+|[^\sA-Za-z0-9_]/g;
+
+    // Word-level changes between two lines, or null when they share no word worth lining up.
+    function wordDiff(a, b) {
+      const ta = a.match(TOKEN) || [], tb = b.match(TOKEN) || [];
+      if (ta.length + tb.length > 400) return null;
+      const ops = diff(ta, tb);
+      if (!ops.some(o => o[0] === ' ' && /\S/.test(ta[o[1]]))) return null;
+      const side = (skip, tokens, at) => {
+        const segs = [];
+        for (const o of ops) {
+          if (o[0] === skip) continue;
+          const changed = o[0] !== ' ';
+          const last = segs[segs.length - 1];
+          if (last && last.changed === changed) last.text += tokens[o[at]];
+          else segs.push({ text: tokens[o[at]], changed });
+        }
+        return segs;
+      };
+      return [side('+', ta, 1), side('-', tb, 2)];
+    }
+
+    const FALLBACK = /[A-Za-z0-9_]+|\s+|[^]/y;
+    const JINJA = /\{\{.*?\}\}|\{%.*?%\}|\{#.*?#\}/y;
+    const DQ = /"(?:[^"\\]|\\.)*"?/y;
+    const SQ = /'(?:[^'\\]|\\.)*'?/y;
+    const HASH_COMMENT = /(?<=^|\s)#.*/y;
+    const NUMBER = /-?\d{1,20}(?:\.\d+)?(?![\w.:-])/y;
+    const words = (list, flags = 'y') => new RegExp(`(?:${list.join('|')})(?![\\w-])`, flags);
+    const SH_VAR = /\$\{[^}]*\}|\$\([^)]*\)|\$[A-Za-z_]\w*|\$[@*#?$!0-9]/y;
+    const SH_WORDS = words(['if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'until', 'do', 'done', 'case', 'esac', 'in',
+      'function', 'return', 'local', 'export', 'set', 'exit', 'exec']);
+
+    const SYNTAX = {
+      yaml: {
+        start: line => {
+          const m = line.match(/^(\s*(?:-\s+)*)([^\s#'"{}[\],&*!|>%@`-][^#]*?|"(?:[^"\\]|\\.)*"|'(?:[^']|'')*')(\s*:)(?=\s|$)/);
+          return m && [[m[1], ''], [m[2], 'key'], [m[3], '']];
+        },
+        rules: [[HASH_COMMENT, 'com'], [JINJA, 'tpl'], [DQ, 'str'], [SQ, 'str'], [/![\w!./-]*/y, 'tag'], [/[&*][\w-]+/y, 'tag'],
+          [words(['true', 'false', 'yes', 'no', 'null', '~'], 'yi'), 'lit'], [NUMBER, 'num']],
+      },
+      python: {
+        rules: [[/#.*/y, 'com'], [/[rRbBfFuU]{0,2}(?:"""|''')/y, 'str'], [/[rRbBfFuU]{0,2}(?:"(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?)/y, 'str'],
+          [/@[\w.]+/y, 'tag'], [words(['True', 'False', 'None']), 'lit'],
+          [words(['def', 'class', 'return', 'if', 'elif', 'else', 'for', 'while', 'in', 'not', 'and', 'or', 'is', 'import', 'from',
+            'as', 'with', 'try', 'except', 'finally', 'raise', 'pass', 'break', 'continue', 'lambda', 'yield', 'async', 'await',
+            'global', 'nonlocal', 'assert', 'del']), 'kw'], [NUMBER, 'num']],
+      },
+      shell: { rules: [[HASH_COMMENT, 'com'], [DQ, 'str'], [SQ, 'str'], [SH_VAR, 'var'], [SH_WORDS, 'kw']] },
+      make: {
+        start: line => {
+          const m = line.match(/^([\w.%/$()-]+(?:\s+[\w.%/$()-]+)*)(\s*::?)(?!=)/);
+          return m && [[m[1], 'key'], [m[2], '']];
+        },
+        rules: [[HASH_COMMENT, 'com'], [DQ, 'str'], [SQ, 'str'], [SH_VAR, 'var'], [SH_WORDS, 'kw']],
+      },
+      json: { rules: [[/"(?:[^"\\]|\\.)*"(?=\s*:)/y, 'key'], [DQ, 'str'], [words(['true', 'false', 'null']), 'lit'], [NUMBER, 'num']] },
+      js: {
+        rules: [[/\/\/.*|\/\*.*?\*\//y, 'com'], [DQ, 'str'], [SQ, 'str'], [/`(?:[^`\\]|\\.)*`?/y, 'str'],
+          [words(['true', 'false', 'null', 'undefined']), 'lit'],
+          [words(['const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'of', 'in', 'new', 'class', 'async',
+            'await', 'try', 'catch', 'finally', 'throw', 'typeof', 'continue', 'break', 'import', 'export', 'from']), 'kw'],
+          [NUMBER, 'num']],
+      },
+      markdown: {
+        start: line => /^#{1,6}\s/.test(line) && [[line, 'head']],
+        rules: [[/`[^`]*`?/y, 'str'], [/\*\*[^*]+\*\*|__[^_]+__/y, 'em']],
+      },
+      ini: {
+        start: line => {
+          const m = line.match(/^(\s*)([#;].*|\[\[?[^\]]*\]\]?|[\w.@-]+(?=\s*[=:]))/);
+          return m && [[m[1], ''], [m[2], /^[#;]/.test(m[2]) ? 'com' : m[2].startsWith('[') ? 'tag' : 'key']];
+        },
+        rules: [[/(?<=\s)[#;].*/y, 'com'], [DQ, 'str'], [SQ, 'str'], [words(['true', 'false', 'yes', 'no', 'on', 'off'], 'yi'), 'lit'],
+          [NUMBER, 'num']],
+      },
+      docker: {
+        start: line => {
+          const m = line.match(/^(\s*)(#.*|(?:FROM|RUN|CMD|LABEL|EXPOSE|ENV|ADD|COPY|ENTRYPOINT|VOLUME|USER|WORKDIR|ARG|ONBUILD|STOPSIGNAL|HEALTHCHECK|SHELL)(?=\s))/i);
+          return m && [[m[1], ''], [m[2], m[2].startsWith('#') ? 'com' : 'kw']];
+        },
+        rules: [[DQ, 'str'], [SQ, 'str'], [SH_VAR, 'var']],
+      },
+      plain: { rules: [] },
+    };
+
+    // Which highlighter a path gets: 'jinja:<inner>' for templates, 'plain' when nothing fits.
+    function syntaxFor(path) {
+      const name = path.split('/').pop();
+      const template = name.match(/^(.*)\.(?:j2|jinja2?)$/);
+      if (template) return `jinja:${syntaxFor(template[1])}`;
+      if (/\.ya?ml$/.test(name) || /(^|\/)files\/vault\//.test(path)) return 'yaml';
+      if (/\.py$/.test(name)) return 'python';
+      if (/\.(sh|bash)$/.test(name)) return 'shell';
+      if (/^(GNUmakefile|[Mm]akefile)$|\.mk$/.test(name)) return 'make';
+      if (/\.json$/.test(name)) return 'json';
+      if (/\.[cm]?js$/.test(name)) return 'js';
+      if (/\.md$/.test(name)) return 'markdown';
+      if (/\.(ini|conf|cfg|toml|service|timer|socket|network|link|netdev|mount)$/.test(name)) return 'ini';
+      if (/^Dockerfile|\.dockerfile$/.test(name)) return 'docker';
+      return 'plain';
+    }
+
+    // Splits a line into {text, cls} pieces that join back to the line exactly.
+    function highlight(syntax, line) {
+      const template = syntax.startsWith('jinja:');
+      const lang = SYNTAX[template ? syntax.slice(6) : syntax] || SYNTAX.plain;
+      const rules = template && lang !== SYNTAX.yaml ? [[JINJA, 'tpl'], ...lang.rules] : lang.rules;
+      const out = [];
+      const push = (text, cls) => {
+        if (!text) return;
+        const last = out[out.length - 1];
+        if (last && last.cls === cls) last.text += text;
+        else out.push({ text, cls });
+      };
+      let i = 0;
+      const lead = lang.start && !(template && /^\s*\{[{%#]/.test(line)) && lang.start(line);
+      if (lead) for (const [text, cls] of lead) { push(text, cls); i += text.length; }
+      while (i < line.length) {
+        let hit = null;
+        for (const [re, cls] of rules) {
+          re.lastIndex = i;
+          const m = re.exec(line);
+          if (m && m[0]) { hit = [m[0], cls]; break; }
+        }
+        if (!hit) {
+          FALLBACK.lastIndex = i;
+          hit = [FALLBACK.exec(line)[0], ''];
+        }
+        if (hit[1] === 'str' && (lang === SYNTAX.yaml || template)) {
+          for (const part of hit[0].split(/(\{\{.*?\}\}|\{%.*?%\})/)) push(part, /^\{[{%]/.test(part) ? 'tpl' : 'str');
+        } else push(hit[0], hit[1]);
+        i += hit[0].length;
+      }
+      return out;
+    }
+
+    // Cuts syntax pieces at the changed-word boundaries, so each piece keeps its class and its changed flag.
+    function mergeSpans(tokens, segs) {
+      const plain = () => tokens.map(t => ({ text: t.text, cls: t.cls, changed: false }));
+      if (!segs || tokens.map(t => t.text).join('') !== segs.map(s => s.text).join('')) return plain();
+      const out = [];
+      let ti = 0, si = 0, tOff = 0, sOff = 0;
+      while (ti < tokens.length && si < segs.length) {
+        const t = tokens[ti], s = segs[si];
+        const n = Math.min(t.text.length - tOff, s.text.length - sOff);
+        const text = t.text.slice(tOff, tOff + n);
+        const last = out[out.length - 1];
+        if (last && last.cls === t.cls && last.changed === s.changed) last.text += text;
+        else out.push({ text, cls: t.cls, changed: s.changed });
+        tOff += n;
+        sOff += n;
+        if (tOff === t.text.length) { ti++; tOff = 0; }
+        if (sOff === s.text.length) { si++; sOff = 0; }
+      }
+      return out;
+    }
+
+    if (typeof module !== 'undefined') {
+      module.exports = {
+        parseVault, openWith, openVault, expandInline, reveal, diff, hunks, hideKeys, vaultLooking, plaintextHead,
+        opsToRows, patchToRows, blocks, pairUp, wordDiff, syntaxFor, highlight, mergeSpans,
+      };
+    }
+
+    if (typeof document !== 'undefined') {
+      const $ = sel => document.querySelector(sel);
+      let password = null;
+      let idleTimer = null;
+      // Bumped by forget() and by each new load, so an older load in flight stops before it shows anything.
+      let load = 0;
+      let deadline = 0;
+      let shown = [];
+      let layout = savedLayout();
+
+      function savedLayout() {
+        try {
+          const saved = localStorage.getItem('pr-review-layout');
+          if (saved === 'split' || saved === 'unified') return saved;
+        } catch {}
+        return innerWidth >= 1000 ? 'split' : 'unified';
+      }
+
+      function el(tag, cls, text) {
+        const node = document.createElement(tag);
+        if (cls) node.className = cls;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      }
+
+      function forget(reason) {
+        load++;
+        password = null;
+        shown = [];
+        clearTimeout(idleTimer);
+        $('#results').replaceChildren();
+        $('#toolbar').hidden = true;
+        $('#held').hidden = true;
+        $('#status').textContent = reason;
+      }
+
+      // Timers stop while the computer sleeps, so the wall clock decides.
+      function expired() {
+        if (!password || Date.now() < deadline) return false;
+        forget('Forgot the vault password after 30 minutes idle.');
+        return true;
+      }
+
+      function touch() {
+        if (!password || expired()) return;
+        deadline = Date.now() + IDLE_MS;
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(expired, IDLE_MS);
+        $('#held-until').textContent = new Date(deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+
+      async function github(path) {
+        const res = await fetch(`https://api.github.com${path}`, {
+          headers: { Accept: 'application/vnd.github+json' }, credentials: 'omit', cache: 'no-store',
+        });
+        if (!res.ok) throw new Error(`GitHub answered ${res.status} for ${path}${res.status === 403 ? ' (rate limit?)' : ''}`);
+        return res.json();
+      }
+
+      async function raw(repo, sha, path) {
+        if (!path) return null;
+        const url = `https://raw.githubusercontent.com/${repo}/${sha}/${path.split('/').map(encodeURIComponent).join('/')}`;
+        const res = await fetch(url, { credentials: 'omit', cache: 'no-store' });
+        if (res.status === 404) return null;
+        if (!res.ok) throw new Error(`raw.githubusercontent.com answered ${res.status} for ${path}`);
+        return res.text();
+      }
+
+      function parseTarget(input) {
+        const m = input.trim().match(/^(?:https:\/\/github\.com\/)?(?:([\w.-]+\/[\w.-]+)(?:\/pull\/|#|\/))?#?(\d+)/);
+        if (!m) throw new Error('Enter a pull request number or URL.');
+        return { repo: m[1] || DEFAULT_REPO, number: Number(m[2]) };
+      }
+
+      function codeCell(kind, text, segs, syntax) {
+        const td = el('td', `code ${kind}`);
+        for (const p of mergeSpans(highlight(syntax, text), segs)) {
+          const cls = [p.cls && `t-${p.cls}`, p.changed && 'hl'].filter(Boolean).join(' ');
+          td.append(cls ? el('span', cls, p.text) : document.createTextNode(p.text));
+        }
+        return td;
+      }
+
+      function numCell(kind, n) {
+        return el('td', `num ${kind}`, n == null ? '' : String(n));
+      }
+
+      function renderTable(rows, syntax = 'plain') {
+        const split = layout === 'split';
+        const table = el('table', `diff ${layout}`);
+        const cols = el('colgroup');
+        for (const c of split ? ['num', 'half', 'num', 'half'] : ['num', 'num', 'sign', 'full']) cols.append(el('col', c));
+        table.append(cols);
+        const tr = (...cells) => {
+          const row = el('tr');
+          row.append(...cells);
+          table.append(row);
+        };
+        for (const blk of blocks(rows)) {
+          if (blk.kind === 'hunk' || blk.kind === 'note') {
+            const td = el('td', `code ${blk.kind}`, blk.text);
+            td.colSpan = 4;
+            tr(td);
+          } else if (blk.kind === 'ctx') {
+            if (split) tr(numCell('ctx', blk.a), codeCell('ctx', blk.text, null, syntax), numCell('ctx', blk.b), codeCell('ctx', blk.text, null, syntax));
+            else tr(numCell('ctx', blk.a), numCell('ctx', blk.b), el('td', 'sign ctx'), codeCell('ctx', blk.text, null, syntax));
+          } else {
+            const pairs = pairUp(blk.dels, blk.adds).map(([d, a]) => [d, a, d && a ? wordDiff(d.text, a.text) : null]);
+            if (split) {
+              for (const [d, a, w] of pairs) {
+                tr(numCell(d ? 'del' : 'empty', d && d.a), d ? codeCell('del', d.text, w && w[0], syntax) : el('td', 'code empty'),
+                  numCell(a ? 'add' : 'empty', a && a.b), a ? codeCell('add', a.text, w && w[1], syntax) : el('td', 'code empty'));
+              }
+            } else {
+              for (const [d, , w] of pairs) if (d) tr(numCell('del', d.a), numCell('del'), el('td', 'sign del', '-'), codeCell('del', d.text, w && w[0], syntax));
+              for (const [, a, w] of pairs) if (a) tr(numCell('add'), numCell('add', a.b), el('td', 'sign add', '+'), codeCell('add', a.text, w && w[1], syntax));
+            }
+          }
+        }
+        return table;
+      }
+
+      function setLayout(next) {
+        layout = next;
+        try {
+          localStorage.setItem('pr-review-layout', next);
+        } catch {}
+        for (const b of document.querySelectorAll('[data-layout]')) b.setAttribute('aria-pressed', String(b.dataset.layout === next));
+        for (const f of shown) f.section.querySelector('table').replaceWith(renderTable(f.rows, f.syntax));
+      }
+
+      function applyFilters() {
+        const vaultOnly = $('#only-vault').checked, hideSame = $('#hide-same').checked;
+        for (const f of shown) {
+          const hide = (vaultOnly && !f.vault) || (hideSame && f.same);
+          f.section.hidden = hide;
+          f.item.hidden = hide;
+        }
+      }
+
+      async function showFile(file, repo, base, head, stats, pw) {
+        const section = el('details', 'file');
+        section.open = true;
+        const summary = el('summary');
+        summary.append(el('span', 'path', file.previous_filename ? `${file.previous_filename} → ${file.filename}` : file.filename),
+          el('span', `badge ${file.status}`, file.status));
+        section.append(summary);
+        const entry = { section, file, vault: vaultLooking(file), same: false, tag: '', rows: [], syntax: syntaxFor(file.filename) };
+        if (!entry.vault && file.patch) {
+          entry.rows = patchToRows(file.patch);
+        } else if (!entry.vault) {
+          entry.rows = [{ kind: 'note', text: 'GitHub shows no text diff for this file (binary, or too large).' }];
+        } else {
+          const [oldText, newText] = await Promise.all([
+            file.status === 'added' ? null : raw(repo, base, file.previous_filename || file.filename),
+            file.status === 'removed' ? null : raw(repo, head, file.filename),
+          ]);
+          const counts = { files: 0, inline: 0, locked: 0 };
+          const [a, b] = await Promise.all([reveal(oldText, pw, counts), reveal(newText, pw, counts)]);
+          if (counts.files) stats.files++;
+          if (counts.inline) stats.inline++;
+          if (counts.locked) stats.locked++;
+          entry.tag = counts.locked ? 'locked' : counts.files || counts.inline ? 'decrypted' : '';
+          const note = a.note === b.note ? a.note : [a.note && `base: ${a.note}`, b.note && `head: ${b.note}`].filter(Boolean).join('; ');
+          if (note) summary.append(el('span', 'note', note));
+          if (plaintextHead(file.filename, oldText, newText)) {
+            stats.plaintext++;
+            entry.tag = 'NOT encrypted';
+            summary.append(el('span', 'note warn', 'head is NOT encrypted'));
+          }
+          entry.rows = opsToRows(diff(a.lines, b.lines), a.lines, b.lines);
+          if (!entry.rows.length) {
+            entry.same = true;
+            entry.rows = [{ kind: 'note', text: 'No change after decryption.' }];
+          }
+        }
+        entry.adds = entry.rows.filter(r => r.kind === 'add').length;
+        entry.dels = entry.rows.filter(r => r.kind === 'del').length;
+        summary.append(el('span', 'count add', `+${entry.adds}`), el('span', 'count del', `−${entry.dels}`));
+        section.append(renderTable(entry.rows, entry.syntax));
+        return entry;
+      }
+
+      function fileList(entries) {
+        const list = el('ol', 'files');
+        for (const entry of entries) {
+          const item = el('li');
+          const jump = el('button', 'jump', entry.file.filename);
+          jump.type = 'button';
+          jump.addEventListener('click', () => {
+            entry.section.open = true;
+            entry.section.scrollIntoView({ block: 'start' });
+          });
+          item.append(el('span', `badge ${entry.file.status}`, entry.file.status), jump, el('span', 'count add', `+${entry.adds}`),
+            el('span', 'count del', `−${entry.dels}`));
+          if (entry.tag) item.append(el('span', entry.tag === 'NOT encrypted' ? 'note warn' : 'note', entry.tag));
+          entry.item = item;
+          list.append(item);
+        }
+        return list;
+      }
+
+      function ago(iso) {
+        const minutes = (Date.now() - Date.parse(iso)) / 60000;
+        if (minutes < 60) return `${Math.max(1, Math.round(minutes))} min ago`;
+        if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h ago`;
+        return `${Math.round(minutes / 1440)} d ago`;
+      }
+
+      function pick(number) {
+        $('#pr').value = String(number);
+        history.replaceState(null, '', `#${number}`);
+        if (password && !expired()) {
+          $('#form').requestSubmit();
+        } else {
+          $('#password').focus();
+          $('#status').textContent = `Enter the vault password to open #${number}.`;
+        }
+      }
+
+      async function listPulls() {
+        const mine = ++load;
+        $('#toolbar').hidden = true;
+        shown = [];
+        const results = $('#results');
+        results.replaceChildren();
+        $('#status').textContent = 'Loading open pull requests…';
+        try {
+          const pulls = await github(`/repos/${DEFAULT_REPO}/pulls?state=open&per_page=50`);
+          if (mine !== load) return;
+          const box = el('section', 'backlog');
+          box.append(el('h2', '', `Open pull requests in ${DEFAULT_REPO}`));
+          const list = el('ol', 'pulls');
+          for (const p of pulls) {
+            const item = el('li');
+            const open = el('button', 'jump', `#${p.number} ${p.title}`);
+            open.type = 'button';
+            open.addEventListener('click', () => pick(p.number));
+            const meta = el('div', 'meta');
+            meta.append(el('span', '', p.user ? p.user.login : ''));
+            const stacked = p.base.repo && p.base.ref !== p.base.repo.default_branch;
+            meta.append(el('span', stacked ? 'badge stacked' : 'badge', stacked ? `on ${p.base.ref}` : `into ${p.base.ref}`));
+            if (p.draft) meta.append(el('span', 'badge draft', 'draft'));
+            for (const label of p.labels || []) meta.append(el('span', 'badge', label.name));
+            meta.append(el('span', '', `updated ${ago(p.updated_at)}`));
+            item.append(open, meta);
+            list.append(item);
+          }
+          box.append(pulls.length ? list : el('p', 'meta', 'None open.'));
+          results.append(box);
+          $('#status').textContent = `${pulls.length} open pull request${pulls.length === 1 ? '' : 's'}; pick one to review.`;
+        } catch (e) {
+          if (mine === load) $('#status').textContent = e.message;
+        }
+      }
+
+      async function show(event) {
+        event.preventDefault();
+        const typed = $('#password').value.trim();
+        $('#password').value = '';
+        if (typed) {
+          password = typed;
+          deadline = Date.now() + IDLE_MS;
+        }
+        if (!password || expired()) {
+          $('#status').textContent = 'Enter the vault password.';
+          return;
+        }
+        const mine = ++load;
+        const pw = password;
+        const stale = () => mine !== load;
+        touch();
+        $('#held').hidden = false;
+        $('#toolbar').hidden = true;
+        shown = [];
+        const results = $('#results');
+        results.replaceChildren();
+        try {
+          const { repo, number } = parseTarget($('#pr').value);
+          history.replaceState(null, '', `#${repo === DEFAULT_REPO ? '' : repo + '/'}${number}`);
+          $('#status').textContent = `Loading ${repo}#${number}…`;
+          const pr = await github(`/repos/${repo}/pulls/${number}`);
+          if (stale()) return;
+          const compare = await github(`/repos/${repo}/compare/${pr.base.sha}...${pr.head.sha}?per_page=1`);
+          if (stale()) return;
+          const base = compare.merge_base_commit.sha;
+          const files = [];
+          for (let page = 1; ; page++) {
+            const batch = await github(`/repos/${repo}/pulls/${number}/files?per_page=100&page=${page}`);
+            if (stale()) return;
+            files.push(...batch);
+            if (batch.length < 100) break;
+          }
+          const stats = { files: 0, inline: 0, locked: 0, plaintext: 0 };
+          const entries = [];
+          for (let i = 0; i < files.length; i += 6) {
+            entries.push(...await Promise.all(files.slice(i, i + 6).map(f => showFile(f, repo, base, pr.head.sha, stats, pw).catch(e => {
+              const section = el('details', 'file');
+              section.open = true;
+              section.append(el('summary', '', `${f.filename}: ${e.message}`), renderTable([]));
+              return { section, file: f, vault: vaultLooking(f), same: false, tag: 'failed', rows: [], adds: 0, dels: 0, syntax: 'plain' };
+            }))));
+            if (stale()) return;
+          }
+          const head = el('header', 'pr');
+          const link = el('a', '', `#${number} ${pr.title}`);
+          link.href = pr.html_url;
+          link.target = '_blank';
+          link.rel = 'noreferrer noopener';
+          head.append(el('h2'), el('p', 'meta', `${pr.state}, ${files.length} files, ${base.slice(0, 7)} → ${pr.head.sha.slice(0, 7)}`));
+          head.firstChild.append(link);
+          results.append(head, fileList(entries), ...entries.map(e => e.section));
+          shown = entries;
+          $('#toolbar').hidden = false;
+          applyFilters();
+          $('#status').textContent = `Decrypted ${stats.files} vault files and the inline values in ${stats.inline} more` +
+            (stats.locked ? `; ${stats.locked} files hold vaults this password doesn't open` : '') +
+            (stats.plaintext ? `; ${stats.plaintext} vault files are NOT encrypted in the head` : '') + '.';
+        } catch (e) {
+          if (!stale()) $('#status').textContent = e.message;
+        }
+      }
+
+      $('#form').addEventListener('submit', show);
+      $('#pulls').addEventListener('click', listPulls);
+      $('#forget').addEventListener('click', () => forget('Forgot the vault password.'));
+      for (const b of document.querySelectorAll('[data-layout]')) b.addEventListener('click', () => setLayout(b.dataset.layout));
+      for (const id of ['#only-vault', '#hide-same']) $(id).addEventListener('change', applyFilters);
+      $('#collapse').addEventListener('click', () => shown.forEach(f => { f.section.open = false; }));
+      $('#expand').addEventListener('click', () => shown.forEach(f => { f.section.open = true; }));
+      setLayout(layout);
+      for (const type of ['pointerdown', 'keydown', 'scroll']) addEventListener(type, touch, { passive: true });
+      for (const type of ['focus', 'pageshow']) addEventListener(type, expired);
+      document.addEventListener('visibilitychange', expired);
+      setInterval(expired, 15000);
+      const target = location.hash.slice(1);
+      if (target) $('#pr').value = target;
+      else listPulls();
+    }
+  style.css: |
+    :root { --t-key: #0550ae; --t-str: #0a3069; --t-com: #6e7781; --t-num: #953800; --t-lit: #cf222e; --t-kw: #cf222e; --t-tag: #8250df; --t-tpl: #116329; --t-var: #953800; --t-head: #0550ae; --add-hl: #abf2bc; --del-hl: #ffc1c0; --page: #eef1f4; --text: #1d2128; --muted: #5f6b7a; --card: #fff; --border: #d5dae1; --accent: #c76f1a; --add: #e6f4ea; --add-sign: #1e7b34; --del: #fbe9e9; --del-sign: #b42318; --hunk: #eef2f8; }
+    @media (prefers-color-scheme: dark) { :root { --page: #0d0b10; --text: #e8eaed; --muted: #9aa3ae; --card: #181b21; --border: #2c323c; --accent: #f6b34b; --add: #12291a; --add-sign: #6fd08c; --del: #321617; --del-sign: #f28b82; --hunk: #1b2130; --add-hl: #1f5c30; --del-hl: #6e2a2a; --t-key: #79c0ff; --t-str: #a5d6ff; --t-com: #8b949e; --t-num: #ffa657; --t-lit: #ff7b72; --t-kw: #ff7b72; --t-tag: #d2a8ff; --t-tpl: #7ee787; --t-var: #ffa657; --t-head: #79c0ff; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px 16px 48px; background: var(--page); color: var(--text); font: 400 15px/1.5 Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main, #results, #toolbar { max-width: 1400px; margin: 0 auto; }
+    main { padding: 24px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    .lede, .meta, .hint, .note { color: var(--muted); }
+    .lede { margin: 0 0 16px; }
+    form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; align-items: end; }
+    label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; }
+    .hint { font-weight: 400; }
+    input { width: 100%; padding: 8px 10px; font: inherit; color: var(--text); background: var(--page); border: 1px solid var(--border); border-radius: 6px; }
+    button { padding: 8px 14px; font: inherit; font-weight: 600; color: #fff; background: var(--accent); border: 0; border-radius: 6px; cursor: pointer; }
+    #held button { padding: 2px 8px; font-size: 13px; }
+    #status:empty { display: none; }
+    .pr { margin: 24px 0 8px; }
+    .pr h2 { margin: 0; font-size: 18px; }
+    .pr a { color: var(--text); }
+    .file { margin: 12px 0; background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+    .path { font: 600 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+    .badge { padding: 0 6px; font-size: 12px; border: 1px solid var(--border); border-radius: 10px; }
+    .note { font-size: 12px; }
+    .warn { padding: 0 6px; color: #fff; background: #b42318; border-radius: 4px; font-weight: 700; }
+    .count { font: 600 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .count.add { color: var(--add-sign); }
+    .count.del { color: var(--del-sign); }
+    #toolbar { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 16px; padding: 10px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+    #toolbar[hidden] { display: none; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .seg button, button.plain { padding: 4px 12px; font-size: 13px; color: var(--text); background: transparent; border: 0; border-radius: 0; }
+    button.plain { border: 1px solid var(--border); border-radius: 6px; }
+    .seg button[aria-pressed="true"] { color: #fff; background: var(--accent); }
+    .check { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; }
+    .check input { width: auto; }
+    .files { margin: 8px 0 16px; padding: 8px 12px 8px 36px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+    .files li { margin: 2px 0; }
+    .files li > * { margin-right: 8px; }
+    .jump { padding: 0; font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); background: none; border: 0; text-align: left; word-break: break-all; cursor: pointer; text-decoration: underline dotted; }
+    .diff { width: 100%; table-layout: fixed; border-collapse: collapse; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .diff td { padding: 0 8px; vertical-align: top; }
+    col.num { width: 3.6em; }
+    col.sign { width: 1.6em; }
+    .num { color: var(--muted); text-align: right; user-select: none; }
+    .sign { color: var(--muted); user-select: none; }
+    .code { white-space: pre-wrap; word-break: break-all; }
+    .add { background: var(--add); }
+    .del { background: var(--del); }
+    .sign.add, .num.add { color: var(--add-sign); }
+    .sign.del, .num.del { color: var(--del-sign); }
+    .add .hl, .code.add .hl { background: var(--add-hl); border-radius: 2px; }
+    .del .hl, .code.del .hl { background: var(--del-hl); border-radius: 2px; }
+    .split .code.del { border-right: 1px solid var(--border); }
+    .split .code.ctx:nth-child(2) { border-right: 1px solid var(--border); }
+    .empty { background: var(--hunk); }
+    .hunk { background: var(--hunk); color: var(--muted); }
+    .t-key { color: var(--t-key); }
+    .t-str { color: var(--t-str); }
+    .t-com { color: var(--t-com); font-style: italic; }
+    .t-num { color: var(--t-num); }
+    .t-lit { color: var(--t-lit); }
+    .t-kw { color: var(--t-kw); }
+    .t-tag { color: var(--t-tag); }
+    .t-tpl { color: var(--t-tpl); }
+    .t-var { color: var(--t-var); }
+    .t-head { color: var(--t-head); font-weight: 700; }
+    .t-em { font-weight: 700; }
+    .backlog { margin: 24px 0; }
+    .backlog h2 { margin: 0 0 8px; font-size: 18px; }
+    .pulls { margin: 0; padding: 8px 12px 8px 36px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+    .pulls li { margin: 6px 0; }
+    .pulls .jump { font-family: inherit; font-weight: 600; text-decoration: none; }
+    .pulls .meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 12px; }
+    .badge.stacked { color: #fff; background: var(--accent); border-color: var(--accent); }
+    .badge.draft { font-style: italic; }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pr-review-nginx
+  namespace: edge
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      server_name _;
+      server_tokens off;
+      root /usr/share/nginx/html;
+      index index.html;
+      # The page holds the vault password, so it may load nothing but itself and talk only to GitHub.
+      add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://api.github.com https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
+      add_header X-Content-Type-Options nosniff always;
+      add_header Referrer-Policy no-referrer always;
+      add_header Cache-Control no-store always;
+      location / {
+        try_files $uri $uri/ =404;
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pr-review
+  namespace: edge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pr-review
+  template:
+    metadata:
+      labels:
+        app: pr-review
+    spec:
+      nodeSelector:
+        homelab.local/edge: "true"
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 101
+        runAsGroup: 101
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nginx
+          image: nginxinc/nginx-unprivileged:alpine
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          volumeMounts:
+            - name: site
+              mountPath: /usr/share/nginx/html
+              readOnly: true
+            - name: nginx
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: site
+          configMap:
+            name: pr-review-site
+        - name: nginx
+          configMap:
+            name: pr-review-nginx
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pr-review
+  namespace: edge
+spec:
+  selector:
+    app: pr-review
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
