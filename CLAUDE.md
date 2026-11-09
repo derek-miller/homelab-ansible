@@ -8,6 +8,7 @@ Ansible-managed homelab. k3s (server rackvm1, agents rackvm2-5, amd64 VMs on the
 
 - **Service config lives in Ansible Vault, not in the tree you can grep.** The Pis' Compose stacks are `docker_compose_definition` in each Pi's `vars.yml`, with their secrets vaulted inline, and rackmini1 keeps its secrets in `host_vars/rackmini1/vault.yml`. A plain grep reads vaulted text as opaque AES blobs and reports it absent — decrypt (`make vault-decrypt`) before concluding anything is undeclared.
 - **Kubernetes apps live in `kubernetes/`, applied by Flux, not Ansible.** A `*.vault.yaml` file there is vault-encrypted whole. Hidden apps must not be named by any file name, plain file, comment or deploy output; the repo and its Actions logs are public. Every namespace in `kubernetes/` carries the default-deny baseline copied from `kubernetes/portainer/namespace.yaml` (RUNBOOK.md, Apps on k3s).
+- **`kubernetes/edge/pr-review.yaml` and `pr-review.vault.yaml` are never self-merged.** The page they serve receives the vault password, so every change to either goes to Derek for review.
 - **Run `make vault-encrypt` before committing.** `hooks/pre-commit` runs `make vault-check` and rejects the commit otherwise. The Makefile hard-errors unless `VIRTUAL_ENV` is set, so commit from inside `.venv`.
 
 ## Commands
