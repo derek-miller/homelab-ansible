@@ -123,6 +123,7 @@
   delay: 15
   when:
     - _k3s_release | length > 0
+    - _k3s_release != _k3s_installed_release
     - not (ansible_check_mode and _k3s_bindir is changed)
   notify: restart k3s
 
