@@ -140,7 +140,7 @@ data:
                     refId: B
                     type: threshold
               noDataState: Alerting
-              execErrState: Alerting
+              execErrState: Error
               for: 15m
               annotations:
                 description: The volume_backups measurement has received nothing for 15 minutes
@@ -1128,7 +1128,7 @@ data:
                     refId: B
                     type: threshold
               noDataState: Alerting
-              execErrState: Alerting
+              execErrState: Error
               for: 2m
               annotations:
                 description: 'rackvm1''s Telegraf has read nothing from the k3s API for 3 minutes: k3s is down on rackvm1, or Telegraf''s k3s token no longer works. Host Deadman fires as well if rackvm1 itself is down.'
