@@ -4,6 +4,8 @@ telegraf_collection_interval: 10s
 telegraf_collection_jitter: 0s
 telegraf_flush_interval: "{{ telegraf_collection_interval }}"
 telegraf_flush_jitter: 5s
+# Metrics kept per output while writes fail: about 50 minutes on the busiest hosts.
+telegraf_metric_buffer_limit: 200000
 telegraf_conf: /etc/telegraf/telegraf.conf
 telegraf_conf_dir: /etc/telegraf/telegraf.d
 telegraf_conf_group: "{{ root_group if ansible_os_family == 'Darwin' else 'telegraf' }}"
