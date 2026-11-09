@@ -1,0 +1,31 @@
+---
+- assert:
+    that: cloudflare_dns_state in ('present', 'absent')
+    quiet: yes
+
+# A failed task's message names the zone even under no_log, so failures are kept quiet here and reported below.
+- name: "{{ 'set' if cloudflare_dns_state == 'present' else 'remove' }} the Cloudflare DNS records"
+  community.general.cloudflare_dns:
+    zone: "{{ cloudflare_zone }}"
+    api_token: "{{ cloudflare_api_token }}"
+    type: "{{ item.type }}"
+    record: "{{ item.record }}"
+    value: "{{ item.value if cloudflare_dns_state == 'present' else omit }}"
+    ttl: "{{ 1 if cloudflare_dns_state == 'present' else omit }}"
+    proxied: "{{ false if cloudflare_dns_state == 'present' else omit }}"
+    solo: "{{ true if cloudflare_dns_state == 'present' else omit }}"
+    state: "{{ cloudflare_dns_state }}"
+  loop: "{{ cloudflare_dns_records }}"
+  loop_control:
+    label: "{{ item.type }}"
+  register: _cloudflare_dns
+  no_log: true
+  failed_when: false
+  until: _cloudflare_dns.failed_when_suppressed_exception is not defined or _cloudflare_dns.attempts >= 5
+  retries: 5
+  delay: 10
+
+- name: stop when Cloudflare didn't {{ 'take' if cloudflare_dns_state == 'present' else 'remove' }} a DNS record
+  fail:
+    msg: Cloudflare didn't {{ 'take' if cloudflare_dns_state == 'present' else 'remove' }} the DNS records after 5 tries
+  when: _cloudflare_dns.results | default([]) | selectattr('failed_when_suppressed_exception', 'defined') | list | length > 0

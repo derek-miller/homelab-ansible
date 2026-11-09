@@ -1,0 +1,4 @@
+---
+cloudflare_dns_state: present
+# Records in cloudflare_zone, each {type, record, value}; value is unused when absent.
+cloudflare_dns_records: []
