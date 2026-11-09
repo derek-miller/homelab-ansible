@@ -76,7 +76,6 @@ data:
       const inner = new TextDecoder().decode(hexToBytes(lines.slice(1).join(''))).split('\n');
       if (inner.length < 3) throw new Error('not a vault: bad body');
       return {
-        label: header[1] === '1.2' && header[3] ? header[3] : '',
         salt: hexToBytes(inner[0]),
         hmac: hexToBytes(inner[1]),
         ciphertext: hexToBytes(inner[2]),
@@ -97,25 +96,8 @@ data:
       return padded.slice(0, padded.length - pad);
     }
 
-    class Keyring {
-      constructor(passwords) {
-        this.passwords = passwords;
-        this.byLabel = new Map();
-      }
-
-      async open(text) {
-        const vault = parseVault(text);
-        const first = this.byLabel.get(vault.label);
-        const order = first === undefined ? this.passwords : [first, ...this.passwords.filter(p => p !== first)];
-        for (const password of order) {
-          const bytes = await openWith(vault, password);
-          if (bytes) {
-            this.byLabel.set(vault.label, password);
-            return { bytes, label: vault.label };
-          }
-        }
-        return { bytes: null, label: vault.label };
-      }
+    async function openVault(text, password) {
+      return openWith(parseVault(text), password);
     }
 
     function asText(bytes) {
@@ -143,7 +125,7 @@ data:
 
     const INLINE = /^(\s*)(\S.*?)?!vault\s*\|[-+]?\s*$/;
 
-    async function expandInline(text, keyring, stats) {
+    async function expandInline(text, password, stats) {
       const lines = text.split('\n');
       const out = [];
       for (let i = 0; i < lines.length; i++) {
@@ -163,17 +145,16 @@ data:
           out.push(lines[i - block.length], ...block);
           continue;
         }
-        let opened;
+        let bytes = null, error = '';
         try {
-          opened = await keyring.open(block.join('\n'));
+          bytes = await openVault(block.join('\n'), password);
         } catch (e) {
-          opened = { bytes: null, label: '', error: e.message };
+          error = e.message;
         }
-        const value = opened.bytes && asText(opened.bytes);
-        const tag = opened.label ? ` (${opened.label})` : '';
+        const value = bytes && asText(bytes);
         if (value === null || value === undefined) {
           stats.locked++;
-          out.push(`${prefix}!vault${tag} |  # not decrypted${opened.error ? ': ' + opened.error : ''}`, ...block);
+          out.push(`${prefix}!vault |  # not decrypted${error ? ': ' + error : ''}`, ...block);
           continue;
         }
         stats.inline++;
@@ -181,35 +162,34 @@ data:
         const plain = await hideKeys(value);
         const kept = plain.endsWith('\n');
         const shown = kept ? plain.slice(0, -1) : plain;
-        out.push(`${prefix}!vault${tag} |${kept ? '' : '-'} # decrypted`, ...shown.split('\n').map(l => (l ? pad + l : '')));
+        out.push(`${prefix}!vault |${kept ? '' : '-'} # decrypted`, ...shown.split('\n').map(l => (l ? pad + l : '')));
       }
       return out.join('\n');
     }
 
-    async function reveal(text, keyring, stats) {
+    async function reveal(text, password, stats) {
       if (text === null) return { lines: [], note: '' };
       if (text.startsWith('$ANSIBLE_VAULT;')) {
-        let opened;
+        let bytes;
         try {
-          opened = await keyring.open(text);
+          bytes = await openVault(text, password);
         } catch (e) {
           stats.locked++;
           return { lines: text.split('\n'), note: e.message };
         }
-        const tag = opened.label ? `${opened.label} tier` : 'vault';
-        if (!opened.bytes) {
+        if (!bytes) {
           stats.locked++;
-          return { lines: text.split('\n'), note: `${tag}, not opened by any password given` };
+          return { lines: text.split('\n'), note: 'vault, wrong password' };
         }
         stats.files++;
-        const plain = asText(opened.bytes);
+        const plain = asText(bytes);
         if (plain === null) {
-          const digest = bytesToHex(new Uint8Array(await crypto.subtle.digest('SHA-256', opened.bytes))).slice(0, 12);
-          return { lines: [`<binary, ${opened.bytes.length} bytes, sha256 ${digest}>`], note: `${tag}, binary` };
+          const digest = bytesToHex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))).slice(0, 12);
+          return { lines: [`<binary, ${bytes.length} bytes, sha256 ${digest}>`], note: 'vault, binary' };
         }
-        return { lines: (await hideKeys(plain)).split('\n'), note: `${tag}, decrypted` };
+        return { lines: (await hideKeys(plain)).split('\n'), note: 'vault, decrypted' };
       }
-      return { lines: (await expandInline(text, keyring, stats)).split('\n'), note: '' };
+      return { lines: (await expandInline(text, password, stats)).split('\n'), note: '' };
     }
 
     // Myers' O(ND) line diff; past MAX_EDIT_DISTANCE it gives up and shows all old lines, then all new.
@@ -544,14 +524,14 @@ data:
 
     if (typeof module !== 'undefined') {
       module.exports = {
-        parseVault, openWith, Keyring, expandInline, reveal, diff, hunks, hideKeys, vaultLooking, plaintextHead,
+        parseVault, openWith, openVault, expandInline, reveal, diff, hunks, hideKeys, vaultLooking, plaintextHead,
         opsToRows, patchToRows, blocks, pairUp, wordDiff, syntaxFor, highlight, mergeSpans,
       };
     }
 
     if (typeof document !== 'undefined') {
       const $ = sel => document.querySelector(sel);
-      let keyring = null;
+      let password = null;
       let idleTimer = null;
       // Bumped by forget() and by each new load, so an older load in flight stops before it shows anything.
       let load = 0;
@@ -576,7 +556,7 @@ data:
 
       function forget(reason) {
         load++;
-        keyring = null;
+        password = null;
         shown = [];
         clearTimeout(idleTimer);
         $('#results').replaceChildren();
@@ -587,13 +567,13 @@ data:
 
       // Timers stop while the computer sleeps, so the wall clock decides.
       function expired() {
-        if (!keyring || Date.now() < deadline) return false;
+        if (!password || Date.now() < deadline) return false;
         forget('Forgot the vault password after 30 minutes idle.');
         return true;
       }
 
       function touch() {
-        if (!keyring || expired()) return;
+        if (!password || expired()) return;
         deadline = Date.now() + IDLE_MS;
         clearTimeout(idleTimer);
         idleTimer = setTimeout(expired, IDLE_MS);
@@ -689,7 +669,7 @@ data:
         }
       }
 
-      async function showFile(file, repo, base, head, stats, ring) {
+      async function showFile(file, repo, base, head, stats, pw) {
         const section = el('details', 'file');
         section.open = true;
         const summary = el('summary');
@@ -707,7 +687,7 @@ data:
             file.status === 'removed' ? null : raw(repo, head, file.filename),
           ]);
           const counts = { files: 0, inline: 0, locked: 0 };
-          const [a, b] = await Promise.all([reveal(oldText, ring, counts), reveal(newText, ring, counts)]);
+          const [a, b] = await Promise.all([reveal(oldText, pw, counts), reveal(newText, pw, counts)]);
           if (counts.files) stats.files++;
           if (counts.inline) stats.inline++;
           if (counts.locked) stats.locked++;
@@ -761,7 +741,7 @@ data:
       function pick(number) {
         $('#pr').value = String(number);
         history.replaceState(null, '', `#${number}`);
-        if (keyring && !expired()) {
+        if (password && !expired()) {
           $('#form').requestSubmit();
         } else {
           $('#password').focus();
@@ -807,18 +787,18 @@ data:
 
       async function show(event) {
         event.preventDefault();
-        const passwords = [$('#password').value.trim()].filter(Boolean);
+        const typed = $('#password').value.trim();
         $('#password').value = '';
-        if (passwords.length) {
-          keyring = new Keyring(passwords);
+        if (typed) {
+          password = typed;
           deadline = Date.now() + IDLE_MS;
         }
-        if (!keyring || expired()) {
+        if (!password || expired()) {
           $('#status').textContent = 'Enter the vault password.';
           return;
         }
         const mine = ++load;
-        const ring = keyring;
+        const pw = password;
         const stale = () => mine !== load;
         touch();
         $('#held').hidden = false;
@@ -845,7 +825,7 @@ data:
           const stats = { files: 0, inline: 0, locked: 0, plaintext: 0 };
           const entries = [];
           for (let i = 0; i < files.length; i += 6) {
-            entries.push(...await Promise.all(files.slice(i, i + 6).map(f => showFile(f, repo, base, pr.head.sha, stats, ring).catch(e => {
+            entries.push(...await Promise.all(files.slice(i, i + 6).map(f => showFile(f, repo, base, pr.head.sha, stats, pw).catch(e => {
               const section = el('details', 'file');
               section.open = true;
               section.append(el('summary', '', `${f.filename}: ${e.message}`), renderTable([]));
@@ -865,7 +845,7 @@ data:
           $('#toolbar').hidden = false;
           applyFilters();
           $('#status').textContent = `Decrypted ${stats.files} vault files and the inline values in ${stats.inline} more` +
-            (stats.locked ? `; ${stats.locked} files hold vaults no password given opens` : '') +
+            (stats.locked ? `; ${stats.locked} files hold vaults this password doesn't open` : '') +
             (stats.plaintext ? `; ${stats.plaintext} vault files are NOT encrypted in the head` : '') + '.';
         } catch (e) {
           if (!stale()) $('#status').textContent = e.message;
