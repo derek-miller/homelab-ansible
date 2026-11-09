@@ -30,7 +30,8 @@ spec:
     githubConfigSecret: rack-github
     runnerScaleSetName: rack
     minRunners: 0
-    maxRunners: 4
+    # Four busy runners push the rack's UPS past its rated load; raise this again once that UPS has headroom.
+    maxRunners: 2
     controllerServiceAccount:
       namespace: arc
       name: arc-controller
