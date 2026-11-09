@@ -65,83 +65,14 @@
   force_handlers: true
   roles:
     - role: generic/tailscale
-  tasks:
-    - name: publish the tailscale addresses
-      when: tailscale_state == 'present' and not ansible_check_mode
-      block:
-        - name: add Cloudflare DNS record for tailscale ipv4 address
-          community.general.cloudflare_dns:
-            zone: "{{ cloudflare_zone }}"
-            api_token: "{{ cloudflare_api_token }}"
-            type: "A"
-            record: "{{ inventory_hostname }}.ts"
-            value: "{{ tailscale_node_ipv4 }}"
-            ttl: 1
-            proxied: no
-            solo: yes
-          register: _cloudflare_ipv4
-          no_log: true
-          failed_when: false
-          until: _cloudflare_ipv4.failed_when_suppressed_exception is not defined or _cloudflare_ipv4.attempts >= 5
-          retries: 5
-          delay: 10
-          when: create_cloudflare_ipv4_dns_record is defined and create_cloudflare_ipv4_dns_record is truthy
-        - name: add Cloudflare DNS record for tailscale ipv6 address
-          community.general.cloudflare_dns:
-            zone: "{{ cloudflare_zone }}"
-            api_token: "{{ cloudflare_api_token }}"
-            type: "AAAA"
-            record: "{{ inventory_hostname }}.ts"
-            value: "{{ tailscale_node_ipv6 }}"
-            ttl: 1
-            proxied: no
-            solo: yes
-          register: _cloudflare_ipv6
-          no_log: true
-          failed_when: false
-          until: _cloudflare_ipv6.failed_when_suppressed_exception is not defined or _cloudflare_ipv6.attempts >= 5
-          retries: 5
-          delay: 10
-          when: create_cloudflare_ipv6_dns_record is defined and create_cloudflare_ipv6_dns_record is truthy
-        - name: stop when Cloudflare didn't take a tailscale DNS record
-          ansible.builtin.fail:
-            msg: Cloudflare didn't take the tailscale DNS records after 5 tries
-          when: _cloudflare_ipv4.failed_when_suppressed_exception is defined or _cloudflare_ipv6.failed_when_suppressed_exception is defined
-    - name: remove the tailscale DNS records
-      when: tailscale_state == 'absent'
-      block:
-        - name: remove Cloudflare DNS record for tailscale ipv4 address
-          community.general.cloudflare_dns:
-            zone: "{{ cloudflare_zone }}"
-            api_token: "{{ cloudflare_api_token }}"
-            type: "A"
-            record: "{{ inventory_hostname }}.ts"
-            state: absent
-          register: _cloudflare_ipv4
-          no_log: true
-          failed_when: false
-          until: _cloudflare_ipv4.failed_when_suppressed_exception is not defined or _cloudflare_ipv4.attempts >= 5
-          retries: 5
-          delay: 10
-          when: create_cloudflare_ipv4_dns_record is defined and create_cloudflare_ipv4_dns_record is truthy
-        - name: remove Cloudflare DNS record for tailscale ipv6 address
-          community.general.cloudflare_dns:
-            zone: "{{ cloudflare_zone }}"
-            api_token: "{{ cloudflare_api_token }}"
-            type: "AAAA"
-            record: "{{ inventory_hostname }}.ts"
-            state: absent
-          register: _cloudflare_ipv6
-          no_log: true
-          failed_when: false
-          until: _cloudflare_ipv6.failed_when_suppressed_exception is not defined or _cloudflare_ipv6.attempts >= 5
-          retries: 5
-          delay: 10
-          when: create_cloudflare_ipv6_dns_record is defined and create_cloudflare_ipv6_dns_record is truthy
-        - name: stop when Cloudflare didn't remove a tailscale DNS record
-          ansible.builtin.fail:
-            msg: Cloudflare didn't remove the tailscale DNS records after 5 tries
-          when: _cloudflare_ipv4.failed_when_suppressed_exception is defined or _cloudflare_ipv6.failed_when_suppressed_exception is defined
+    - role: generic/cloudflare-dns
+      cloudflare_dns_state: "{{ tailscale_state }}"
+      cloudflare_dns_records: >-
+        {{ ([{'type': 'A', 'record': inventory_hostname ~ '.ts', 'value': tailscale_node_ipv4 | default('')}]
+            if create_cloudflare_ipv4_dns_record | default(false) | bool else [])
+           + ([{'type': 'AAAA', 'record': inventory_hostname ~ '.ts', 'value': tailscale_node_ipv6 | default('')}]
+            if create_cloudflare_ipv6_dns_record | default(false) | bool else []) }}
+      when: tailscale_state == 'absent' or not ansible_check_mode
   tags:
     - tailscale
 
