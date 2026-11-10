@@ -1535,8 +1535,9 @@ const server = createServer(async (req, res) => {
     }
 
     // Filter events by user (allowlist or ignorelist). A check has no user to filter
-    // on: a branch here was pushed by someone with write access, and a check on a
-    // fork's commit comes with no head_branch and is held.
+    // on: a commit pushed here was pushed by someone with write access, and its suite's
+    // `after` is that commit. A fork's commit was never pushed here, so its suite has no
+    // `after` (its head_branch is the fork's own branch name), and it is held.
     let actor = null;
     let fork = false;
     switch (event) {
@@ -1555,10 +1556,12 @@ const server = createServer(async (req, res) => {
         actor = payload.pusher?.name || payload.sender?.login;
         break;
       case "check_run":
-      case "check_suite":
-        fork = (payload.check_suite ?? payload.check_run?.check_suite)?.head_branch == null;
+      case "check_suite": {
+        const suite = payload.check_suite ?? payload.check_run?.check_suite;
+        fork = !suite?.after || suite.after !== suite.head_sha;
         if (fork) actor = `${payload.sender?.login ?? "unknown"} (fork)`;
         break;
+      }
       default:
         actor = payload.sender?.login;
         break;
