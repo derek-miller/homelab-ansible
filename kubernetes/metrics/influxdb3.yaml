@@ -45,23 +45,57 @@ data:
       echo "influxdb3 backup failed, last backup kept: $1" >&2
       exit 1
     }
+    # The list keeps every earlier nightly, and an in_progress twin of each completed one with the same created_at.
+    nightlies() {
+      curl -s -H "Authorization: Bearer $INFLUXDB3_AUTH_TOKEN" http://127.0.0.1:8181/api/v3/enterprise/backup | tr '{' '\n' | grep '"name":"nightly"' || true
+    }
+    created() { sed -n 's/.*"created_at":"\([0-9T:-]\{19\}\).*/\1/p'; }
+    unfinished() {
+      s=$(nightlies)
+      printf '%s\n' "$s" | grep '"status":"in_progress"' | created | while read -r c; do
+        printf '%s\n' "$s" | grep "\"created_at\":\"$c" | grep -q '"status":"completed"' || echo "$c"
+      done
+    }
     if ! curl -sf -o /dev/null http://127.0.0.1:8181/health; then
       echo "influxdb3 isn't serving; last backup left in place" >&2
       exit 1
     fi
+    # A retry can start while the backup an earlier attempt started is still writing into nightly.
+    n=0
+    while [ -n "$(unfinished)" ]; do
+      n=$((n + 1))
+      if [ "$n" -gt 360 ]; then
+        echo "an earlier influxdb3 backup is still running after an hour; last backup left in place" >&2
+        exit 1
+      fi
+      sleep 10
+    done
     # --force overwrites the files it writes but leaves an earlier backup's other files in place,
     # so the new backup goes into an empty folder and the last one waits beside it until it completes.
     # A nightly.prev left by a run that was cut off is the last completed backup, so it wins over nightly.
     if [ -d "$d/nightly.prev" ]; then rm -rf "$d/nightly"; elif [ -d "$d/nightly" ]; then mv "$d/nightly" "$d/nightly.prev"; fi
-    influxdb3 create backup --name nightly --force >/dev/null || keep_last "create backup exited $?"
+    since=$(date -u +%Y-%m-%dT%H:%M:%S)
+    if ! influxdb3 create backup --name nightly --force >/dev/null; then
+      echo "influxdb3 create backup failed; last backup left in nightly.prev" >&2
+      exit 1
+    fi
+    n=0
     while :; do
       sleep 10
-      s=$(curl -s -H "Authorization: Bearer $INFLUXDB3_AUTH_TOKEN" http://127.0.0.1:8181/api/v3/enterprise/backup | tr '{' '\n' | grep '"name":"nightly"') || true
+      s=$(nightlies | while IFS= read -r l; do
+        c=$(printf '%s\n' "$l" | created)
+        if [ -n "$c" ] && expr "$c" \>= "$since" >/dev/null; then printf '%s\n' "$l"; fi
+      done)
       case "$s" in
         *'"status":"completed"'*) break ;;
-        *'"status":"in_progress"'*) ;;
+        *'"status":"in_progress"'* | '') ;;
         *) keep_last "$s" ;;
       esac
+      n=$((n + 1))
+      if [ "$n" -gt 360 ]; then
+        echo "influxdb3 backup still running after an hour; last backup left in nightly.prev" >&2
+        exit 1
+      fi
     done
     rm -rf "$d/nightly.prev"
     exec tar -C /var/lib/influxdb3 -cf - homelab/backups/nightly homelab/trial_or_home_license
