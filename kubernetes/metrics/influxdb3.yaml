@@ -53,7 +53,7 @@ data:
     unfinished() {
       s=$(nightlies)
       printf '%s\n' "$s" | grep '"status":"in_progress"' | created | while read -r c; do
-        printf '%s\n' "$s" | grep "\"created_at\":\"$c" | grep -q '"status":"completed"' || echo "$c"
+        printf '%s\n' "$s" | grep "\"created_at\":\"$c" | grep -v '"status":"in_progress"' | grep -q . || echo "$c"
       done
     }
     if ! curl -sf -o /dev/null http://127.0.0.1:8181/health; then
@@ -88,9 +88,8 @@ data:
       done)
       case "$s" in
         *'"status":"completed"'*) break ;;
-        *'"status":"in_progress"'* | '') ;;
-        *) keep_last "$s" ;;
       esac
+      if printf '%s\n' "$s" | grep -v '"status":"in_progress"' | grep -q .; then keep_last "$s"; fi
       n=$((n + 1))
       if [ "$n" -gt 360 ]; then
         echo "influxdb3 backup still running after an hour; last backup left in nightly.prev" >&2
