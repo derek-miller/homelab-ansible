@@ -48,6 +48,10 @@ spec:
           envFrom:
             - secretRef:
                 name: openclaw-webhook-proxy
+          # A hook body is buffered whole before its signature is checked.
+          resources:
+            limits:
+              memory: 512Mi
           readinessProbe:
             httpGet:
               path: /health
