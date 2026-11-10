@@ -7,8 +7,8 @@
  * session has no turn in flight, and follows the gateway log to learn when
  * the turn has ended. It also serves an admin page at / with a JSON API under
  * /api/ for watching the inbox and replaying or discarding events. A GitHub event
- * from someone outside the source's allowlist, other than a bot, is held until an
- * approver approves or dismisses it there.
+ * from someone outside the source's allowlist, other than a bot, and a check on a
+ * fork's commit are held until an approver approves or dismisses them there.
  *
  * A turn that every model refuses for the account's sake (a usage or billing limit, a
  * lost login, an Anthropic outage) pauses all sending. The breaker then sends one turn at
@@ -55,6 +55,8 @@
  *   YOUTRACK_BASE_URL        — base URL for YouTrack instance
  *   YOUTRACK_ALLOW_USERS     — comma-separated usernames to allow (allowlist mode; mutually exclusive with YOUTRACK_IGNORE_USERS)
  *   YOUTRACK_IGNORE_USERS    — comma-separated usernames to skip (ignorelist mode; mutually exclusive with YOUTRACK_ALLOW_USERS)
+ *   YOUTRACK_SELF_USERS      — comma-separated logins of this agent's own accounts; their changes that file an alert ticket
+ *                              or set one to Open or Reopened go through even when the lists above skip them (optional)
  *   YOUTRACK_GUARDRAILS_FILE — path to file containing YouTrack guardrails text, read for each turn
  */
 
@@ -180,9 +182,9 @@ function loadSource(name, kind, prefix) {
     guardrailsFile: env("GUARDRAILS_FILE"),
     allowUsers,
     ignoreUsers,
-    // Commit authors that are this agent's own service accounts. Used only to drop
-    // all-green CI batches on commits we authored ourselves; see
-    // isSelfAuthoredGreenCheckBatch(). Empty (the default) disables the behaviour.
+    // This agent's own accounts: on GitHub the commit authors whose all-green CI batches
+    // are dropped (isSelfAuthoredGreenCheckBatch()), on YouTrack the logins whose alert
+    // tickets are handed to it (isAlertTicketHandoff()). Empty (the default) does neither.
     selfUsers: envList(`${prefix}SELF_USERS`),
   };
   try {
@@ -914,7 +916,7 @@ function getGitHubEventDetail(event, payload) {
   }
 }
 
-/** Whether an ignored user's event files an alert ticket or sets it to Open or Reopened; its other changes stay skipped */
+/** Whether the agent's own event files an alert ticket or sets it to Open or Reopened; its other changes stay skipped */
 function isAlertTicketHandoff(payload) {
   if (payload.comment || !(payload.issue?.summary || "").startsWith("Alert: ")) return false;
   if (payload.action === "created") return true;
@@ -955,6 +957,7 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS events_status_session ON events (status, session_key);
   CREATE INDEX IF NOT EXISTS events_thread ON events (thread_key);
+  CREATE UNIQUE INDEX IF NOT EXISTS events_delivery ON events (delivery_id);
 `);
 if (db.prepare("PRAGMA user_version").get().user_version === 0) {
   db.exec(`
@@ -1000,7 +1003,8 @@ db.exec(`UPDATE events SET status = 'pending' WHERE status = 'sent' AND run_id I
 const insertEvent = db.prepare(`
   INSERT INTO events (received_at, source, thread_key, session_key, delivery_id,
                       event_type, detail, message, check_json, status, due_at, actor, token_hash)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`);
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT (delivery_id) DO NOTHING RETURNING id`);
 const moveThreadToKey = db.prepare(`
   UPDATE events SET session_key = ? WHERE thread_key = ? AND status IN ('pending', 'held')`);
 const latestTicketKey = db.prepare(`
@@ -1123,7 +1127,7 @@ function setBreaker(changes) {
   writeBreaker.run(breaker);
 }
 
-/** Queue one accepted event, or hold one for approval; returns its id and throws if the inbox cannot take it */
+/** Queue one accepted event, or hold one for approval; returns its id (none if its delivery is already in) and throws if the inbox cannot take it */
 function enqueue(source, threadKey, sessionKey, deliveryId, eventEntry, dueNow, held = null) {
   const now = Date.now();
   return insertEvent.get(
@@ -1140,7 +1144,7 @@ function enqueue(source, threadKey, sessionKey, deliveryId, eventEntry, dueNow, 
     held ? now + HOLD_MS : dueNow ? 0 : now + BATCH_WINDOW_MS,
     held?.actor ?? null,
     held?.tokenHash ?? null
-  ).id;
+  )?.id;
 }
 
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
@@ -1530,10 +1534,11 @@ const server = createServer(async (req, res) => {
       }
     }
 
-    // Filter events by user (allowlist or ignorelist)
-    // Note: check_run events bypass user filtering — they are system events
-    // triggered by CI, not by a specific user action
+    // Filter events by user (allowlist or ignorelist). A check has no user to filter
+    // on: a branch here was pushed by someone with write access, and a check on a
+    // fork's commit comes with no head_branch and is held.
     let actor = null;
+    let fork = false;
     switch (event) {
       case "pull_request_review":
         actor = payload.review?.user?.login;
@@ -1550,12 +1555,9 @@ const server = createServer(async (req, res) => {
         actor = payload.pusher?.name || payload.sender?.login;
         break;
       case "check_run":
-        // Check runs are system events; skip user filtering
-        actor = null;
-        break;
       case "check_suite":
-        // Check suites are system events; skip user filtering
-        actor = null;
+        fork = (payload.check_suite ?? payload.check_run?.check_suite)?.head_branch == null;
+        if (fork) actor = `${payload.sender?.login ?? "unknown"} (fork)`;
         break;
       default:
         actor = payload.sender?.login;
@@ -1566,7 +1568,7 @@ const server = createServer(async (req, res) => {
       source.allowUsers,
       source.ignoreUsers
     );
-    const held = !processGitHub && githubReason === "not in allowlist" && !actor.toLowerCase().endsWith("[bot]");
+    const held = fork || (!processGitHub && githubReason === "not in allowlist" && !actor.toLowerCase().endsWith("[bot]"));
     if (!processGitHub && !held) {
       console.log(
         `[${new Date().toISOString()}] Skipping GitHub event from ${actor || "(no actor)"} (${githubReason})`
@@ -1616,6 +1618,12 @@ const server = createServer(async (req, res) => {
       logWarn(`Failed to queue GitHub ${event} (delivery: ${delivery}): ${err.message}`);
       res.writeHead(500);
       res.end("Failed to queue event");
+      return;
+    }
+    if (id === undefined) {
+      logInfo(`Skipping GitHub ${event} (delivery: ${delivery}): already received`);
+      res.writeHead(200);
+      res.end("OK (skipped: already received)");
       return;
     }
     logDebug(`GitHub ${event} (${detail}): thread ${thread.id} → session ${sessionKey}`);
@@ -1671,7 +1679,8 @@ const server = createServer(async (req, res) => {
       source.allowUsers,
       source.ignoreUsers
     );
-    const handoff = !processYouTrack && youtrackReason === "ignored user" && isAlertTicketHandoff(payload);
+    const handoff = !processYouTrack && source.selfUsers.includes((updaterLogin ?? "").toLowerCase()) &&
+      isAlertTicketHandoff(payload);
     if (handoff) logInfo(`Passing YouTrack ${action} on ${issueId} from ${updaterLogin}: an alert ticket handed to the agent`);
     if (!processYouTrack && !handoff) {
       console.log(
