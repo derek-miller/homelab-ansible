@@ -61,8 +61,9 @@ jobs:
           SKIP_HOSTS: ${{ vars.DEPLOY_SKIP_HOSTS }}
         run: |
           # The Makefile puts these inside single quotes on a shell command line.
-          if [[ ! "$HOSTS,$TAGS,$SKIP_HOSTS" =~ ^[A-Za-z0-9_.,:!*-]*$ ]]; then
-            echo "hosts, tags and DEPLOY_SKIP_HOSTS may hold only letters, digits and _ . , : ! * -" >&2
+          allowed='^[]A-Za-z0-9_.,:!*&~[-]*$'
+          if [[ ! "$HOSTS,$TAGS,$SKIP_HOSTS" =~ $allowed ]]; then
+            echo "hosts, tags and DEPLOY_SKIP_HOSTS may hold only letters, digits and _ . , : ! * & ~ [ ] -" >&2
             exit 1
           fi
           source .venv/bin/activate
