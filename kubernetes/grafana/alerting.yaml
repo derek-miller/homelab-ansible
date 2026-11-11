@@ -374,6 +374,98 @@ data:
               labels:
                 severity: critical
               isPaused: false
+            # An error's signature is its first line with digits and hex IDs masked, so the line
+            # numbers that move with every release don't make a known error look new.
+            - uid: c4-new-driver-error
+              title: New Driver Error
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: bg30eewutkydcd
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT driver, signature, MAX(version) AS version, COUNT(DISTINCT mac) AS value FROM (SELECT driver, version, mac, time, substr(regexp_replace(regexp_replace(regexp_replace(message, '(\\n|\n)[\s\S]*', ''), '(?i)(0x)?[0-9a-f]{8,}|([0-9a-f]{2}[:-]){5}[0-9a-f]{2}', 'X', 'g'), '[0-9]+', 'N', 'g'), 1, 160) AS signature FROM error_log WHERE time >= now() - interval '30 days') GROUP BY driver, signature HAVING MIN(time) >= now() - interval '15 minutes'
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 0s
+              annotations:
+                __dashboardUid__: c4-driver-errors
+                dashboard_query: var-driver={{ urlquery $labels.driver }}&var-version={{ urlquery $labels.version }}
+                description: '"{{ $labels.signature }}", first seen in the last 15 minutes, on {{ $values.A.Value }} controller(s) so far'
+                summary: New {{ $labels.driver }} {{ $labels.version }} error
+              isPaused: false
+            - uid: c4-driver-error-spike
+              title: Driver Error Spike
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: bg30eewutkydcd
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT driver, signature, MAX(version) AS version, COUNT(DISTINCT mac) AS value FROM (SELECT driver, version, mac, substr(regexp_replace(regexp_replace(regexp_replace(message, '(\\n|\n)[\s\S]*', ''), '(?i)(0x)?[0-9a-f]{8,}|([0-9a-f]{2}[:-]){5}[0-9a-f]{2}', 'X', 'g'), '[0-9]+', 'N', 'g'), 1, 160) AS signature FROM error_log WHERE time >= now() - interval '6 hours') GROUP BY driver, signature
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 2
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 0s
+              annotations:
+                __dashboardUid__: c4-driver-errors
+                dashboard_query: var-driver={{ urlquery $labels.driver }}&var-version={{ urlquery $labels.version }}
+                description: '"{{ $labels.signature }}" in {{ $labels.version }} has reached {{ $values.A.Value }} controllers within 6 hours'
+                summary: '{{ $labels.driver }} error on {{ $values.A.Value }} controllers in 6 hours'
+              isPaused: false
         - orgId: 1
           name: cpu
           folder: Alerting
@@ -1440,6 +1532,18 @@ data:
                 message: '{{ template "discord_pretty.message" . }}'
                 use_discord_username: false
               disableResolveMessage: false
+        # A first sighting has nothing to resolve; its alert just ages out of the 15-minute window.
+        - orgId: 1
+          name: Discord (no resolve)
+          receivers:
+            - uid: discord-alerts-no-resolve
+              type: discord
+              settings:
+                url: ${DISCORD_ALERTS_WEBHOOK_URL}
+                title: '{{ template "discord_pretty.title" . }}'
+                message: '{{ template "discord_pretty.message" . }}'
+                use_discord_username: false
+              disableResolveMessage: true
     policies:
         - orgId: 1
           receiver: Discord
@@ -1449,6 +1553,10 @@ data:
           group_wait: 30s
           group_interval: 5m
           repeat_interval: 4h
+          routes:
+            - receiver: Discord (no resolve)
+              object_matchers:
+                - ['alertname', '=', 'New Driver Error']
   templates.yaml: |
     apiVersion: 1
     templates:
@@ -1467,4 +1575,4 @@ data:
               **Summary:** {{ $a.Annotations.summary }}{{ end }}{{ if $a.Annotations.description }}
               **Details:** {{ $a.Annotations.description }}{{ end }}
 
-              [View alert]({{ .ExternalURL }}alerting/list){{ if $a.SilenceURL }} • [Silence]({{ $a.SilenceURL }}){{ end }}{{ if $a.DashboardURL }} • [Dashboard]({{ $a.DashboardURL }}){{ end }}{{ if $a.PanelURL }} • [Panel]({{ $a.PanelURL }}){{ end }}{{ end }}
+              [View alert]({{ .ExternalURL }}alerting/list){{ if $a.SilenceURL }} • [Silence]({{ $a.SilenceURL }}){{ end }}{{ if $a.DashboardURL }} • [Dashboard]({{ $a.DashboardURL }}{{ if $a.Annotations.dashboard_query }}&{{ $a.Annotations.dashboard_query }}{{ end }}){{ end }}{{ if $a.PanelURL }} • [Panel]({{ $a.PanelURL }}){{ end }}{{ end }}
