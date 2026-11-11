@@ -48,7 +48,7 @@ spec:
             - name: ZIGBEE2MQTT_CONFIG_ADVANCED_LAST_SEEN
               value: ISO_8601_local
             - name: ZIGBEE2MQTT_CONFIG_ADVANCED_LOG_LEVEL
-              value: debug
+              value: info
             - name: ZIGBEE2MQTT_CONFIG_ADVANCED_OUTPUT
               value: attribute
             - name: ZIGBEE2MQTT_CONFIG_ADVANCED_TRANSMIT_POWER
