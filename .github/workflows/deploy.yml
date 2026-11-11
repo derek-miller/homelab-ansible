@@ -27,6 +27,8 @@ jobs:
   deploy:
     if: vars.DEPLOY_PAUSED != 'true'
     runs-on: ubuntu-26.04
+    # Its secrets are only released to runs from master.
+    environment: production
     steps:
       - uses: actions/checkout@v7
 
@@ -58,6 +60,12 @@ jobs:
           TAGS: ${{ inputs.tags }}
           SKIP_HOSTS: ${{ vars.DEPLOY_SKIP_HOSTS }}
         run: |
+          # The Makefile puts these inside single quotes on a shell command line.
+          allowed='^[]A-Za-z0-9_.,:!*&~[-]*$'
+          if [[ ! "$HOSTS,$TAGS,$SKIP_HOSTS" =~ $allowed ]]; then
+            echo "hosts, tags and DEPLOY_SKIP_HOSTS may hold only letters, digits and _ . , : ! * & ~ [ ] -" >&2
+            exit 1
+          fi
           source .venv/bin/activate
           limit="${HOSTS:-all}"
           for host in ${SKIP_HOSTS//,/ }; do
