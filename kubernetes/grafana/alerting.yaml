@@ -416,7 +416,6 @@ data:
               execErrState: Error
               for: 0s
               annotations:
-                __dashboardUid__: c4-driver-errors
                 dashboard_query: var-driver={{ urlquery $labels.driver }}&var-version={{ urlquery $labels.version }}
                 description: '"{{ $labels.signature }}", first seen in the last 15 minutes, on {{ $values.A.Value }} controller(s) so far'
                 summary: New {{ $labels.driver }} {{ $labels.version }} error
@@ -461,7 +460,6 @@ data:
               execErrState: Error
               for: 0s
               annotations:
-                __dashboardUid__: c4-driver-errors
                 dashboard_query: var-driver={{ urlquery $labels.driver }}&var-version={{ urlquery $labels.version }}
                 description: '"{{ $labels.signature }}" in {{ $labels.version }} has reached {{ $values.A.Value }} controllers within 6 hours'
                 summary: '{{ $labels.driver }} error on {{ $values.A.Value }} controllers in 6 hours'
