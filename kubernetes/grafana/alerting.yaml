@@ -1532,7 +1532,7 @@ data:
                 message: '{{ template "discord_pretty.message" . }}'
                 use_discord_username: false
               disableResolveMessage: false
-        # A first sighting has nothing to resolve; its alert just ages out of the 15-minute window.
+        # New Driver Error alerts end by leaving their 15-minute window, not by anything being fixed.
         - orgId: 1
           name: Discord (no resolve)
           receivers:
@@ -1553,10 +1553,24 @@ data:
           group_wait: 30s
           group_interval: 5m
           repeat_interval: 4h
+          # discord_pretty.message details only an alert group's first alert, so each driver error is a group of its own.
           routes:
             - receiver: Discord (no resolve)
               object_matchers:
                 - ['alertname', '=', 'New Driver Error']
+              group_by:
+                - grafana_folder
+                - alertname
+                - driver
+                - signature
+            - receiver: Discord
+              object_matchers:
+                - ['alertname', '=', 'Driver Error Spike']
+              group_by:
+                - grafana_folder
+                - alertname
+                - driver
+                - signature
   templates.yaml: |
     apiVersion: 1
     templates:
