@@ -1,5 +1,6 @@
 $ActionQueueType LinkedList # use asynchronous processing
 $ActionQueueFileName srvrfwd # set file name, also enables disk mode
+$ActionQueueMaxDiskSpace 512m # spools at most this much while Telegraf is down
 $ActionResumeRetryCount -1 # infinite retries on insert failure
 $ActionQueueSaveOnShutdown on # save in-memory data if rsyslog shuts down
 

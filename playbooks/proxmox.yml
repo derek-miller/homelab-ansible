@@ -81,6 +81,7 @@
   hosts: proxmox
   roles:
     - role: generic/telegraf
+    - role: generic/telegraf-syslog
   tags:
     - telegraf
 
