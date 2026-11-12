@@ -15,6 +15,8 @@ spec:
       labels:
         app: unifi-collector
     spec:
+      nodeSelector:
+        homelab.local/metrics: "true"
       containers:
         - name: unifi-collector
           image: registry.homelab.local/unifi-collector
