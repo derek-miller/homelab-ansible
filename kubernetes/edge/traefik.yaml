@@ -267,11 +267,45 @@ spec:
     ingressClass:
       enabled: false
     experimental:
-      plugins:
+      localPlugins:
         # Renames a caller's X-Api-Key to the header an app reads, such as sourcebot's.
         htransformation:
+          type: localPath
           moduleName: github.com/tomMoulard/htransformation
-          version: v0.4.1
+          mountPath: /plugins-local/src/github.com/tomMoulard/htransformation
+          volumeName: htransformation
+    deployment:
+      additionalVolumes:
+        - name: htransformation
+          configMap:
+            name: traefik-htransformation
+            items:
+              - key: .traefik.yml
+                path: .traefik.yml
+              - key: go.mod
+                path: go.mod
+              - key: LICENSE
+                path: LICENSE
+              - key: htransformation.go
+                path: htransformation.go
+              - key: pkg_handler_deleter_delete.go
+                path: pkg/handler/deleter/delete.go
+              - key: pkg_handler_join_join.go
+                path: pkg/handler/join/join.go
+              - key: pkg_handler_rename_rename.go
+                path: pkg/handler/rename/rename.go
+              - key: pkg_handler_rewrite_rewrite.go
+                path: pkg/handler/rewrite/rewrite.go
+              - key: pkg_handler_set_set.go
+                path: pkg/handler/set/set.go
+              - key: pkg_types_types.go
+                path: pkg/types/types.go
+              - key: pkg_utils_header_add.go
+                path: pkg/utils/header/add.go
+              - key: pkg_utils_header_delete.go
+                path: pkg/utils/header/delete.go
+              - key: pkg_utils_header_set.go
+                path: pkg/utils/header/set.go
     providers:
       kubernetesCRD:
         safeNaming: true
