@@ -22,7 +22,6 @@
 {% endif %}
 {% if volume_backup_stats_homebridge_dir %}
 
-# Homebridge's nightly backups, which its UI writes to the share.
 [[inputs.filecount]]
   name_override = "{{ volume_backup_stats_metric_name }}"
   directories = ["{{ volume_backup_stats_homebridge_dir }}"]
