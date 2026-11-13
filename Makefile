@@ -33,14 +33,14 @@ ansible_setup = ansible -m setup $(ansible_default_flags) $(ansible_flags)
 ansible_bootstrap_flags = $(if $(user),--user=$(user)) --ask-pass $(if $(become_pass),--ask-become-pass)
 
 known_hosts_vault = playbooks/files/vault/known_hosts
-known_hosts = .ssh/known_hosts
+known_hosts = .known_hosts
 read_known_hosts_vault = if grep -q '$(vault_marker)' $(known_hosts_vault); then ansible-vault view $(vault_flag) $(known_hosts_vault); else cat $(known_hosts_vault); fi
 
 # new_host_keys=yes trusts a host's key on first contact and saves it to the
 # vault, even when the run fails. A changed key is still refused.
 ssh_args_accept_new = $(shell sed -n 's/^ssh_args *= *//p' ansible.cfg | sed 's/StrictHostKeyChecking=yes/StrictHostKeyChecking=accept-new/')
-accept_host_keys = $(if $(new_host_keys),ANSIBLE_SSH_ARGS='$(ssh_args_accept_new)')
-save_host_keys = $(if $(new_host_keys),; rc=$$?; $(MAKE) --no-print-directory known-hosts-save; exit $$rc)
+accept_host_keys = $(if $(filter yes,$(new_host_keys)),ANSIBLE_SSH_ARGS='$(ssh_args_accept_new)')
+save_host_keys = $(if $(filter yes,$(new_host_keys)),; rc=$$?; $(MAKE) --no-print-directory known-hosts-save; exit $$rc)
 
 .PHONY: all
 all: after-git-pull check
@@ -142,25 +142,25 @@ check-%:
 facts: known-hosts
 	$(accept_host_keys) $(ansible_setup) all $(save_host_keys)
 
-# Rewritten on every run, since worktrees share .ssh/.
+# Rewritten on every run, so it holds exactly the checked-out vault's keys.
 .PHONY: known-hosts
 known-hosts:
-	@mkdir -p .ssh && chmod 0700 .ssh
-	@tmp=$(known_hosts).$$$$; \
-	{ $(read_known_hosts_vault); } > "$$tmp" && chmod 0600 "$$tmp" && mv "$$tmp" $(known_hosts) \
+	@umask 077; tmp=$(known_hosts).$$$$; \
+	{ $(read_known_hosts_vault); } > "$$tmp" && mv "$$tmp" $(known_hosts) \
 		|| { rm -f "$$tmp"; exit 1; }
 
 .PHONY: known-hosts-save
 known-hosts-save:
 	@new=$$(mktemp); old=$$(mktemp); \
-	LC_ALL=C sort -u $(known_hosts) > "$$new"; \
-	{ $(read_known_hosts_vault); } > "$$old" || { rm -f "$$new" "$$old"; exit 1; }; \
+	LC_ALL=C sort -u $(known_hosts) > "$$new" && test -s "$$new" \
+		&& { $(read_known_hosts_vault); } > "$$old" \
+		|| { rm -f "$$new" "$$old"; exit 1; }; \
 	if ! cmp -s "$$new" "$$old"; then \
 		if grep -q '$(vault_marker)' $(known_hosts_vault); then \
 			ansible-vault encrypt $(vault_flag) --output=$(known_hosts_vault) "$$new"; \
 		else \
 			cp "$$new" $(known_hosts_vault); \
-		fi; \
+		fi || { rm -f "$$new" "$$old"; exit 1; }; \
 		echo "Saved new host keys to $(known_hosts_vault)"; \
 	fi; \
 	rm -f "$$new" "$$old"
