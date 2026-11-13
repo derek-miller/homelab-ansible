@@ -1,0 +1,26 @@
+---
+version: 2
+updates:
+  - package-ecosystem: pip
+    directories:
+      - /
+      - /playbooks/roles/ansible/remote/files
+      - /playbooks/roles/generic/tplink-plug-stats/files
+    schedule:
+      interval: weekly
+    # A release has a week to be yanked before it lands here.
+    cooldown:
+      default-days: 7
+    groups:
+      pip:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
