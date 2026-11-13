@@ -15,7 +15,7 @@ data:
     allow_anonymous false
     password_file /mosquitto/config/mosquitto.passwd
     acl_file /mosquitto/config/acl
-  # A login reaches only the topics listed under it; the broker drops a refused publish without a word.
+  # A login reaches only the topics listed under it. An MQTT 3.1.1 client is told a refused publish or subscription succeeded; nothing is delivered.
   acl: |
     user mosquitto
     topic readwrite #
