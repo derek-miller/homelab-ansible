@@ -26,4 +26,5 @@
   systemd:
     name: "{{ smb_mount_service_name }}.mount"
     state: "{{ 'restarted' if systemd_mount_result.changed or smb_mount_credentials_result.changed else 'started' }}"
-    enabled: yes
+    # The automount mounts it on first use, so a NAS that is slow at boot doesn't fail the unit.
+    enabled: no
