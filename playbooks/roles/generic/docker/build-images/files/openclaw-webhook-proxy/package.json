@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "dependencies": {
+    "dompurify": "^3",
+    "marked": "^18"
+  }
+}
