@@ -32,16 +32,33 @@ spec:
     spec:
       nodeSelector:
         homelab.local/mqtt: "true"
+      initContainers:
+        # A restore unpacks the backup's tar as root, and the app runs as its own user.
+        - name: own-data
+          image: ghcr.io/thomasnordquist/mqtt-explorer
+          command:
+            - chown
+            - -R
+            - mqttexplorer:mqttexplorer
+            - /app/data
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: config
+              mountPath: /app/data
       containers:
         - name: mqtt-explorer
-          image: smeagolworms4/mqtt-explorer
+          image: ghcr.io/thomasnordquist/mqtt-explorer
           env:
             - name: TZ
               value: America/Chicago
-            - name: HTTP_PORT
+            - name: NODE_ENV
+              value: production
+            - name: PORT
               value: "4000"
-            - name: CONFIG_PATH
-              value: /mqtt-explorer/config
+            # Its route already requires the house sign-in.
+            - name: MQTT_EXPLORER_SKIP_AUTH
+              value: "true"
           ports:
             - name: http
               containerPort: 4000
@@ -50,7 +67,7 @@ spec:
               port: http
           volumeMounts:
             - name: config
-              mountPath: /mqtt-explorer/config
+              mountPath: /app/data
       volumes:
         - name: config
           persistentVolumeClaim:
