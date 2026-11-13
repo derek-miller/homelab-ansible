@@ -24,6 +24,16 @@ available_docker_images:
       - sourcebot/next-16.4.5.patch
     image_name: sourcebot
     hide_build_log: true
+  mqtt-explorer:
+    repo: https://github.com/thomasnordquist/MQTT-Explorer.git
+    version: 35f31973c456a024a37450f5961e4610dc9a9ce0
+    patches:
+      - mqtt-explorer/safari-idle-callback.patch
+      # Each response it logged carried the request's payload, a broker password included.
+      - mqtt-explorer/no-response-log.patch
+    # The repository's Dockerfile.browser.
+    dockerfile: mqtt-explorer/Dockerfile
+    image_name: mqtt-explorer
   openclaw-webhook-proxy:
     dockerfile: openclaw-webhook-proxy/Dockerfile
     build_files:

@@ -1,0 +1,18 @@
+diff --git a/app/src/index.tsx b/app/src/index.tsx
+index c31b9a5..763eb8e 100644
+--- a/app/src/index.tsx
++++ b/app/src/index.tsx
+@@ -12,6 +12,13 @@ import { BrowserAuthWrapper } from './components/BrowserAuthWrapper'
+ import { store } from './store'
+ import './autoConnectHandler' // Initialize auto-connect handling
+ 
++// Safari has neither, and the topic tree calls both without checking.
++if (!('requestIdleCallback' in window)) {
++  const w = window as any
++  w.requestIdleCallback = (callback: () => void) => window.setTimeout(callback, 1)
++  w.cancelIdleCallback = (handle: number) => window.clearTimeout(handle)
++}
++
+ function ApplicationRenderer(props: { theme: 'light' | 'dark' }) {
+   const theme = props.theme === 'light' ? themes.lightTheme : themes.darkTheme
+   return (

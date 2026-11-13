@@ -35,7 +35,7 @@ spec:
       initContainers:
         # A restore unpacks the backup's tar as root, and the app runs as its own user.
         - name: own-data
-          image: ghcr.io/thomasnordquist/mqtt-explorer
+          image: registry.homelab.local/mqtt-explorer
           command:
             - chown
             - -R
@@ -48,7 +48,7 @@ spec:
               mountPath: /app/data
       containers:
         - name: mqtt-explorer
-          image: ghcr.io/thomasnordquist/mqtt-explorer
+          image: registry.homelab.local/mqtt-explorer
           env:
             - name: TZ
               value: America/Chicago
