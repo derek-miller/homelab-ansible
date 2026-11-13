@@ -20,7 +20,7 @@ jobs:
           python-version: "3.13"
 
       - run: |
-          pin=$(grep -E '^yamllint==' requirements.txt)
+          pin=$(grep -oE '^yamllint==[^ ]+' requirements.txt)
           python -m venv .venv
           source .venv/bin/activate
           pip install "$pin"

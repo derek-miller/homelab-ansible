@@ -4,3 +4,4 @@ collections:
   - name: community.proxmox
   - name: community.docker
   - name: artis3n.tailscale
+    version: 1.2.1
