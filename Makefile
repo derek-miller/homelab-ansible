@@ -51,7 +51,9 @@ init:
 	pip install -i $(PIP_INDEX_URL) -U setuptools pip wheel pip-tools
 
 .PHONY: install
-install: requirements.txt playbooks/roles/ansible/remote/files/requirements.txt playbooks/roles/generic/tplink-plug-stats/files/requirements.txt
+install: requirements.txt playbooks/roles/ansible/remote/files/requirements.txt playbooks/roles/generic/tplink-plug-stats/files/requirements.txt \
+		playbooks/roles/generic/docker/build-images/files/c4-release-notifier/requirements.txt \
+		playbooks/roles/generic/docker/build-images/files/unifi-collector/requirements.txt
 	pip-sync -i $(PIP_INDEX_URL)
 
 .PHONY: galaxy-install
@@ -74,6 +76,12 @@ playbooks/roles/ansible/remote/files/requirements.txt: playbooks/roles/ansible/r
 	$(pip_compile) $< -o $@
 
 playbooks/roles/generic/tplink-plug-stats/files/requirements.txt: playbooks/roles/generic/tplink-plug-stats/files/requirements.in
+	$(pip_compile) $< -o $@
+
+playbooks/roles/generic/docker/build-images/files/c4-release-notifier/requirements.txt: playbooks/roles/generic/docker/build-images/files/c4-release-notifier/requirements.in
+	$(pip_compile) $< -o $@
+
+playbooks/roles/generic/docker/build-images/files/unifi-collector/requirements.txt: playbooks/roles/generic/docker/build-images/files/unifi-collector/requirements.in
 	$(pip_compile) $< -o $@
 
 .PHONY: lint
