@@ -34,6 +34,7 @@ ansible_bootstrap_flags = $(if $(user),--user=$(user)) --ask-pass $(if $(become_
 
 known_hosts_vault = playbooks/files/vault/known_hosts
 known_hosts = .ssh/known_hosts
+read_known_hosts_vault = if grep -q '$(vault_marker)' $(known_hosts_vault); then ansible-vault view $(vault_flag) $(known_hosts_vault); else cat $(known_hosts_vault); fi
 
 # new_host_keys=yes trusts a host's key on first contact and saves it to the
 # vault, even when the run fails. A changed key is still refused.
@@ -146,21 +147,14 @@ facts: known-hosts
 known-hosts:
 	@mkdir -p .ssh && chmod 0700 .ssh
 	@tmp=$(known_hosts).$$$$; \
-	if grep -q '$(vault_marker)' $(known_hosts_vault); then \
-		ansible-vault view $(vault_flag) $(known_hosts_vault) > "$$tmp"; \
-	else \
-		cat $(known_hosts_vault) > "$$tmp"; \
-	fi && chmod 0600 "$$tmp" && mv "$$tmp" $(known_hosts)
+	{ $(read_known_hosts_vault); } > "$$tmp" && chmod 0600 "$$tmp" && mv "$$tmp" $(known_hosts) \
+		|| { rm -f "$$tmp"; exit 1; }
 
 .PHONY: known-hosts-save
 known-hosts-save:
 	@new=$$(mktemp); old=$$(mktemp); \
 	LC_ALL=C sort -u $(known_hosts) > "$$new"; \
-	if grep -q '$(vault_marker)' $(known_hosts_vault); then \
-		ansible-vault view $(vault_flag) $(known_hosts_vault) > "$$old"; \
-	else \
-		cat $(known_hosts_vault) > "$$old"; \
-	fi; \
+	{ $(read_known_hosts_vault); } > "$$old" || { rm -f "$$new" "$$old"; exit 1; }; \
 	if ! cmp -s "$$new" "$$old"; then \
 		if grep -q '$(vault_marker)' $(known_hosts_vault); then \
 			ansible-vault encrypt $(vault_flag) --output=$(known_hosts_vault) "$$new"; \
