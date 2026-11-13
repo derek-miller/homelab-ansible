@@ -19,6 +19,29 @@
     cache_valid_time: 3600
   when: ansible_os_family == 'Debian'
 
+- name: uninstall the dependencies the pip-installed virtualenv left behind
+  when: ansible_os_family == 'Debian'
+  block:
+    - name: find them in the system Python's /usr/local site-packages
+      find:
+        paths: /usr/local/lib/python{{ ansible_python.version.major }}.{{ ansible_python.version.minor }}/dist-packages
+        patterns:
+          - distlib-*.dist-info
+          - filelock-*.dist-info
+          - platformdirs-*.dist-info
+          - python_discovery-*.dist-info
+        file_type: directory
+      register: _python_virtualenv_leftovers
+
+    - name: uninstall them with the system pip
+      pip:
+        name: "{{ _python_virtualenv_leftovers.files | map(attribute='path') | map('basename') | map('regex_replace', '-.*', '') | list }}"
+        executable: pip3
+        state: absent
+      environment:
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+      when: _python_virtualenv_leftovers.matched > 0
+
 # Apple's /usr/bin/python3 is 3.9; venvs build from Homebrew's Python instead.
 - name: install Python via Homebrew (macOS)
   when: ansible_os_family == 'Darwin'
