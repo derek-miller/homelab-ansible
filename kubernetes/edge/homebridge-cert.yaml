@@ -23,14 +23,12 @@ spec:
         homelab.local/edge: "true"
       containers:
         - name: dumper
-          image: ldez/traefik-certs-dumper
-          imagePullPolicy: IfNotPresent
+          image: registry.homelab.local/homebridge-cert
           command:
             - sh
             - -c
             - |
               set -eu
-              apk add --no-cache jq openssh-client > /dev/null
               until [ -s /acme/acme.json ] && [ "$(jq '[.[].Certificates | length] | add' /acme/acme.json)" != 0 ]; do
                 sleep 5
               done

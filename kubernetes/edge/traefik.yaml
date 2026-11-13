@@ -231,6 +231,19 @@ spec:
     requests:
       storage: 128Mi
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: traefik-plugins
+  namespace: edge
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-retain
+  resources:
+    requests:
+      storage: 16Mi
+---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:
@@ -267,11 +280,50 @@ spec:
     ingressClass:
       enabled: false
     experimental:
-      plugins:
+      localPlugins:
         # Renames a caller's X-Api-Key to the header an app reads, such as sourcebot's.
         htransformation:
+          type: localPath
           moduleName: github.com/tomMoulard/htransformation
-          version: v0.4.1
+          mountPath: /plugins-local/src/github.com/tomMoulard/htransformation
+          volumeName: htransformation
+    deployment:
+      additionalVolumes:
+        - name: htransformation
+          persistentVolumeClaim:
+            claimName: traefik-plugins
+      initContainers:
+        # Caches htransformation on its own volume, so a start without the internet still loads it; hence IfNotPresent.
+        - name: htransformation
+          image: alpine:3
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: VERSION
+              value: v0.4.1
+            - name: SHA256
+              value: 07fe245700829a0fe8d6e1234c4c9a1201acf7d0e3edc31b160eafaad47f37b0
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              cd /plugin
+              rm -f .archive.tar.gz
+              [ "$(cat .sha256 2>/dev/null)" != "$SHA256" ] || exit 0
+              wget -q -O .archive.tar.gz "https://codeload.github.com/tomMoulard/htransformation/tar.gz/refs/tags/$VERSION"
+              echo "$SHA256  .archive.tar.gz" | sha256sum -c -s
+              find . -mindepth 1 ! -name .archive.tar.gz -delete
+              tar -xzf .archive.tar.gz --strip-components=1
+              rm .archive.tar.gz
+              echo "$SHA256" > .sha256
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: htransformation
+              mountPath: /plugin
     providers:
       kubernetesCRD:
         safeNaming: true
