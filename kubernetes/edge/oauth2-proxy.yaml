@@ -94,6 +94,8 @@ spec:
       cookie-secure: true
       custom-templates-dir: /templates
       reverse-proxy: true
+      # An allowed group would otherwise add a groups scope, which Keycloak refuses; the client's own mapper adds the claim.
+      scope: openid email profile
       set-xauthrequest: true
       skip-provider-button: true
     extraVolumes:
