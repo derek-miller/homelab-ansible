@@ -62,3 +62,19 @@
   ## For each combination a field is created.
   ## Its name is created concatenating identifier, sdparam_separator, and parameter name.
   # sdparam_separator = "_"
+
+# VictoriaLogs keeps syslog; its Elasticsearch bulk API takes Telegraf's batches.
+# Each document is {"@timestamp", "tag": {...}, "syslog": {...}}, stored with dotted names such as tag.host.
+[[outputs.elasticsearch]]
+  urls = ["{{ victoria_logs_url }}/insert/elasticsearch"]
+  username = "{{ victoria_logs_username }}"
+  password = "{{ victoria_logs_password }}"
+  timeout = "1m"
+  enable_sniffer = false
+  health_check_interval = "0s"
+  manage_template = false
+  namepass = ["syslog"]
+  [outputs.elasticsearch.headers]
+    "VL-Msg-Field" = "syslog.message"
+    "VL-Time-Field" = "@timestamp"
+    "VL-Stream-Fields" = "tag.host,tag.appname"
