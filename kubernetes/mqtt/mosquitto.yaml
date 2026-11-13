@@ -14,6 +14,24 @@ data:
     socket_domain ipv4
     allow_anonymous false
     password_file /mosquitto/config/mosquitto.passwd
+    acl_file /mosquitto/config/acl
+  # A login reaches only the topics listed under it; the broker drops a refused publish without a word.
+  acl: |
+    user mosquitto
+    topic readwrite #
+    topic read $SYS/#
+
+    user control4
+    topic readwrite apc/products/#
+    topic readwrite nixie-tube-clock/#
+    topic read node-red/available
+
+    user nixieclock
+    topic readwrite nixie-tube-clock/#
+
+    user nodered
+    topic readwrite apc/#
+    topic readwrite node-red/#
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -33,6 +51,8 @@ kind: Deployment
 metadata:
   name: mosquitto
   namespace: mqtt
+  annotations:
+    configmap.reloader.stakater.com/reload: mosquitto
 spec:
   replicas: 1
   # Two at once would share one persistence file.
@@ -49,13 +69,13 @@ spec:
       nodeSelector:
         homelab.local/mqtt: "true"
       initContainers:
-        # Mosquitto refuses a password file anyone but its owner can read.
+        # Mosquitto refuses a password or ACL file anyone but its owner can read.
         - name: config
           image: eclipse-mosquitto
           command:
             - sh
             - -c
-            - cp /config-source/mosquitto.conf /secret/mosquitto.passwd /mosquitto/config/ && chown 1883:1883 /mosquitto/config/* && chmod 0600 /mosquitto/config/mosquitto.passwd
+            - cp /config-source/mosquitto.conf /config-source/acl /secret/mosquitto.passwd /mosquitto/config/ && chown 1883:1883 /mosquitto/config/* && chmod 0600 /mosquitto/config/mosquitto.passwd /mosquitto/config/acl
           volumeMounts:
             - name: config-source
               mountPath: /config-source
