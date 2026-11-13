@@ -360,9 +360,16 @@ spec:
                   address: http://oauth2-proxy-finitelabs.edge.svc.cluster.local/
                   trustForwardHeader: false
                   authResponseHeadersRegex: ^X-Auth-Request-
+              hsts:
+                headers:
+                  stsSeconds: 31536000
             serversTransports:
               self-signed:
                 insecureSkipVerify: true
+          tls:
+            options:
+              default:
+                minVersion: VersionTLS12
     ports:
       web:
         http:
@@ -372,6 +379,8 @@ spec:
               scheme: https
       websecure:
         http:
+          middlewares:
+            - hsts@file
           tls:
             certResolver: letsencrypt
     ingressRoute:
