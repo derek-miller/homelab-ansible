@@ -32,6 +32,16 @@ ansible_setup = ansible -m setup $(ansible_default_flags) $(ansible_flags)
 
 ansible_bootstrap_flags = $(if $(user),--user=$(user)) --ask-pass $(if $(become_pass),--ask-become-pass)
 
+known_hosts_vault = playbooks/files/vault/known_hosts
+known_hosts = .known_hosts
+read_known_hosts_vault = if grep -q '$(vault_marker)' $(known_hosts_vault); then ansible-vault view $(vault_flag) $(known_hosts_vault); else cat $(known_hosts_vault); fi
+
+# new_host_keys=yes trusts a host's key on first contact and saves it to the
+# vault, even when the run fails. A changed key is still refused.
+ssh_args_accept_new = $(shell sed -n 's/^ssh_args *= *//p' ansible.cfg | sed 's/StrictHostKeyChecking=yes/StrictHostKeyChecking=accept-new/')
+accept_host_keys = $(if $(filter yes,$(new_host_keys)),ANSIBLE_SSH_ARGS='$(ssh_args_accept_new)')
+save_host_keys = $(if $(filter yes,$(new_host_keys)),; rc=$$?; $(MAKE) --no-print-directory known-hosts-save; exit $$rc)
+
 .PHONY: all
 all: after-git-pull check
 
@@ -94,41 +104,66 @@ check: lint test
 	$(ansible_playbook_cmd) --syntax-check
 
 .PHONY: bootstrap
-bootstrap:
-	$(ansible_playbook_cmd) $(ansible_bootstrap_flags) --extra-vars=bootstrap=yes --tags=bootstrap --skip-tags=base,common
+bootstrap: new_host_keys = yes
+bootstrap: known-hosts
+	$(accept_host_keys) $(ansible_playbook_cmd) $(ansible_bootstrap_flags) --extra-vars=bootstrap=yes --tags=bootstrap --skip-tags=base,common $(save_host_keys)
 
 .PHONY: connect
-connect:
-	$(ansible_playbook_cmd) --tags=connect --skip-tags=base,common
+connect: known-hosts
+	$(accept_host_keys) $(ansible_playbook_cmd) --tags=connect --skip-tags=base,common $(save_host_keys)
 
 .PHONY: run
-run:
-	$(ansible_playbook_cmd)
+run: known-hosts
+	$(accept_host_keys) $(ansible_playbook_cmd) $(save_host_keys)
 
 .PHONY: dry-run
-dry-run:
-	$(ansible_playbook_cmd) --check
+dry-run: known-hosts
+	$(accept_host_keys) $(ansible_playbook_cmd) --check $(save_host_keys)
 
 # <name> selects playbooks/<name>.yml, paired with playbooks/hosts-<name>
 # when that inventory exists.
 bootstrap-% run-% dry-run-% check-%: playbook = $*
 bootstrap-% run-% dry-run-% check-%: inventory = $(if $(wildcard playbooks/hosts-$*),hosts-$*,hosts)
 
-bootstrap-%:
-	$(ansible_playbook_cmd) $(ansible_bootstrap_flags) --extra-vars=bootstrap=yes --tags=bootstrap --skip-tags=base,common
+bootstrap-%: new_host_keys = yes
+bootstrap-%: known-hosts
+	$(accept_host_keys) $(ansible_playbook_cmd) $(ansible_bootstrap_flags) --extra-vars=bootstrap=yes --tags=bootstrap --skip-tags=base,common $(save_host_keys)
 
-run-%:
-	$(ansible_playbook_cmd)
+run-%: known-hosts
+	$(accept_host_keys) $(ansible_playbook_cmd) $(save_host_keys)
 
-dry-run-%:
-	$(ansible_playbook_cmd) --check
+dry-run-%: known-hosts
+	$(accept_host_keys) $(ansible_playbook_cmd) --check $(save_host_keys)
 
 check-%:
 	$(ansible_playbook_cmd) --syntax-check
 
 .PHONY: facts
-facts:
-	$(ansible_setup) all
+facts: known-hosts
+	$(accept_host_keys) $(ansible_setup) all $(save_host_keys)
+
+# Rewritten on every run, so it holds exactly the checked-out vault's keys.
+.PHONY: known-hosts
+known-hosts:
+	@umask 077; tmp=$(known_hosts).$$$$; \
+	{ $(read_known_hosts_vault); } > "$$tmp" && mv "$$tmp" $(known_hosts) \
+		|| { rm -f "$$tmp"; exit 1; }
+
+.PHONY: known-hosts-save
+known-hosts-save:
+	@new=$$(mktemp); old=$$(mktemp); \
+	LC_ALL=C sort -u $(known_hosts) > "$$new" && test -s "$$new" \
+		&& { $(read_known_hosts_vault); } > "$$old" \
+		|| { rm -f "$$new" "$$old"; exit 1; }; \
+	if ! cmp -s "$$new" "$$old"; then \
+		if grep -q '$(vault_marker)' $(known_hosts_vault); then \
+			ansible-vault encrypt $(vault_flag) --output=$(known_hosts_vault) "$$new"; \
+		else \
+			cp "$$new" $(known_hosts_vault); \
+		fi || { rm -f "$$new" "$$old"; exit 1; }; \
+		echo "Saved new host keys to $(known_hosts_vault)"; \
+	fi; \
+	rm -f "$$new" "$$old"
 
 vault_marker := $$ANSIBLE_VAULT;
 vault_files_encrypted = $(if $(vault_files),$(shell grep --files-with-matches '$(vault_marker)' $(vault_files)))
