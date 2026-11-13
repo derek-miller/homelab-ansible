@@ -231,6 +231,19 @@ spec:
     requests:
       storage: 128Mi
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: traefik-plugins
+  namespace: edge
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-retain
+  resources:
+    requests:
+      storage: 16Mi
+---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:
@@ -274,16 +287,15 @@ spec:
           moduleName: github.com/tomMoulard/htransformation
           mountPath: /plugins-local/src/github.com/tomMoulard/htransformation
           volumeName: htransformation
-          subPath: plugins/htransformation
     deployment:
       additionalVolumes:
         - name: htransformation
           persistentVolumeClaim:
-            claimName: traefik
+            claimName: traefik-plugins
       initContainers:
-        # Caches htransformation on Traefik's volume, so a start without the internet still loads it; hence IfNotPresent.
+        # Caches htransformation on its own volume, so a start without the internet still loads it; hence IfNotPresent.
         - name: htransformation
-          image: alpine
+          image: alpine:3
           imagePullPolicy: IfNotPresent
           env:
             - name: VERSION
@@ -295,25 +307,23 @@ spec:
             - -c
             - |
               set -eu
-              dir=/data/plugins/htransformation
-              [ "$(cat "$dir/.sha256" 2>/dev/null)" != "$SHA256" ] || exit 0
-              rm -rf "$dir.part"
-              mkdir -p "$dir.part"
-              wget -q -O "$dir.part/src.tar.gz" "https://codeload.github.com/tomMoulard/htransformation/tar.gz/refs/tags/$VERSION"
-              echo "$SHA256  $dir.part/src.tar.gz" | sha256sum -c -s
-              tar -xzf "$dir.part/src.tar.gz" -C "$dir.part" --strip-components=1
-              rm "$dir.part/src.tar.gz"
-              echo "$SHA256" > "$dir.part/.sha256"
-              rm -rf "$dir"
-              mv "$dir.part" "$dir"
+              cd /plugin
+              rm -f .archive.tar.gz
+              [ "$(cat .sha256 2>/dev/null)" != "$SHA256" ] || exit 0
+              wget -q -O .archive.tar.gz "https://codeload.github.com/tomMoulard/htransformation/tar.gz/refs/tags/$VERSION"
+              echo "$SHA256  .archive.tar.gz" | sha256sum -c -s
+              find . -mindepth 1 ! -name .archive.tar.gz -delete
+              tar -xzf .archive.tar.gz --strip-components=1
+              rm .archive.tar.gz
+              echo "$SHA256" > .sha256
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
             readOnlyRootFilesystem: true
           volumeMounts:
-            - name: data
-              mountPath: /data
+            - name: htransformation
+              mountPath: /plugin
     providers:
       kubernetesCRD:
         safeNaming: true
