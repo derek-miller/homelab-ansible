@@ -65,7 +65,7 @@ upgrade = $(or $(UPGRADE),0)
 ifneq ($(upgrade),0)
 pip_compile_flags += --upgrade --rebuild
 endif
-pip_compile = pip-compile -i $(PIP_INDEX_URL) --no-strip-extras $(pip_compile_flags)
+pip_compile = pip-compile -i $(PIP_INDEX_URL) --no-strip-extras --generate-hashes $(pip_compile_flags)
 
 requirements.txt: requirements.in
 	$(pip_compile) $< -o $@
