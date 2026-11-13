@@ -83,7 +83,7 @@ Never run k3s's own `k3s-uninstall.sh` or `k3s-killall.sh` here. Besides removin
   3. `make run tags=k3s` then brings back everything the cluster ran from the repo. Volumes on rackvm2-5 are reused where they are, as are rackvm1's if its data disk survived. `sudo k3s kubectl get csinode` should list `smb.csi.k8s.io` on every node within a minute; for one that doesn't, delete its `csi-smb-node` pod in `kube-system`.
   4. Suites whose volumes were on a lost rackvm1 start empty. Restore each, with `-e k3s_restore_before=<time of the loss>`, before its next backup would save the empty one.
 
-**Drills.** Rehearsing on rackvm1 would take every k3s route down, so the copy is checked in isolation and the steps on a throwaway cluster: two VMs on pve1 built from the repo, with a copy of `playbooks/hosts` whose `[k3s_server]` and `[k3s_agent]` name only them, plus their own token and app tree. Appending them to those groups instead would join them to this cluster.
+**Drills.** Rehearsing on rackvm1 would take every k3s route down, so the copy is checked in isolation and the steps on a throwaway cluster: two VMs on pve1 built from the repo, with a copy of `playbooks/hosts` whose `[k3s_server]` and `[k3s_agent]` name only them, plus their own token and app tree. Appending them to those groups instead would join them to this cluster. Its runs need the VMs' keys trusted: set `ANSIBLE_SSH_ARGS` to `ansible.cfg`'s `ssh_args` with `StrictHostKeyChecking=accept-new`. The keys land only in `.ssh/known_hosts`, which the next `make` run rewrites from the vault.
 
 | Date | Drill | Result |
 |---|---|---|
@@ -334,14 +334,14 @@ OpenClaw reads every message in the Discord alerts channel and answers under eac
 ## Bringing up a new host
 
 1. Add the host to `playbooks/hosts` under its groups (a k3s node also under `[node_labels]`) and give it `playbooks/host_vars/<host>/`.
-2. **First contact goes over the LAN.** Tailscale hosts are reached at `<host>.ts.<domain>`, which exists only once the host's first Tailscale run has published it. Set the new host's `ansible_host` to its LAN address in its host_vars, run `make bootstrap hosts=<host> user=<user>` and then `make run`, and switch `ansible_host` to the tailnet name afterwards. Don't pass `-e ansible_host=<address>` instead: an extra var applies to every host, so `influxdb3_url`, built from the metrics host's `ansible_host`, would point the new host's Telegraf at itself.
+2. **First contact goes over the LAN.** Tailscale hosts are reached at `<host>.ts.<domain>`, which exists only once the host's first Tailscale run has published it. Set the new host's `ansible_host` to its LAN address in its host_vars, run `make bootstrap hosts=<host> user=<user>` and then `make run`, and switch `ansible_host` to the tailnet name afterwards. The bootstrap saves the host's key under its LAN address to `playbooks/files/vault/known_hosts`; after the switch, `make connect hosts=<host> new_host_keys=yes` saves it under the tailnet name too. Commit that file with the host, since every run refuses a host whose key it doesn't hold. Don't pass `-e ansible_host=<address>` instead: an extra var applies to every host, so `influxdb3_url`, built from the metrics host's `ansible_host`, would point the new host's Telegraf at itself.
 3. **A k3s node joins with `make run hosts=<host> tags=k3s`.** A word moved to it in `[node_labels]` moves as in Moving a label under [Apps on k3s](#apps-on-k3s).
 
 When a host is rebuilt under the same name:
 
 - **k3s node:** delete its old node on rackvm1 with `sudo kubectl delete node <host>`, then restore its suites as in A lost node under [Apps on k3s](#apps-on-k3s).
 - **Tailscale:** remove the old, offline machine in the admin console, and approve any routes the host advertises again.
-- **SSH:** if it comes back at an address used before, run `ssh-keygen -R <address>` before `make bootstrap`. With a changed key SSH refuses the password login the bootstrap uses.
+- **SSH:** it comes back with a new key, which every run refuses, the bootstrap included, until the old one is gone: run `make known-hosts`, then `ssh-keygen -R <name> -f .ssh/known_hosts` for each name it is reached by (its tailnet name and LAN address, or a pve node's address), then `make known-hosts-save`, and bootstrap it. A bootstrap refused this way reports only "Using a SSH password instead of a key is not possible because Host Key checking is enabled". Commit the changed `playbooks/files/vault/known_hosts`; until it merges, deploys fail on that host.
 
 ## macOS hosts: manual steps at bootstrap
 
