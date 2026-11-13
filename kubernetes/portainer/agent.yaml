@@ -42,6 +42,8 @@ spec:
       labels:
         app: portainer-agent
     spec:
+      nodeSelector:
+        homelab.local/portainer: "true"
       serviceAccountName: portainer-sa-clusteradmin
       containers:
         - name: portainer-agent
