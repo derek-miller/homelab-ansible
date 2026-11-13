@@ -8,7 +8,8 @@ docker_build_images_registry_password: ""
 available_docker_images:
   sourcebot:
     repo: https://github.com/sourcebot-dev/sourcebot.git
-    version: v5.1.16
+    # v5.1.16. A tag can be moved; a commit can't.
+    version: f9e1a2834192dbfb2a1b482aadc5c86342a99e1f
     patches:
       # Strips the Sentry sourcemap-upload secret mounts: RUN --mount requires
       # BuildKit, which the docker_image build path doesn't use, and no Sentry
@@ -19,6 +20,8 @@ available_docker_images:
       # container memory limit, Node reads 50% of the whole VM. supervisord.conf
       # overrides NODE_OPTIONS for the web program, so an env var can't do this.
       - sourcebot/web-heap-cap.patch
+      # v5.1.16 locks Next.js 16.3.8; this moves it to 16.4.5, past October's advisories.
+      - sourcebot/next-16.4.5.patch
     image_name: sourcebot
     hide_build_log: true
   openclaw-webhook-proxy:
