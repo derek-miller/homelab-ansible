@@ -979,13 +979,13 @@ data:
                   relativeTimeRange:
                     from: 600
                     to: 0
-                  datasourceUid: ffdu753me8hdse
+                  datasourceUid: victorialogs
                   model:
                     editorMode: code
-                    format: table
+                    expr: '_time:10m tag.appname:=kernel _msg:~"oom-kill:.*task_memcg=/kubepods" | extract_regexp ",task=(?P<process>[^,]+)," from _msg | rename tag.host as host | stats by (host, process) count() as value'
                     intervalMs: 1000
                     maxDataPoints: 43200
-                    rawSql: SELECT host, regexp_replace(message, '^.*,task=([^,]+),.*$', '\1') AS process, COUNT(*) AS value FROM syslog WHERE appname = 'kernel' AND message LIKE '%oom-kill:%task_memcg=/kubepods%' AND time >= now() - interval '10 minutes' GROUP BY host, process
+                    queryType: stats
                     refId: A
                 - refId: B
                   relativeTimeRange:

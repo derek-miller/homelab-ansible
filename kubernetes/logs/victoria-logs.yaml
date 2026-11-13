@@ -1,5 +1,6 @@
 ---
-# The cluster's logs, which vlagent in kubernetes/vlagent sends. Its login is in victoria-logs.vault.yaml.
+# The cluster's logs, which vlagent in kubernetes/vlagent sends, and each host's syslog, which Telegraf sends
+# (generic/telegraf-syslog). Its login is in victoria-logs.vault.yaml.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -102,6 +103,31 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: vlagent
+      ports:
+        - protocol: TCP
+          port: 9428
+---
+# Telegraf's syslog from each host, sent to the node's Tailscale name, arrives from the ServiceLB pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-servicelb
+  namespace: logs
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: victoria-logs
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              svccontroller.k3s.cattle.io/svcname: victoria-logs-lb
+              svccontroller.k3s.cattle.io/svcnamespace: logs
       ports:
         - protocol: TCP
           port: 9428
