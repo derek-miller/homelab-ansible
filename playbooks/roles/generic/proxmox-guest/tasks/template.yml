@@ -1,11 +1,4 @@
 ---
-- name: fetch the debian cloud image
-  get_url:
-    url: "{{ proxmox_guest_image_url }}"
-    dest: "{{ proxmox_guest_image_path }}"
-    mode: 0644
-    force: no
-
 - name: check whether the template exists
   command: "qm config {{ proxmox_guest_template_vmid }}"
   register: proxmox_guest_template_check
@@ -16,6 +9,13 @@
 - name: create the template
   when: proxmox_guest_template_check.rc != 0
   block:
+    - name: fetch the debian cloud image
+      get_url:
+        url: "{{ proxmox_guest_image_url }}"
+        checksum: "sha512:{{ proxmox_guest_image_url | dirname }}/SHA512SUMS"
+        dest: "{{ proxmox_guest_image_path }}"
+        mode: 0644
+
     - name: define the vm
       command: >-
         qm create {{ proxmox_guest_template_vmid }}

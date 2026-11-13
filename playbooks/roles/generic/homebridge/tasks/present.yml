@@ -16,6 +16,7 @@
     - name: download Node.js installer
       get_url:
         url: "{{ homebridge_node_pkg_url }}"
+        checksum: "sha256:{{ homebridge_node_pkg_url | dirname }}/SHASUMS256.txt"
         dest: "{{ _hb_node_pkg }}"
         mode: '0644'
 
