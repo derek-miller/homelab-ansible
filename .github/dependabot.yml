@@ -6,6 +6,8 @@ updates:
       - /
       - /playbooks/roles/ansible/remote/files
       - /playbooks/roles/generic/tplink-plug-stats/files
+      - /playbooks/roles/generic/docker/build-images/files/c4-release-notifier
+      - /playbooks/roles/generic/docker/build-images/files/unifi-collector
     schedule:
       interval: weekly
     # A release has a week to be yanked before it lands here.
@@ -13,6 +15,16 @@ updates:
       default-days: 7
     groups:
       pip:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /playbooks/roles/generic/docker/build-images/files/openclaw-webhook-proxy
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      npm:
         patterns: ["*"]
 
   - package-ecosystem: github-actions

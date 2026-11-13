@@ -3,7 +3,8 @@ FROM node:24-alpine
 RUN apk add --no-cache openssh-client && mkdir /data && chown node:node /data
 
 WORKDIR /app
-RUN npm install --omit=dev --no-audit --no-fund marked@18 dompurify@3 && cp node_modules/marked/lib/marked.umd.js node_modules/dompurify/dist/purify.min.js .
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund && cp node_modules/marked/lib/marked.umd.js node_modules/dompurify/dist/purify.min.js .
 COPY server.mjs admin.html ./
 
 EXPOSE 3000

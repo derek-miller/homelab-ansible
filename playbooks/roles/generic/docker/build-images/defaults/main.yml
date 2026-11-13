@@ -24,17 +24,21 @@ available_docker_images:
   openclaw-webhook-proxy:
     dockerfile: openclaw-webhook-proxy/Dockerfile
     build_files:
+      - openclaw-webhook-proxy/package.json
+      - openclaw-webhook-proxy/package-lock.json
       - openclaw-webhook-proxy/server.mjs
       - openclaw-webhook-proxy/admin.html
     image_name: openclaw-webhook-proxy
   unifi-collector:
     dockerfile: unifi-collector/Dockerfile
     build_files:
+      - unifi-collector/requirements.txt
       - unifi-collector/collector.py
     image_name: unifi-collector
   c4-release-notifier:
     dockerfile: c4-release-notifier/Dockerfile
     build_files:
+      - c4-release-notifier/requirements.txt
       - c4-release-notifier/notifier.py
     image_name: c4-release-notifier
   gha-runner:

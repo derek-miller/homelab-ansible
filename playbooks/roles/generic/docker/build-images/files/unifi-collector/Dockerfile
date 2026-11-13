@@ -1,6 +1,7 @@
 FROM python:3.12-slim
 
-RUN pip install --no-cache-dir 'requests>=2.31,<3'
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt
 
 WORKDIR /app
 COPY collector.py .
