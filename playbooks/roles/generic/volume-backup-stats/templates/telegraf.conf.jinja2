@@ -20,3 +20,12 @@
   recursive = false
   interval = "{{ volume_backup_stats_interval_s|int }}s"
 {% endif %}
+{% if volume_backup_stats_homebridge_dir %}
+
+[[inputs.filecount]]
+  name_override = "{{ volume_backup_stats_metric_name }}"
+  directories = ["{{ volume_backup_stats_homebridge_dir }}"]
+  name = "homebridge-backup-*.tar.gz"
+  recursive = false
+  interval = "{{ volume_backup_stats_interval_s|int }}s"
+{% endif %}

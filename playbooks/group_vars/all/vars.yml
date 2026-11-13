@@ -8,6 +8,8 @@ docker_volume_backup_root: /mnt/Backups/Volumes
 # The k3s restic server's repositories, one per namespace, as the hosts mount the Backups drive.
 k3s_backup_root: /mnt/Backups/Restic
 k3s_migrate_transit_dir: /mnt/Backups/migrate
+# Where Homebridge's UI writes its nightly backups (its scheduledBackupPath), as the Linux hosts mount the share.
+homebridge_backup_dir: /mnt/Backups/Homebridge/instance-backups
 # A label whose host changed in [node_labels] moves only with k3s_migrate_labels.
 k3s_migrate_labels: false
 k3s_migrate_force: false
