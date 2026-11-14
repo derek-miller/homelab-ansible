@@ -29,9 +29,9 @@ available_docker_images:
     version: 35f31973c456a024a37450f5961e4610dc9a9ce0
     patches:
       - mqtt-explorer/safari-idle-callback.patch
-      # Each response it logged carried the request's payload, a broker password included.
+      # Every RPC result it logged included the stored settings, broker passwords and all.
       - mqtt-explorer/no-response-log.patch
-    # The repository's Dockerfile.browser.
+    # The repository's Dockerfile.browser, without its HEALTHCHECK.
     dockerfile: mqtt-explorer/Dockerfile
     image_name: mqtt-explorer
   openclaw-webhook-proxy:
