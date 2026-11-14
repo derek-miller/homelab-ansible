@@ -62,3 +62,16 @@
   ## For each combination a field is created.
   ## Its name is created concatenating identifier, sdparam_separator, and parameter name.
   # sdparam_separator = "_"
+
+# VictoriaLogs keeps syslog, one JSON line per message: {"@timestamp", "tag": {...}, "syslog": {...}},
+# stored with dotted names such as tag.host.
+[[outputs.http]]
+  url = "{{ victoria_logs_url }}/insert/jsonline?_msg_field=syslog.message&_time_field=@timestamp&_stream_fields=tag.host,tag.appname"
+  username = "{{ victoria_logs_insert_username }}"
+  password = "{{ victoria_logs_insert_password }}"
+  timeout = "1m"
+  data_format = "json"
+  use_batch_format = false
+  json_timestamp_format = "2006-01-02T15:04:05.999999999Z07:00"
+  json_transformation = '{"@timestamp": timestamp, "tag": tags, "syslog": fields}'
+  namepass = ["syslog"]

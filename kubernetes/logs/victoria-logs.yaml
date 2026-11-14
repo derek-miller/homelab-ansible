@@ -1,5 +1,6 @@
 ---
-# The cluster's logs, which vlagent in kubernetes/vlagent sends. Its login is in victoria-logs.vault.yaml.
+# The cluster's logs, which vlagent in kubernetes/vlagent sends, and each host's syslog, which Telegraf sends
+# through vmauth (generic/telegraf-syslog). Its login is in victoria-logs.vault.yaml.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
