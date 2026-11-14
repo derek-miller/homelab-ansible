@@ -60,10 +60,11 @@ $(git_hook):
 init:
 	pip install -i $(PIP_INDEX_URL) -U setuptools pip wheel pip-tools
 
+requirements_locks := $(patsubst ./%.in,%.txt,$(shell find . \( -path './.*' -o -path ./playbooks/collections -o -path ./playbooks/roles/galaxy \) -prune \
+	-o -name requirements.in -print))
+
 .PHONY: install
-install: requirements.txt playbooks/roles/ansible/remote/files/requirements.txt playbooks/roles/generic/tplink-plug-stats/files/requirements.txt \
-		playbooks/roles/generic/docker/build-images/files/c4-release-notifier/requirements.txt \
-		playbooks/roles/generic/docker/build-images/files/unifi-collector/requirements.txt
+install: $(requirements_locks)
 	pip-sync -i $(PIP_INDEX_URL)
 
 .PHONY: galaxy-install
@@ -79,19 +80,7 @@ pip_compile_flags += --upgrade --rebuild
 endif
 pip_compile = pip-compile -i $(PIP_INDEX_URL) --no-strip-extras --generate-hashes $(pip_compile_flags)
 
-requirements.txt: requirements.in
-	$(pip_compile) $< -o $@
-
-playbooks/roles/ansible/remote/files/requirements.txt: playbooks/roles/ansible/remote/files/requirements.in
-	$(pip_compile) $< -o $@
-
-playbooks/roles/generic/tplink-plug-stats/files/requirements.txt: playbooks/roles/generic/tplink-plug-stats/files/requirements.in
-	$(pip_compile) $< -o $@
-
-playbooks/roles/generic/docker/build-images/files/c4-release-notifier/requirements.txt: playbooks/roles/generic/docker/build-images/files/c4-release-notifier/requirements.in
-	$(pip_compile) $< -o $@
-
-playbooks/roles/generic/docker/build-images/files/unifi-collector/requirements.txt: playbooks/roles/generic/docker/build-images/files/unifi-collector/requirements.in
+$(requirements_locks): %.txt: %.in
 	$(pip_compile) $< -o $@
 
 .PHONY: lint
