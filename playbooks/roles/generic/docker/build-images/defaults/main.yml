@@ -29,7 +29,8 @@ available_docker_images:
     version: 35f31973c456a024a37450f5961e4610dc9a9ce0
     patches:
       - mqtt-explorer/safari-idle-callback.patch
-      # Every RPC result it logged included the stored settings, broker passwords and all.
+      # It logged each RPC result whole: storage/load's stored settings, broker passwords
+      # and all, and the contents of any certificate or key it uploaded or read.
       - mqtt-explorer/no-response-log.patch
     # The repository's Dockerfile.browser, without its HEALTHCHECK.
     dockerfile: mqtt-explorer/Dockerfile
