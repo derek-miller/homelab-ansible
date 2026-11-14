@@ -3,6 +3,7 @@
 *.swp
 /.ansible/
 /.idea/
+/.known_hosts*
 /.python-version
 /.ssh/
 /.vault_pass

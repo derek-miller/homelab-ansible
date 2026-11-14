@@ -83,4 +83,4 @@ jobs:
       # Post steps run after this, so none of them can read the vault password or key.
       - name: Remove secrets
         if: always()
-        run: rm -f .vault_pass .ssh/ansible-id_ed25519
+        run: rm -f .vault_pass .ssh/ansible-id_ed25519 .known_hosts
