@@ -173,14 +173,14 @@ spec:
             periodSeconds: 5
             failureThreshold: 180
           # The nightly retention pass at 00:00 UTC can slow /health past a second for minutes;
-          # this takes a minute of answers slower than 5s to drop the pod from the Service.
+          # this takes two minutes of answers slower than 5s to drop the pod from the Service.
           readinessProbe:
             httpGet:
               path: /health
               port: http
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 6
+            failureThreshold: 12
           volumeMounts:
             - name: data
               mountPath: /var/lib/influxdb3
