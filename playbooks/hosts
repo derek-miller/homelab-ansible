@@ -48,7 +48,7 @@ raspi1
 [docker-build-images]
 rackvm1 docker_images_to_build=openclaw-webhook-proxy,homebridge-cert
 rackvm2 docker_images_to_build=gha-runner
-rackvm3 docker_images_to_build=c4-release-notifier
+rackvm3 docker_images_to_build=c4-release-notifier,mqtt-explorer
 rackvm4 docker_images_to_build=unifi-collector
 rackvm5 docker_images_to_build=sourcebot,control4-driver-scraper
 

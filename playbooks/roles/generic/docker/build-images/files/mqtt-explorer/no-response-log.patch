@@ -1,0 +1,12 @@
+diff --git a/events/EventSystem/Rpc.ts b/events/EventSystem/Rpc.ts
+index 5682706..0f15a83 100644
+--- a/events/EventSystem/Rpc.ts
++++ b/events/EventSystem/Rpc.ts
+@@ -55,7 +55,6 @@ export class Rpc {
+         error = e
+       }
+       const { id } = request as any
+-      console.log(`${event.topic}/response/${id}`, payload, error)
+       this.participant.emit({ topic: `${event.topic}/response/${id}` }, { id, payload, error })
+     })
+   }
