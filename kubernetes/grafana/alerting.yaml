@@ -564,6 +564,49 @@ data:
                 description: No Telegraf data received from {{ $labels.host }} in the last 90 seconds
                 summary: '{{ $labels.host }} is unreachable'
               isPaused: false
+            - uid: syslog-deadman
+              title: Syslog Deadman
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 86400
+                    to: 0
+                  datasourceUid: victorialogs
+                  model:
+                    editorMode: code
+                    expr: '_time:24h tag.host:* | rename tag.host as host | stats by (host) count() if (_time:2h) as value'
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    queryType: stats
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 1
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: Alerting
+              execErrState: Error
+              for: 2m
+              annotations:
+                description: VictoriaLogs has received no syslog from {{ $labels.host }} in the last 2 hours. Its Telegraf may still point at an old logs node or login; see Logs in RUNBOOK.md.
+                summary: No syslog from {{ $labels.host }}
+              isPaused: false
         - orgId: 1
           name: disk
           folder: Alerting
@@ -979,13 +1022,13 @@ data:
                   relativeTimeRange:
                     from: 600
                     to: 0
-                  datasourceUid: ffdu753me8hdse
+                  datasourceUid: victorialogs
                   model:
                     editorMode: code
-                    format: table
+                    expr: '_time:10m tag.appname:=kernel _msg:~"oom-kill:.*task_memcg=/kubepods" | extract_regexp ",task=(?P<process>[^,]+)," from _msg | rename tag.host as host | stats by (host, process) count() as value'
                     intervalMs: 1000
                     maxDataPoints: 43200
-                    rawSql: SELECT host, regexp_replace(message, '^.*,task=([^,]+),.*$', '\1') AS process, COUNT(*) AS value FROM syslog WHERE appname = 'kernel' AND message LIKE '%oom-kill:%task_memcg=/kubepods%' AND time >= now() - interval '10 minutes' GROUP BY host, process
+                    queryType: stats
                     refId: A
                 - refId: B
                   relativeTimeRange:

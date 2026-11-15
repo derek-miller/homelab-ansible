@@ -4613,8 +4613,8 @@ data:
           "panels": [
             {
               "datasource": {
-                "type": "influxdb",
-                "uid": "ffdu753me8hdse"
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
               },
               "gridPos": {
                 "h": 20,
@@ -4642,59 +4642,17 @@ data:
               "pluginVersion": "13.1.1",
               "targets": [
                 {
-                  "dataset": "iox",
                   "datasource": {
-                    "type": "influxdb",
-                    "uid": "ffdu753me8hdse"
+                    "type": "victoriametrics-logs-datasource",
+                    "uid": "victorialogs"
                   },
                   "editorMode": "code",
-                  "format": "table",
-                  "query": "SELECT time, hostname AS host, severity AS level, facility, appname, message AS line FROM syslog WHERE $__timeFilter(time) AND host IN (${host:singlequote}) AND severity IN (${log_severity:singlequote}) AND facility IN (${log_facility:singlequote}) AND appname IN (${log_appname:singlequote}) ORDER BY time DESC LIMIT $log_lines",
-                  "rawQuery": true,
-                  "rawSql": "SELECT\n  time,\n  hostname AS host,\n  severity AS level,\n  facility,\n  appname,\n  message AS line\nFROM\n  syslog\nWHERE\n  $__timeFilter(time)\n  AND host IN (${host:singlequote})\n  AND severity IN (${log_severity:singlequote})\n  AND facility IN (${log_facility:singlequote})\n  AND appname IN (${log_appname:singlequote})\nORDER BY\n  time DESC\nLIMIT\n  $log_lines",
-                  "refId": "A",
-                  "resultFormat": "table",
-                  "sql": {
-                    "columns": [
-                      {
-                        "parameters": [],
-                        "type": "function"
-                      }
-                    ],
-                    "groupBy": [
-                      {
-                        "property": {
-                          "type": "string"
-                        },
-                        "type": "groupBy"
-                      }
-                    ]
-                  }
+                  "expr": "tag.host:=$host tag.severity:=$log_severity tag.facility:=$log_facility tag.appname:=$log_appname | fields _time, _msg, tag.hostname, tag.severity, tag.facility, tag.appname | rename tag.severity as level, tag.hostname as hostname, tag.facility as facility, tag.appname as appname | sort by (_time desc) | limit $log_lines",
+                  "queryType": "instant",
+                  "refId": "A"
                 }
               ],
               "title": "",
-              "transformations": [
-                {
-                  "id": "organize",
-                  "options": {
-                    "excludeByName": {
-                      "appname": true,
-                      "facility": true,
-                      "host": true
-                    },
-                    "includeByName": {},
-                    "indexByName": {
-                      "appname": 5,
-                      "facility": 4,
-                      "host": 3,
-                      "level": 2,
-                      "line": 1,
-                      "time": 0
-                    },
-                    "renameByName": {}
-                  }
-                }
-              ],
               "type": "logs"
             }
           ],
@@ -8900,17 +8858,23 @@ data:
             "allowCustomValue": true,
             "current": {},
             "datasource": {
-              "type": "influxdb",
-              "uid": "ffdu753me8hdse"
+              "type": "victoriametrics-logs-datasource",
+              "uid": "victorialogs"
             },
-            "definition": "SELECT DISTINCT severity, now() AS time FROM syslog WHERE $__timeFilter(time) AND host IN (${host:singlequote}) ORDER BY 1",
+            "definition": "tag.severity values for tag.host:=$host",
             "hide": 0,
             "includeAll": true,
             "label": "Log Severity",
             "multi": true,
             "name": "log_severity",
             "options": [],
-            "query": "SELECT DISTINCT severity, now() AS time FROM syslog WHERE $__timeFilter(time) AND host IN (${host:singlequote}) ORDER BY 1",
+            "query": {
+              "field": "tag.severity",
+              "limit": 1000,
+              "query": "tag.host:=$host",
+              "refId": "VictoriaLogsVariableQueryEditor-VariableQuery",
+              "type": "fieldValue"
+            },
             "refresh": 1,
             "regex": "",
             "regexApplyTo": "value",
@@ -8922,17 +8886,23 @@ data:
             "allowCustomValue": true,
             "current": {},
             "datasource": {
-              "type": "influxdb",
-              "uid": "ffdu753me8hdse"
+              "type": "victoriametrics-logs-datasource",
+              "uid": "victorialogs"
             },
-            "definition": "SELECT DISTINCT facility, now() AS time FROM syslog WHERE $__timeFilter(time) AND host IN (${host:singlequote}) ORDER BY 1",
+            "definition": "tag.facility values for tag.host:=$host",
             "hide": 0,
             "includeAll": true,
             "label": "Log Facility",
             "multi": true,
             "name": "log_facility",
             "options": [],
-            "query": "SELECT DISTINCT facility, now() AS time FROM syslog WHERE $__timeFilter(time) AND host IN (${host:singlequote}) ORDER BY 1",
+            "query": {
+              "field": "tag.facility",
+              "limit": 1000,
+              "query": "tag.host:=$host",
+              "refId": "VictoriaLogsVariableQueryEditor-VariableQuery",
+              "type": "fieldValue"
+            },
             "refresh": 1,
             "regex": "",
             "regexApplyTo": "value",
@@ -8944,17 +8914,23 @@ data:
             "allowCustomValue": true,
             "current": {},
             "datasource": {
-              "type": "influxdb",
-              "uid": "ffdu753me8hdse"
+              "type": "victoriametrics-logs-datasource",
+              "uid": "victorialogs"
             },
-            "definition": "SELECT DISTINCT appname, now() AS time FROM syslog WHERE $__timeFilter(time) AND host IN (${host:singlequote}) ORDER BY 1",
+            "definition": "tag.appname values for tag.host:=$host",
             "hide": 0,
             "includeAll": true,
             "label": "Log App",
             "multi": true,
             "name": "log_appname",
             "options": [],
-            "query": "SELECT DISTINCT appname, now() AS time FROM syslog WHERE $__timeFilter(time) AND host IN (${host:singlequote}) ORDER BY 1",
+            "query": {
+              "field": "tag.appname",
+              "limit": 1000,
+              "query": "tag.host:=$host",
+              "refId": "VictoriaLogsVariableQueryEditor-VariableQuery",
+              "type": "fieldValue"
+            },
             "refresh": 1,
             "regex": "",
             "regexApplyTo": "value",
