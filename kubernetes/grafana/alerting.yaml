@@ -1573,6 +1573,20 @@ data:
                 - alertname
                 - driver
                 - signature
+            - receiver: Discord
+              object_matchers:
+                - ['alertname', '=', 'UPS Overload']
+                - ['ups', '=', 'wan-ups']
+              mute_time_intervals:
+                - wan-ups overload
+    muteTimes:
+        - orgId: 1
+          name: wan-ups overload
+          time_intervals:
+            - years: ['2026']
+              months: ['november']
+              days_of_month: ['14:28']
+              location: America/Chicago
   templates.yaml: |
     apiVersion: 1
     templates:
