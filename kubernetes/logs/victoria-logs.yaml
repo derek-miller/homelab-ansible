@@ -68,7 +68,49 @@ spec:
               name: victoria-logs-auth
               key: password
 ---
-# The chart's own Service is headless, which a LoadBalancer can't be.
+# Takes writes from off the cluster. Its one login, in victoria-logs.vault.yaml, reaches only /insert/jsonline.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: victoria-metrics-auth
+  namespace: logs
+spec:
+  interval: 1h
+  url: oci://ghcr.io/victoriametrics/helm-charts/victoria-metrics-auth
+  ref:
+    semver: 0.x
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+  verify:
+    provider: cosign
+    matchOIDCIdentity:
+      - issuer: ^https://token\.actions\.githubusercontent\.com$
+        subject: ^https://github\.com/VictoriaMetrics/helm-charts/\.github/workflows/.+$
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: vmauth
+  namespace: logs
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: victoria-metrics-auth
+  valuesFrom:
+    - kind: Secret
+      name: vmauth-values
+  values:
+    fullnameOverride: vmauth
+    nodeSelector:
+      homelab.local/logs: "true"
+    extraArgs:
+      # Its /metrics, /flags, /debug/pprof and /-/reload otherwise answer anyone on the proxy port.
+      httpInternalListenAddr: 127.0.0.1:8426
+    service:
+      enabled: false
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -80,11 +122,11 @@ spec:
   type: LoadBalancer
   externalTrafficPolicy: Local
   selector:
-    app.kubernetes.io/instance: victoria-logs
+    app.kubernetes.io/instance: vmauth
   ports:
     - name: http
       port: 9428
-      targetPort: 9428
+      targetPort: 8427
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -105,6 +147,31 @@ spec:
       ports:
         - protocol: TCP
           port: 9428
+---
+# A client sent to the logs node's Tailscale name arrives from the ServiceLB pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-servicelb
+  namespace: logs
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: vmauth
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              svccontroller.k3s.cattle.io/svcname: victoria-logs-lb
+              svccontroller.k3s.cattle.io/svcnamespace: logs
+      ports:
+        - protocol: TCP
+          port: 8427
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
