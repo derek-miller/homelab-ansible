@@ -604,7 +604,7 @@ data:
               execErrState: Error
               for: 2m
               annotations:
-                description: VictoriaLogs has received no syslog from {{ $labels.host }} in the last 2 hours, so Container OOM Killed (k3s) can't see that host. Its Telegraf may still point at an old logs node or login; see Logs in RUNBOOK.md.
+                description: VictoriaLogs has received no syslog from {{ $labels.host }} in the last 2 hours. Its Telegraf may still point at an old logs node or login; see Logs in RUNBOOK.md.
                 summary: No syslog from {{ $labels.host }}
               isPaused: false
         - orgId: 1
