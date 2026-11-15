@@ -923,6 +923,146 @@ data:
                 summary: '{{ $labels.container_name }} on {{ $labels.host }} is crash-looping'
               isPaused: false
         - orgId: 1
+          name: edge
+          folder: Alerting
+          interval: 1m
+          rules:
+            - uid: edge-refused-driver-writes
+              title: Edge Refused Driver Writes
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 300
+                    to: 0
+                  datasourceUid: victorialogs
+                  model:
+                    editorMode: code
+                    expr: "_time:5m {kubernetes.container_name=\"traefik\",kubernetes.pod_namespace=\"edge\"} RouterName:=\"metrics_influxdb3-api_0@kubernetescrd\" DownstreamStatus:=429 | stats count() as value"
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    queryType: stats
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 300
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 1m
+              labels:
+                severity: critical
+              annotations:
+                description: A client hit rate-limit-driver-write. Drivers drop a batch after one retry and Telegraf retries from its buffer; find the client in the edge access log and raise the limit if it was legitimate
+                summary: 'Traefik refused {{ $values.A.Value }} InfluxDB writes in 5 minutes'
+              isPaused: false
+            - uid: edge-rate-limit-lan
+              title: Edge Rate Limit Hit (LAN)
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: victorialogs
+                  model:
+                    editorMode: code
+                    expr: "_time:10m {kubernetes.container_name=\"traefik\",kubernetes.pod_namespace=\"edge\"} DownstreamStatus:=429 (ClientHost:ipv4_range(\"10.0.0.0/8\") OR ClientHost:ipv4_range(\"172.16.0.0/12\") OR ClientHost:ipv4_range(\"192.168.0.0/16\")) | stats by (RouterName) count() as value"
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    queryType: stats
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 1m
+              labels:
+                severity: warning
+              annotations:
+                description: A limit refused a home-network client {{ $values.A.Value }} times in 10 minutes. Look for a runaway client in the edge access log, or raise the limit; see Rate limits in RUNBOOK.md
+                summary: 'Traefik rate-limited the home network on {{ $labels.RouterName }}'
+              isPaused: false
+            - uid: edge-refused-webhooks
+              title: Edge Refused Webhooks
+              condition: B
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 900
+                    to: 0
+                  datasourceUid: victorialogs
+                  model:
+                    editorMode: code
+                    expr: "_time:15m {kubernetes.container_name=\"traefik\",kubernetes.pod_namespace=\"edge\"} DownstreamStatus:in(413, 429) RouterName:~\"^webhooks-openclaw-webhook-proxy-hooks-|^mqtt-node-red-hook-|^youtrack_youtrack-api_0@\" | stats by (RouterName) count() as value"
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    queryType: stats
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 900
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    conditions:
+                        - evaluator:
+                            params:
+                                - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params: []
+                    expression: A
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: B
+                    type: threshold
+              noDataState: OK
+              execErrState: Error
+              for: 1m
+              labels:
+                severity: warning
+              annotations:
+                description: A delivery went over webhook-body-limit (413) or webhook-in-flight (429). GitHub does not retry, so raise the limit if the sender was real and redeliver from the hook's Recent Deliveries; see Rate limits in RUNBOOK.md
+                summary: 'Traefik refused {{ $values.A.Value }} webhook deliveries on {{ $labels.RouterName }}'
+              isPaused: false
+        - orgId: 1
           name: k3s
           folder: Alerting
           interval: 1m
