@@ -14,6 +14,7 @@
     /usr/share/wayland-sessions/{{ vnc_session }}.desktop
   register: vnc_session_exec
   changed_when: false
+  check_mode: no
   when: vnc_session_desktop.stat.exists
 
 - name: check the compositor is installed
