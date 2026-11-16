@@ -1,0 +1,62 @@
+---
+# Fails and retries in its pod, so Container Crash Loop (k3s), while GitHub refuses the runners' token or it expires within 14 days.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: github-token
+  namespace: ci
+spec:
+  schedule: "@hourly"
+  jobTemplate:
+    spec:
+      backoffLimit: 6
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: DoesNotExist
+          securityContext:
+            runAsUser: 65534
+            runAsGroup: 65534
+            runAsNonRoot: true
+          containers:
+            - name: github-token
+              image: python:3-alpine
+              command:
+                - python
+                - -c
+                - |
+                  import datetime, sys, urllib.request
+                  token = open("/token/github_token").read().strip()
+                  request = urllib.request.Request(
+                      "https://api.github.com/repos/finitelabs/control4-zigbee3/actions/runners?per_page=1",
+                      headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json"},
+                  )
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      expiry = response.headers.get("GitHub-Authentication-Token-Expiration")
+                  if expiry:
+                      expires = datetime.datetime.strptime(expiry.replace(" UTC", " +0000"), "%Y-%m-%d %H:%M:%S %z")
+                      if expires - datetime.datetime.now(datetime.timezone.utc) < datetime.timedelta(days=14):
+                          sys.exit(f"the runners' token expires {expiry}")
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: token
+                  mountPath: /token
+                  readOnly: true
+          volumes:
+            - name: token
+              secret:
+                secretName: rack-github
+                items:
+                  - key: github_token
+                    path: github_token
