@@ -44,4 +44,33 @@
       path = 'items.#(status.finished==true)#.{"namespace":metadata.namespace,"name":metadata.name,"reason":status.conditions.#(type=="Completed").reason,"completed":status.conditions.#(type=="Completed").lastTransitionTime}'
       tags = ["namespace", "name"]
       disable_prepend_keys = true
+
+# The same for k8up's weekly repository Checks and Prunes.
+[[inputs.http]]
+  urls = ["https://{{ k3s_server_address }}:6443/apis/k8up.io/v1/checks"]
+  token_file = "{{ k3s_stats_token_path }}"
+  tls_ca = "{{ k3s_stats_ca_path }}"
+  interval = "5m"
+  tagexclude = ["url"]
+  data_format = "json_v2"
+  [[inputs.http.json_v2]]
+    measurement_name = "kubernetes_check_status"
+    [[inputs.http.json_v2.object]]
+      path = 'items.#(status.finished==true)#.{"namespace":metadata.namespace,"name":metadata.name,"reason":status.conditions.#(type=="Completed").reason,"completed":status.conditions.#(type=="Completed").lastTransitionTime}'
+      tags = ["namespace", "name"]
+      disable_prepend_keys = true
+
+[[inputs.http]]
+  urls = ["https://{{ k3s_server_address }}:6443/apis/k8up.io/v1/prunes"]
+  token_file = "{{ k3s_stats_token_path }}"
+  tls_ca = "{{ k3s_stats_ca_path }}"
+  interval = "5m"
+  tagexclude = ["url"]
+  data_format = "json_v2"
+  [[inputs.http.json_v2]]
+    measurement_name = "kubernetes_prune_status"
+    [[inputs.http.json_v2.object]]
+      path = 'items.#(status.finished==true)#.{"namespace":metadata.namespace,"name":metadata.name,"reason":status.conditions.#(type=="Completed").reason,"completed":status.conditions.#(type=="Completed").lastTransitionTime}'
+      tags = ["namespace", "name"]
+      disable_prepend_keys = true
 {% endif %}
