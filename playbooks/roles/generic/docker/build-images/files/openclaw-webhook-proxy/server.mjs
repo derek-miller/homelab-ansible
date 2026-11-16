@@ -17,8 +17,9 @@
  *
  * Always required:
  *   OPENCLAW_HOOKS_TOKEN     — bearer token for the OpenClaw hooks API
- *   OPENCLAW_HOOKS_URL       — full URL to the OpenClaw hook mapping that leaves the untrusted
- *                              markers to this proxy (/hooks/proxy)
+ *   OPENCLAW_HOOKS_URL       — full https URL to the OpenClaw hook mapping that leaves the untrusted
+ *                              markers to this proxy (/hooks/proxy); its self-signed certificate
+ *                              isn't checked
  *   OPENCLAW_LOG_SSH         — user@host whose forced command prints `openclaw logs --follow --json`;
  *                              the key and known_hosts are read from /app/ssh
  *
@@ -61,6 +62,7 @@
  */
 
 import { createServer } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -1723,19 +1725,31 @@ async function forwardToOpenClaw(message, sourceName, sessionKey) {
 
   logDebug(`Forwarding ${sourceName} message to OpenClaw:\n${message}`);
 
-  const response = await fetch(OPENCLAW_HOOKS_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENCLAW_HOOKS_TOKEN}`,
-    },
-    body: hookPayload,
-    signal: AbortSignal.timeout(10_000),
+  const { status, text } = await new Promise((resolve, reject) => {
+    const request = httpsRequest(
+      OPENCLAW_HOOKS_URL,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OPENCLAW_HOOKS_TOKEN}`,
+        },
+        rejectUnauthorized: false,
+        signal: AbortSignal.timeout(10_000),
+      },
+      (response) => {
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => (body += chunk));
+        response.on("end", () => resolve({ status: response.statusCode, text: body }));
+        response.on("error", reject);
+      },
+    );
+    request.on("error", reject);
+    request.end(hookPayload);
   });
-
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`OpenClaw hooks returned ${response.status}: ${text}`);
+  if (status < 200 || status > 299) {
+    throw new Error(`OpenClaw hooks returned ${status}: ${text}`);
   }
   return JSON.parse(text).runId;
 }

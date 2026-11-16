@@ -24,3 +24,12 @@
     openclaw_current_discord: "{{ ((openclaw_current.content | b64decode | from_json).channels | default({})).discord | default({}) }}"
   when: openclaw_current_discord | combine(openclaw_discord, recursive=True) != openclaw_current_discord
   no_log: true
+
+- name: set the OpenClaw gateway TLS
+  command:
+    argv: [openclaw, config, patch, --stdin]
+    stdin: "{{ {'gateway': {'tls': openclaw_gateway_tls}} | to_json }}"
+  become_user: "{{ openclaw_user }}"
+  vars:
+    openclaw_current_tls: "{{ ((openclaw_current.content | b64decode | from_json).gateway | default({})).tls | default({}) }}"
+  when: openclaw_current_tls | combine(openclaw_gateway_tls) != openclaw_current_tls
