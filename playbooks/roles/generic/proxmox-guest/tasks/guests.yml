@@ -78,13 +78,14 @@
     label: "{{ item.item.name }}: {{ item.item.cores }} cores, {{ item.item.memory }} MiB"
   delegate_to: localhost
   when: >-
-    ('cores: ' ~ item.item.cores) not in item.stdout
-    or ('memory: ' ~ item.item.memory) not in item.stdout
-    or ('balloon: ' ~ (item.item.balloon | default(0))) not in item.stdout
+    ('cores: ' ~ item.item.cores) not in item.stdout_lines
+    or ('memory: ' ~ item.item.memory) not in item.stdout_lines
+    or ('balloon: ' ~ (item.item.balloon | default(0))) not in item.stdout_lines
     or (item.item.ciuser is defined
-         and ('ciuser: ' ~ item.item.ciuser) not in item.stdout)
-    or ('ip=' ~ item.item.address) not in item.stdout
-    or ('onboot: ' ~ (item.item.onboot | default(true) | int)) not in item.stdout
+         and ('ciuser: ' ~ item.item.ciuser) not in item.stdout_lines)
+    or ('ipconfig0: ip=' ~ item.item.address
+         ~ ',gw=' ~ (item.item.gateway | default(proxmox_lan_gateway))) not in item.stdout_lines
+    or ('onboot: ' ~ (item.item.onboot | default(true) | int)) not in item.stdout_lines
 
 # The template's disk is the 3 GB cloud image, so every declared disk needs work
 # after a clone. Declared per interface, since a guest can carry more than one.
