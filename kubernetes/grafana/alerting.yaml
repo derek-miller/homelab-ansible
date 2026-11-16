@@ -192,6 +192,98 @@ data:
                 description: The newest k8up Backup in {{ $labels.namespace }} ended Failed, or none has succeeded for 31 hours (last good one {{ humanizeDuration $values.A.Value }} ago). `sudo k3s kubectl -n {{ $labels.namespace }} get backups,jobs` shows which job failed.
                 summary: '{{ $labels.namespace }} has no good backup'
               isPaused: false
+            - uid: backup-check-failed-k3s
+              title: Backup Check Failed (k3s)
+              condition: C
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT namespace, EXTRACT(EPOCH FROM now()) - EXTRACT(EPOCH FROM COALESCE(MAX(CASE WHEN reason = 'Succeeded' THEN to_timestamp(completed) END), to_timestamp(0))) AS value FROM kubernetes_check_status WHERE time >= now() - interval '15 minutes' GROUP BY namespace
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT namespace, CASE WHEN MAX(CASE WHEN reason <> 'Succeeded' THEN to_timestamp(completed) END) > COALESCE(MAX(CASE WHEN reason = 'Succeeded' THEN to_timestamp(completed) END), to_timestamp(0)) THEN 1 ELSE 0 END AS value FROM kubernetes_check_status WHERE time >= now() - interval '15 minutes' GROUP BY namespace
+                    refId: B
+                - refId: C
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    expression: $A > 691200 || $B > 0
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: C
+                    type: math
+              noDataState: Alerting
+              execErrState: Error
+              for: 5m
+              annotations:
+                description: The newest k8up Check in {{ $labels.namespace }} ended Failed, or none has succeeded for 8 days (last good one {{ humanizeDuration $values.A.Value }} ago). A failed check can mean restic found damage in the repository. `sudo k3s kubectl -n {{ $labels.namespace }} get checks,jobs` shows which job failed.
+                summary: '{{ $labels.namespace }} has no good backup check'
+              isPaused: false
+            - uid: backup-prune-failed-k3s
+              title: Backup Prune Failed (k3s)
+              condition: C
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT namespace, EXTRACT(EPOCH FROM now()) - EXTRACT(EPOCH FROM COALESCE(MAX(CASE WHEN reason = 'Succeeded' THEN to_timestamp(completed) END), to_timestamp(0))) AS value FROM kubernetes_prune_status WHERE time >= now() - interval '15 minutes' GROUP BY namespace
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: efdqk4ygmww00d
+                  model:
+                    editorMode: code
+                    format: table
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    rawSql: SELECT namespace, CASE WHEN MAX(CASE WHEN reason <> 'Succeeded' THEN to_timestamp(completed) END) > COALESCE(MAX(CASE WHEN reason = 'Succeeded' THEN to_timestamp(completed) END), to_timestamp(0)) THEN 1 ELSE 0 END AS value FROM kubernetes_prune_status WHERE time >= now() - interval '15 minutes' GROUP BY namespace
+                    refId: B
+                - refId: C
+                  relativeTimeRange:
+                    from: 600
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    expression: $A > 691200 || $B > 0
+                    intervalMs: 1000
+                    maxDataPoints: 43200
+                    refId: C
+                    type: math
+              noDataState: Alerting
+              execErrState: Error
+              for: 5m
+              annotations:
+                description: The newest k8up Prune in {{ $labels.namespace }} ended Failed, or none has succeeded for 8 days (last good one {{ humanizeDuration $values.A.Value }} ago). Without prunes the repository keeps every snapshot and grows. `sudo k3s kubectl -n {{ $labels.namespace }} get prunes,jobs` shows which job failed.
+                summary: '{{ $labels.namespace }} has no good backup prune'
+              isPaused: false
         - orgId: 1
           name: control4
           folder: Alerting

@@ -46,6 +46,8 @@ rules:
       - k8up.io
     resources:
       - backups
+      - checks
+      - prunes
     verbs:
       - list
 ---
