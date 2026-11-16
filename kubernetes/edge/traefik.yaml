@@ -363,6 +363,57 @@ spec:
               hsts:
                 headers:
                   stsSeconds: 31536000
+              # Each router that uses a limit keeps its own buckets, one per client IP.
+              rate-limit:
+                rateLimit:
+                  average: 100
+                  period: 1s
+                  burst: 1000
+                  sourceCriterion:
+                    ipStrategy:
+                      ipv6Subnet: 64
+              rate-limit-driver-write:
+                rateLimit:
+                  average: 20
+                  period: 1s
+                  burst: 200
+                  sourceCriterion:
+                    ipStrategy:
+                      ipv6Subnet: 64
+              rate-limit-api-key:
+                rateLimit:
+                  average: 20
+                  period: 1s
+                  burst: 200
+                  sourceCriterion:
+                    ipStrategy:
+                      ipv6Subnet: 64
+              rate-limit-console:
+                rateLimit:
+                  average: 10
+                  period: 1s
+                  burst: 200
+                  sourceCriterion:
+                    ipStrategy:
+                      ipv6Subnet: 64
+              rate-limit-sign-in:
+                rateLimit:
+                  average: 6
+                  period: 1m
+                  burst: 3
+                  sourceCriterion:
+                    ipStrategy:
+                      ipv6Subnet: 64
+              webhook-in-flight:
+                inFlightReq:
+                  amount: 20
+                  sourceCriterion:
+                    ipStrategy:
+                      ipv6Subnet: 64
+              webhook-body-limit:
+                buffering:
+                  maxRequestBodyBytes: 1048576
+                  memRequestBodyBytes: 65536
             serversTransports:
               self-signed:
                 insecureSkipVerify: true
