@@ -38,6 +38,7 @@ metadata:
   namespace: flux-system
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.middlewares: rate-limit-console@file
 spec:
   rules:
     - host: {{ flux_web_base_url | urlsplit('hostname') | to_json }}
