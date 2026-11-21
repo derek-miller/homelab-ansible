@@ -1860,7 +1860,11 @@ data:
           time_intervals:
             - years: ['2026']
               months: ['november']
-              days_of_month: ['14:28']
+              days_of_month: ['14:30']
+              location: America/Chicago
+            - years: ['2026']
+              months: ['december']
+              days_of_month: ['1:28']
               location: America/Chicago
   templates.yaml: |
     apiVersion: 1
