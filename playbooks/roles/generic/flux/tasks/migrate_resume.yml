@@ -55,7 +55,6 @@
         label: "{{ move.label }}"
       no_log: true
 
-    # After a restore, influxdb3's pod copies the restored backup onto the NAS before it starts, about four minutes for 20G.
     - name: "{{ move.label }} | wait for its workloads"
       command: "k3s kubectl -n {{ move.label }} rollout status {{ item.kind }} {{ item.name | quote }} --timeout=10m"
       loop: "{{ _flux_resume_workloads }}"

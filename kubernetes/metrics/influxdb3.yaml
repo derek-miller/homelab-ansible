@@ -157,7 +157,6 @@ spec:
             - name: data
               mountPath: /var/lib/influxdb3
         # A restore unpacks the backup into the claim, beneath the NAS folder InfluxDB sees there, so it goes onto the NAS.
-        # A nightly.prev is the last completed backup of a run that was cut off, as in backup.sh.
         - name: restored-backup
           image: influxdb:3-enterprise
           command:
