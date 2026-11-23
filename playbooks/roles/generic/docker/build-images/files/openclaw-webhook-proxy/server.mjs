@@ -7,8 +7,9 @@
  * session has no turn in flight, and follows the gateway log to learn when
  * the turn has ended. It also serves an admin page at / with a JSON API under
  * /api/ for watching the inbox and replaying or discarding events. A GitHub event
- * from someone outside the source's allowlist, other than a bot, and a check on a
- * fork's commit are held until an approver approves or dismisses them there.
+ * from someone outside the source's allowlist, other than a bot, is held until an
+ * approver approves or dismisses it there. A check on a fork's commit goes through
+ * without its commit message and output, which the fork's author wrote.
  *
  * A turn that every model refuses for the account's sake (a usage or billing limit, a
  * lost login, an Anthropic outage) pauses all sending. The breaker then sends one turn at
@@ -401,8 +402,11 @@ function fence(code, lang = "") {
   return `${ticks}${lang}\n${code}\n${ticks}`;
 }
 
-/** Format GitHub event into a meaningful agent message */
-function formatGitHubMessage(event, payload) {
+const FORK_CHECK_LINE =
+  "Commit message and output: left out, because no push to this repository started this check; on a fork's commit, the fork's author wrote them.";
+
+/** Format GitHub event into a meaningful agent message; `fork` leaves out a check's commit message and output */
+function formatGitHubMessage(event, payload, fork = false) {
   const repo = payload.repository?.full_name || "unknown";
 
   switch (event) {
@@ -550,14 +554,18 @@ function formatGitHubMessage(event, payload) {
         lines.push(`Associated PRs: ${associatedPRs}`);
       }
 
+      if (fork) {
+        lines.push(FORK_CHECK_LINE);
+      }
+
       // Include head commit message for context (especially useful for default branch)
       const headCommitMsg = checkRun.check_suite?.head_commit?.message;
-      if (headCommitMsg) {
+      if (headCommitMsg && !fork) {
         lines.push(`Commit message: ${headCommitMsg.split("\n")[0]}`);
       }
 
       // Include output summary/text if available (contains failure details)
-      if (checkRun.output) {
+      if (checkRun.output && !fork) {
         if (checkRun.output.title && checkRun.output.title !== checkName) {
           lines.push(`Output title: ${checkRun.output.title}`);
         }
@@ -608,9 +616,13 @@ function formatGitHubMessage(event, payload) {
         lines.push(`Associated PRs: ${associatedPRs}`);
       }
 
+      if (fork) {
+        lines.push(FORK_CHECK_LINE);
+      }
+
       // Include head commit message for context
       const headCommitMsg = checkSuite.head_commit?.message;
-      if (headCommitMsg) {
+      if (headCommitMsg && !fork) {
         lines.push(`Commit message: ${headCommitMsg.split("\n")[0]}`);
       }
 
@@ -1537,7 +1549,8 @@ const server = createServer(async (req, res) => {
     // Filter events by user (allowlist or ignorelist). A check has no user to filter
     // on: a commit pushed here was pushed by someone with write access, and its suite's
     // `after` is that commit. A fork's commit was never pushed here, so its suite has no
-    // `after` (its head_branch is the fork's own branch name), and it is held.
+    // `after` (its head_branch is the fork's own branch name), and the fork's author
+    // wrote its commit message and its output.
     let actor = null;
     let fork = false;
     switch (event) {
@@ -1559,7 +1572,6 @@ const server = createServer(async (req, res) => {
       case "check_suite": {
         const suite = payload.check_suite ?? payload.check_run?.check_suite;
         fork = !suite?.after || suite.after !== suite.head_sha;
-        if (fork) actor = `${payload.sender?.login ?? "unknown"} (fork)`;
         break;
       }
       default:
@@ -1571,7 +1583,7 @@ const server = createServer(async (req, res) => {
       source.allowUsers,
       source.ignoreUsers
     );
-    const held = fork || (!processGitHub && githubReason === "not in allowlist" && !actor.toLowerCase().endsWith("[bot]"));
+    const held = !processGitHub && githubReason === "not in allowlist" && !actor.toLowerCase().endsWith("[bot]");
     if (!processGitHub && !held) {
       console.log(
         `[${new Date().toISOString()}] Skipping GitHub event from ${actor || "(no actor)"} (${githubReason})`
@@ -1581,7 +1593,7 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    const eventMessage = formatGitHubMessage(event, payload);
+    const eventMessage = formatGitHubMessage(event, payload, fork);
 
     // One resolved thread identity drives the session key, so a PR's events
     // can never split across lanes (HL-17).
