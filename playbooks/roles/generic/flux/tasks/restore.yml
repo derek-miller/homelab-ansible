@@ -305,10 +305,12 @@
                 label: "{{ item.claim }}"
 
             # The tar holds the folder's contents, not the folder itself, so the app sets its owner and mode.
+            # Files near the top go first, so a delete cut off part way never leaves one such as influxdb3's licence,
+            # which marks a finished unpack, beside a part-deleted backup.
             - name: "{{ move.label }} | empty each volume restored from a tar and unpack it there"
               command: >-
                 k3s kubectl -n {{ move.label }} exec {{ _flux_restore_pod }} -- sh -c
-                {{ ('set -o pipefail; cd /restore/' ~ item.claim ~ '/' ~ item.claim ~ ' && find . -mindepth 1 -delete && restic dump '
+                {{ ('set -o pipefail; cd /restore/' ~ item.claim ~ '/' ~ item.claim ~ ' && find . -mindepth 1 -maxdepth 2 ! -type d -delete && find . -mindepth 1 -delete && restic dump '
                     ~ item.id ~ ' ' ~ item.tar ~ ' | tar -x --numeric-owner') | quote }}
               loop: "{{ _flux_restore_picks | selectattr('tar') | list }}"
               loop_control:
