@@ -90,6 +90,7 @@ data:
     # --force overwrites the files it writes but leaves an earlier backup's other files in place,
     # so the new backup goes into an empty folder and the last one waits beside it until it completes.
     # A nightly.prev left by a run that was cut off is the last completed backup, so it wins over nightly.
+    rm -rf "$d/nightly.old"
     if [ -d "$d/nightly.prev" ]; then rm -rf "$d/nightly"; elif [ -d "$d/nightly" ]; then mv "$d/nightly" "$d/nightly.prev"; fi
     since=$(date -u +%Y-%m-%dT%H:%M:%S)
     if ! influxdb3 create backup --name nightly --force >/dev/null; then
@@ -113,7 +114,9 @@ data:
         exit 1
       fi
     done
-    rm -rf "$d/nightly.prev"
+    # Renamed first, so a run cut off while deleting it leaves no part-deleted nightly.prev to win over nightly.
+    if [ -d "$d/nightly.prev" ]; then mv "$d/nightly.prev" "$d/nightly.old"; fi
+    rm -rf "$d/nightly.old" || true
     exec tar -C /var/lib/influxdb3 -cf - homelab/backups/nightly homelab/trial_or_home_license
 ---
 apiVersion: apps/v1
@@ -162,12 +165,18 @@ spec:
             - |
               set -e
               d=/var/lib/influxdb3/homelab/backups
+              rm -rf "$d/copied"
+              # The tar ends with the licence, which a restore deletes first, so without it the unpack was cut off.
+              if [ ! -f /var/lib/influxdb3/homelab/trial_or_home_license ]; then rm -rf "$d/nightly" "$d/nightly.prev"; exit 0; fi
               if [ -d "$d/nightly.prev" ]; then b=$d/nightly.prev; elif [ -d "$d/nightly" ]; then b=$d/nightly; else exit 0; fi
               rm -rf /backups/nightly.new
               cp -R "$b" /backups/nightly.new
               rm -rf /backups/nightly /backups/nightly.prev
               mv /backups/nightly.new /backups/nightly
-              rm -rf "$d/nightly" "$d/nightly.prev"
+              # Renamed first, so a start cut off while deleting it never copies a part-deleted folder.
+              if [ "$b" != "$d/nightly" ]; then rm -rf "$d/nightly"; fi
+              mv "$b" "$d/copied"
+              rm -rf "$d/copied"
           volumeMounts:
             - name: data
               mountPath: /var/lib/influxdb3
