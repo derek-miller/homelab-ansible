@@ -8,8 +8,9 @@
  * the turn has ended. It also serves an admin page at / with a JSON API under
  * /api/ for watching the inbox and replaying or discarding events. A GitHub event
  * from someone outside the source's allowlist, other than a bot, is held until an
- * approver approves or dismisses it there. A check on a fork's commit goes through
- * without its commit message and output, which the fork's author wrote.
+ * approver approves or dismisses it there. A check on a fork's commit goes through in
+ * a lane of its own, without the check name, branch, pull requests, commit message and
+ * output, which the fork's author wrote.
  *
  * A turn that every model refuses for the account's sake (a usage or billing limit, a
  * lost login, an Anthropic outage) pauses all sending. The breaker then sends one turn at
@@ -321,11 +322,20 @@ function extractTicketIdFromGitHub(event, payload) {
  * PR/issue number, present on nearly every event, is the fallback, and the
  * branch is the last resort for numberless events (post-merge CI, pushes).
  *
+ * A fork's check keys on its commit alone, in one lane per repository: the fork's
+ * author chose its branch and commit message, and GitHub matches PRs to it by branch
+ * name. Git refs and repository names can't hold a ":", so that lane can't meet another.
+ *
  * @returns {{id: string, numbered: boolean, sessionKey: string}}
  */
-function resolveGitHubThread(event, payload) {
+function resolveGitHubThread(event, payload, fork = false) {
   const repo = payload.repository?.full_name;
   if (!repo) return { id: "unknown", numbered: false, sessionKey: "hook:github:unknown" };
+
+  if (fork) {
+    const sha = payload.check_suite?.head_sha ?? payload.check_run?.head_sha ?? "unknown";
+    return { id: `${repo}:fork@${sha}`, numbered: false, sessionKey: `hook:github:${repo}:fork` };
+  }
 
   const number =
     payload.pull_request?.number ??
@@ -403,9 +413,9 @@ function fence(code, lang = "") {
 }
 
 const FORK_CHECK_LINE =
-  "Commit message and output: left out, because no push to this repository started this check; on a fork's commit, the fork's author wrote them.";
+  "Check name, branch, pull requests, commit message and output: left out. No push to this repository started this check, so it ran on a fork's commit, and the fork's author wrote all of them. Find its pull request from the commit.";
 
-/** Format GitHub event into a meaningful agent message; `fork` leaves out a check's commit message and output */
+/** Format GitHub event into a meaningful agent message; `fork` leaves out what a fork's author wrote */
 function formatGitHubMessage(event, payload, fork = false) {
   const repo = payload.repository?.full_name || "unknown";
 
@@ -543,6 +553,16 @@ function formatGitHubMessage(event, payload, fork = false) {
       const defaultBranch = payload.repository?.default_branch || "main";
       const isDefaultBranch = branch === defaultBranch;
 
+      if (fork) {
+        return [
+          `GitHub Check Run [${action}] on ${repo}, on a fork's commit`,
+          `Status: ${status}${conclusion ? ` / ${conclusion}` : ""}`,
+          `Commit: ${checkRun.head_sha || "unknown"}`,
+          FORK_CHECK_LINE,
+          htmlUrl ? `URL: ${htmlUrl}` : null,
+        ].filter(Boolean).join("\n");
+      }
+
       const lines = [
         `GitHub Check Run [${action}] on ${repo}: "${checkName}"`,
         `Status: ${status}${conclusion ? ` / ${conclusion}` : ""}`,
@@ -554,18 +574,14 @@ function formatGitHubMessage(event, payload, fork = false) {
         lines.push(`Associated PRs: ${associatedPRs}`);
       }
 
-      if (fork) {
-        lines.push(FORK_CHECK_LINE);
-      }
-
       // Include head commit message for context (especially useful for default branch)
       const headCommitMsg = checkRun.check_suite?.head_commit?.message;
-      if (headCommitMsg && !fork) {
+      if (headCommitMsg) {
         lines.push(`Commit message: ${headCommitMsg.split("\n")[0]}`);
       }
 
       // Include output summary/text if available (contains failure details)
-      if (checkRun.output && !fork) {
+      if (checkRun.output) {
         if (checkRun.output.title && checkRun.output.title !== checkName) {
           lines.push(`Output title: ${checkRun.output.title}`);
         }
@@ -605,6 +621,16 @@ function formatGitHubMessage(event, payload, fork = false) {
       const defaultBranch = payload.repository?.default_branch || "main";
       const isDefaultBranch = branch === defaultBranch;
 
+      if (fork) {
+        return [
+          `GitHub Check Suite [${action}] on ${repo}: "${app}", on a fork's commit`,
+          `Status: ${status}${conclusion ? ` / ${conclusion}` : ""}`,
+          `Commit: ${checkSuite.head_sha || "unknown"}`,
+          FORK_CHECK_LINE,
+          htmlUrl ? `URL: ${htmlUrl}` : null,
+        ].filter(Boolean).join("\n");
+      }
+
       const lines = [
         `GitHub Check Suite [${action}] on ${repo}: "${app}"`,
         `Status: ${status}${conclusion ? ` / ${conclusion}` : ""}`,
@@ -616,13 +642,9 @@ function formatGitHubMessage(event, payload, fork = false) {
         lines.push(`Associated PRs: ${associatedPRs}`);
       }
 
-      if (fork) {
-        lines.push(FORK_CHECK_LINE);
-      }
-
       // Include head commit message for context
       const headCommitMsg = checkSuite.head_commit?.message;
-      if (headCommitMsg && !fork) {
+      if (headCommitMsg) {
         lines.push(`Commit message: ${headCommitMsg.split("\n")[0]}`);
       }
 
@@ -854,16 +876,17 @@ function formatYouTrackMessage(payload) {
  * Note the actor filter cannot do this job: on these payloads `sender` is the
  * repo owner (`derek-miller`), not the bot that authored the commit.
  */
-function getCheckMeta(event, payload) {
+function getCheckMeta(event, payload, fork = false) {
   if (event !== "check_run" && event !== "check_suite") return { isCheck: false };
   const node = event === "check_run" ? payload.check_run : payload.check_suite;
   return {
     isCheck: true,
     conclusion: node?.conclusion ?? null,
-    commitAuthor:
-      payload.check_suite?.head_commit?.author?.name ??
-      payload.check_run?.check_suite?.head_commit?.author?.name ??
-      null,
+    commitAuthor: fork
+      ? null
+      : payload.check_suite?.head_commit?.author?.name ??
+        payload.check_run?.check_suite?.head_commit?.author?.name ??
+        null,
   };
 }
 
@@ -887,8 +910,8 @@ function isSelfAuthoredGreenCheckBatch(events, selfUsers) {
   if (conclusions.length === 0) return false;
   if (!conclusions.every((c) => c === "success")) return false;
 
-  const author = events.map((e) => e.check.commitAuthor).find(Boolean);
-  return !!author && selfUsers.includes(author.toLowerCase());
+  const authors = events.map((e) => e.check.commitAuthor).filter(Boolean);
+  return authors.length > 0 && authors.every((author) => selfUsers.includes(author.toLowerCase()));
 }
 
 /** Return true if this event should go out without waiting for related events */
@@ -904,8 +927,12 @@ function isDueImmediately(event, payload) {
 }
 
 /** Return a human-readable { eventType, detail } for batch event headers */
-function getGitHubEventDetail(event, payload) {
+function getGitHubEventDetail(event, payload, fork = false) {
   const repo = payload.repository?.full_name || "unknown";
+  if (fork) {
+    const node = event === "check_run" ? payload.check_run : payload.check_suite;
+    return { eventType: event, detail: `${repo} fork ${payload.action}=${node?.conclusion ?? "pending"}` };
+  }
   switch (event) {
     case "pull_request_review":
       return { eventType: event, detail: `${repo}#${payload.pull_request?.number} state=${payload.review?.state}` };
@@ -1550,7 +1577,7 @@ const server = createServer(async (req, res) => {
     // on: a commit pushed here was pushed by someone with write access, and its suite's
     // `after` is that commit. A fork's commit was never pushed here, so its suite has no
     // `after` (its head_branch is the fork's own branch name), and the fork's author
-    // wrote its commit message and its output.
+    // wrote its branch, check names, commit message and output.
     let actor = null;
     let fork = false;
     switch (event) {
@@ -1605,16 +1632,16 @@ const server = createServer(async (req, res) => {
     // it. An allowlist here has to be re-audited every time the App's event
     // subscriptions change, and silently reintroduces the duplicate-review bug
     // when it isn't. The thread id is defined for any payload, so key on it.
-    const thread = resolveGitHubThread(event, payload);
+    const thread = resolveGitHubThread(event, payload, fork);
     const threadKey = `github:${thread.id}`;
     let sessionKey = thread.sessionKey;
 
-    const { eventType, detail } = getGitHubEventDetail(event, payload);
+    const { eventType, detail } = getGitHubEventDetail(event, payload, fork);
     const eventEntry = {
       eventType,
       detail,
       formattedMessage: eventMessage,
-      check: getCheckMeta(event, payload),
+      check: getCheckMeta(event, payload, fork),
     };
     const token = held ? randomBytes(16).toString("hex") : null;
     let id;

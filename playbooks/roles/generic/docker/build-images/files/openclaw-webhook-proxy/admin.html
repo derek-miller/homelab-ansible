@@ -426,6 +426,7 @@
   const state = {
     held: [],
     heldSelected: new Set(),
+    approving: false,
     sessions: [],
     events: [],
     paged: false,
@@ -506,7 +507,7 @@
 
   /** The event's detail without the repo and PR or issue number its session key already shows */
   function shortDetail(e) {
-    const [, repo, number = ""] = e.session_key.match(/^hook:github:([^#@]+)(#\d+)?/) ?? [];
+    const [, repo, number = ""] = e.session_key.match(/^hook:github:([^#@:]+)(#\d+)?/) ?? [];
     if (!repo || !e.detail.startsWith(repo)) return e.detail;
     return e.detail.slice(repo.length).replace(new RegExp(`^${number}\\b`), "").trim() || "–";
   }
@@ -564,6 +565,7 @@
           el("input", {
             type: "checkbox",
             checked: selected,
+            disabled: state.approving,
             title: `Select event ${e.id}`,
             onchange: (event) => selectHeld([e.id], event.target.checked),
           })),
@@ -575,8 +577,9 @@
         el("td", { title: absolute(e.due_at) }, relative(e.due_at)));
     }));
     const count = state.heldSelected.size;
-    $("held-selected-count").textContent = `${count} selected`;
-    $("approve-selected").disabled = count === 0;
+    $("held-selected-count").textContent = state.approving ? "Approving…" : `${count} selected`;
+    $("approve-selected").disabled = state.approving || count === 0;
+    $("held-select-all").disabled = state.approving;
     $("held-select-all").checked = shown.length > 0 && count === shown.length;
     $("held-select-all").indeterminate = count > 0 && count < shown.length;
   }
@@ -592,24 +595,40 @@
   /** Approve each selected held event, bound to it by the hash of its message as the server shows it */
   async function approveSelected() {
     const ids = [...state.heldSelected];
-    if (!confirm(`Approve ${ids.length} held event(s)? Each one goes to the bot.`)) return;
+    if (state.approving || !confirm(`Approve ${ids.length} held event(s)? Each one goes to the bot.`)) return;
+    state.approving = true;
     selectHeld(ids, false);
+    let approved = 0;
+    const gone = [];
     const failed = [];
-    for (const id of ids) {
-      try {
-        const { hash } = await api(`/api/events/${id}`);
-        const response = await fetch("/api/held/decide", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, action: "approve", hash }),
-        });
-        if (!response.ok) failed.push(id);
-      } catch {
-        failed.push(id);
+    try {
+      for (const id of ids) {
+        try {
+          const { status, hash } = await api(`/api/events/${id}`);
+          if (!hash) {
+            gone.push(`${id} (${status})`);
+            continue;
+          }
+          const response = await fetch("/api/held/decide", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, action: "approve", hash }),
+          });
+          const text = await response.text();
+          if (response.ok) approved++;
+          else if (response.status === 409) gone.push(`${id} (${JSON.parse(text).status})`);
+          else failed.push(`${id}: ${response.status} ${text.slice(0, 200)}`);
+        } catch (err) {
+          failed.push(`${id}: ${err.message}`);
+        }
       }
+    } finally {
+      state.approving = false;
     }
-    if (failed.length) notify(`Approved ${ids.length - failed.length} of ${ids.length} event(s). Not approved: ${failed.join(", ")}.`, true);
-    else notify(`Approved ${ids.length} event(s).`);
+    const parts = [`Approved ${approved} of ${ids.length} event(s).`];
+    if (gone.length) parts.push(`No longer held: ${gone.join(", ")}.`);
+    if (failed.length) parts.push(`Not approved: ${failed.join("; ")}.`);
+    notify(parts.join(" "), failed.length > 0);
     await showNewest();
   }
 
