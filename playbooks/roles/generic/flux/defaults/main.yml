@@ -18,7 +18,8 @@ flux_registry_password: ""
 flux_registry_htpasswd: ""
 flux_registry_path: /mnt/data/volumes/zot
 
-flux_apply_timeout: 5m
+# Covers the slowest start, influxdb3's after a restore, which first copies the restored backup onto the NAS.
+flux_apply_timeout: 10m
 
 # The Discord webhook Flux posts to when the platform or the apps fail.
 flux_alert_webhook_url: ""
