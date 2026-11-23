@@ -263,10 +263,15 @@
 <main>
   <section id="held-section" hidden>
     <h2>Held for approval</h2>
+    <div class="toolbar">
+      <span id="held-selected-count">0 selected</span>
+      <button id="approve-selected" type="button" disabled>Approve selected</button>
+    </div>
     <div class="table-wrap">
       <table id="held">
         <thead>
           <tr>
+            <th><input id="held-select-all" type="checkbox" title="Select all held"></th>
             <th class="num">ID</th>
             <th>Received</th>
             <th>From</th>
@@ -420,6 +425,7 @@
 
   const state = {
     held: [],
+    heldSelected: new Set(),
     sessions: [],
     events: [],
     paged: false,
@@ -549,14 +555,62 @@
 
   function renderHeld() {
     $("held-section").hidden = state.held.length === 0;
-    setChildren($("held").tBodies[0], state.held.map((e) =>
-      el("tr", { onclick: () => showDetail(e.id) },
+    const shown = state.held.map((e) => e.id);
+    for (const id of state.heldSelected) if (!shown.includes(id)) state.heldSelected.delete(id);
+    setChildren($("held").tBodies[0], state.held.map((e) => {
+      const selected = state.heldSelected.has(e.id);
+      return el("tr", { className: selected ? "selected" : "", onclick: () => showDetail(e.id) },
+        el("td", { onclick: (event) => event.stopPropagation() },
+          el("input", {
+            type: "checkbox",
+            checked: selected,
+            title: `Select event ${e.id}`,
+            onchange: (event) => selectHeld([e.id], event.target.checked),
+          })),
         el("td", { className: "num" }, el("button", { type: "button", className: "link" }, e.id)),
         el("td", { title: absolute(e.received_at) }, relative(e.received_at)),
         el("td", { className: "key" }, e.actor ?? "–"),
         el("td", { className: "key" }, clip(e.thread_key.replace(/^github:/, ""))),
         el("td", {}, e.event_type ?? "–"),
-        el("td", { title: absolute(e.due_at) }, relative(e.due_at)))));
+        el("td", { title: absolute(e.due_at) }, relative(e.due_at)));
+    }));
+    const count = state.heldSelected.size;
+    $("held-selected-count").textContent = `${count} selected`;
+    $("approve-selected").disabled = count === 0;
+    $("held-select-all").checked = shown.length > 0 && count === shown.length;
+    $("held-select-all").indeterminate = count > 0 && count < shown.length;
+  }
+
+  function selectHeld(ids, on) {
+    for (const id of ids) {
+      if (on) state.heldSelected.add(id);
+      else state.heldSelected.delete(id);
+    }
+    renderHeld();
+  }
+
+  /** Approve each selected held event, bound to it by the hash of its message as the server shows it */
+  async function approveSelected() {
+    const ids = [...state.heldSelected];
+    if (!confirm(`Approve ${ids.length} held event(s)? Each one goes to the bot.`)) return;
+    selectHeld(ids, false);
+    const failed = [];
+    for (const id of ids) {
+      try {
+        const { hash } = await api(`/api/events/${id}`);
+        const response = await fetch("/api/held/decide", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, action: "approve", hash }),
+        });
+        if (!response.ok) failed.push(id);
+      } catch {
+        failed.push(id);
+      }
+    }
+    if (failed.length) notify(`Approved ${ids.length - failed.length} of ${ids.length} event(s). Not approved: ${failed.join(", ")}.`, true);
+    else notify(`Approved ${ids.length} event(s).`);
+    await showNewest();
   }
 
   /** Approve or dismiss a held event, bound to it by a notice's token or the hash of the message shown here */
@@ -974,6 +1028,8 @@
       render();
     });
   }
+  $("held-select-all").addEventListener("change", (event) => selectHeld(state.held.map((e) => e.id), event.target.checked));
+  $("approve-selected").addEventListener("click", approveSelected);
   $("select-all").addEventListener("change", (event) => select(state.events.map((e) => e.id), event.target.checked));
   $("replay-selected").addEventListener("click", () => changeSelected("replay"));
   $("discard-selected").addEventListener("click", () => changeSelected("discard"));
