@@ -16,6 +16,23 @@ spec:
     requests:
       storage: 60Gi
 ---
+# InfluxDB writes its backups here, a folder on the NAS. The volume is in influxdb3-backups.vault.yaml.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: influxdb3-backups
+  namespace: metrics
+  annotations:
+    k8up.io/backup: "false"
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ""
+  volumeName: metrics-influxdb3-backups
+  resources:
+    requests:
+      storage: 100Gi
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -122,18 +139,41 @@ spec:
         homelab.local/metrics: "true"
       terminationGracePeriodSeconds: 120
       initContainers:
-        # A restore unpacks the backup's tar as root, which leaves these two folders root-owned.
+        # A restore unpacks the backup's tar as root, which leaves these two folders root-owned,
+        # and on an empty claim the NAS folder's mount point would otherwise be made root-owned too.
         - name: own-folders
           image: influxdb:3-enterprise
           command:
             - sh
             - -c
-            - for f in homelab homelab/backups; do [ ! -d "/var/lib/influxdb3/$f" ] || chown 1500:1500 "/var/lib/influxdb3/$f"; done
+            - mkdir -p /var/lib/influxdb3/homelab/backups && chown 1500:1500 /var/lib/influxdb3/homelab /var/lib/influxdb3/homelab/backups
           securityContext:
             runAsUser: 0
           volumeMounts:
             - name: data
               mountPath: /var/lib/influxdb3
+        # A restore unpacks the backup into the claim, beneath the NAS folder InfluxDB sees there, so it goes onto the NAS.
+        # A nightly.prev is the last completed backup of a run that was cut off, as in backup.sh.
+        - name: restored-backup
+          image: influxdb:3-enterprise
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              d=/var/lib/influxdb3/homelab/backups
+              if [ -d "$d/nightly.prev" ]; then b=$d/nightly.prev; elif [ -d "$d/nightly" ]; then b=$d/nightly; else exit 0; fi
+              rm -rf /backups/nightly.new
+              cp -R "$b" /backups/nightly.new
+              rm -rf /backups/nightly /backups/nightly.prev
+              mv /backups/nightly.new /backups/nightly
+              rm -rf "$d/nightly" "$d/nightly.prev"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/influxdb3
+            - name: backups
+              mountPath: /backups
+              subPath: InfluxDB
       containers:
         - name: influxdb3
           image: influxdb:3-enterprise
@@ -184,6 +224,9 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/influxdb3
+            - name: backups
+              mountPath: /var/lib/influxdb3/homelab/backups
+              subPath: InfluxDB
             - name: plugins
               mountPath: /plugins
             - name: admin-token
@@ -196,6 +239,9 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: influxdb3
+        - name: backups
+          persistentVolumeClaim:
+            claimName: influxdb3-backups
         - name: plugins
           persistentVolumeClaim:
             claimName: plugins
