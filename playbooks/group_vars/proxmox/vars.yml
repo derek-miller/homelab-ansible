@@ -83,12 +83,14 @@ proxmox_guest_storage: local-zfs
 proxmox_guest_template_cores: 2
 proxmox_guest_template_memory: 2048
 
-proxmox_guests: >-
+proxmox_inventory_guests: >-
   {%- set out = [] -%}
   {%- for h in groups['proxmox_guests'] | sort -%}
   {%- set _ = out.append(hostvars[h].proxmox_guest | combine({'name': h})) -%}
   {%- endfor -%}
   {{ out }}
+
+proxmox_guests: "{{ proxmox_inventory_guests }}"
 
 proxmox_cluster_name: homelab
 proxmox_domain: localdomain
@@ -132,16 +134,22 @@ proxmox_roles:
 
 # What proxmox-guest's clone and config calls need: the template each guest is
 # cloned from, the guest itself, and the storage and bridge the clone lands on.
+# The inventory's guests are always included, because the cluster scope revokes
+# any grant missing here and a throwaway run passes its own proxmox_guests.
 proxmox_api_token_acls: >-
+  {%- set guests = proxmox_inventory_guests
+        + (proxmox_guests
+           | rejectattr('vmid', 'in', proxmox_inventory_guests | map(attribute='vmid') | list)
+           | list) -%}
   {%- set out = [
         {'path': '/storage/' ~ proxmox_guest_storage, 'roleid': 'PVEDatastoreUser'},
         {'path': '/sdn/zones/localnetwork/vmbr0', 'roleid': 'PVESDNUser'},
       ] -%}
-  {%- for node in proxmox_guests | map(attribute='node') | unique | sort -%}
+  {%- for node in guests | map(attribute='node') | unique | sort -%}
   {%- set _ = out.append({'path': '/vms/' ~ hostvars[node].proxmox_guest_template_vmid,
                           'roleid': 'PVETemplateUser'}) -%}
   {%- endfor -%}
-  {%- for g in proxmox_guests -%}
+  {%- for g in guests -%}
   {%- set _ = out.append({'path': '/vms/' ~ g.vmid, 'roleid': 'Provisioner'}) -%}
   {%- endfor -%}
   {{ out }}

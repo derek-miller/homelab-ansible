@@ -99,8 +99,12 @@ def test_the_grants():
     check("present revokes only this token's grants",
           ("selectattr('type', 'equalto', 'token')" in t, "selectattr('ugid', 'equalto', %s)" % TOKEN in t),
           (True, True))
-    check("present keeps the grants proxmox_api_token_acls declares",
-          ("proxmox_api_token_acls" in t, "== 0" in t, "pveum acl delete" in t), (True, True, True))
+    keep = re.search(r"when: >-\n((?:\s{4}.*\n?)+)", t + "\n")
+    keep = re.sub(r"\s+", " ", keep.group(1)).strip() if keep else ""
+    check("present keeps exactly the path and role pairs proxmox_api_token_acls declares", keep,
+          "(proxmox_api_token_acls | selectattr('path', 'equalto', item.path)"
+          " | selectattr('roleid', 'equalto', item.roleid) | list | length) == 0")
+    check("present revokes with pveum acl delete", "pveum acl delete" in t, True)
 
     privs = re.search(r"roleid: Provisioner\n\s+privs: \[(.*?)\]", VARS)
     privs = sorted(p.strip() for p in privs.group(1).split(",")) if privs else []
@@ -124,8 +128,12 @@ def test_the_grant_set():
         check("the token gets %s on %s" % (role, path),
               bool(re.search(re.escape("'path': " + path) + r",\s*'roleid': '" + role + "'", acls)), True)
     check("templates are granted for each node with a guest",
-          "proxmox_guests | map(attribute='node') | unique" in acls, True)
-    check("guests are granted one by one", "{%- for g in proxmox_guests -%}" in acls, True)
+          "guests | map(attribute='node') | unique" in acls, True)
+    check("guests are granted one by one", "{%- for g in guests -%}" in acls, True)
+    check("a throwaway proxmox_guests adds to the inventory's grants rather than replacing them",
+          bool(re.search(r"set guests = proxmox_inventory_guests\s*\+\s*\(proxmox_guests\s*\|\s*rejectattr", acls)), True)
+    check("proxmox_guests defaults to the inventory's guests",
+          'proxmox_guests: "{{ proxmox_inventory_guests }}"' in VARS, True)
 
 
 def test_guest_runs_skip_existing_guests():
