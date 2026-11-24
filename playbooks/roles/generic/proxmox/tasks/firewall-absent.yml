@@ -1,0 +1,24 @@
+---
+# A cluster object, so this turns the firewall off on every node even under
+# --limit. It goes before host.fw: an enabled cluster.fw with no host.fw
+# filters the node with PVE's defaults.
+- name: remove the datacenter firewall
+  file:
+    path: /etc/pve/firewall/cluster.fw
+    state: absent
+  run_once: true
+
+- name: remove the host firewall
+  file:
+    path: "/etc/pve/nodes/{{ inventory_hostname }}/host.fw"
+    state: absent
+
+# pve-firewall turns these on and never back off.
+- name: stop passing bridged guest traffic through iptables
+  shell: |
+    for f in /proc/sys/net/bridge/bridge-nf-call-iptables /proc/sys/net/bridge/bridge-nf-call-ip6tables; do
+      [ -e "$f" ] || continue
+      if [ "$(cat "$f")" != 0 ]; then echo 0 > "$f"; echo reset; fi
+    done
+  register: proxmox_firewall_bridge
+  changed_when: "'reset' in proxmox_firewall_bridge.stdout"

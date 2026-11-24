@@ -72,6 +72,9 @@ proxmox_api_token_id: ansible
 proxmox_guest_ssh_keys: |
   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNxxAEcT71BAXlVhmi76gjI26BkXwjAgcLaPLIMI+i8 dmiller
 
+proxmox_root_ssh_keys:
+  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNxxAEcT71BAXlVhmi76gjI26BkXwjAgcLaPLIMI+i8 dmiller
+
 proxmox_guest_image_url: https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2
 proxmox_guest_image_path: /var/lib/vz/template/cache/debian-13-genericcloud-amd64.qcow2
 proxmox_guest_template_vmid: "{{ 9000 + proxmox_nodeid }}"
@@ -122,6 +125,35 @@ proxmox_acls:
       6534653939633363380a316532363032663731386435653766363165653461363738346334623566
       66326139646462336430303635326138396361373663633565626238366630343736
     propagate: 1
+
+proxmox_roles:
+  - roleid: Provisioner
+    privs: [VM.Allocate, VM.Audit, VM.Config.CPU, VM.Config.Cloudinit, VM.Config.Memory, VM.Config.Options]
+
+# What proxmox-guest's clone and config calls need: the template each guest is
+# cloned from, the guest itself, and the storage and bridge the clone lands on.
+proxmox_api_token_acls: >-
+  {%- set out = [
+        {'path': '/storage/' ~ proxmox_guest_storage, 'roleid': 'PVEDatastoreUser'},
+        {'path': '/sdn/zones/localnetwork/vmbr0', 'roleid': 'PVESDNUser'},
+      ] -%}
+  {%- for node in proxmox_guests | map(attribute='node') | unique | sort -%}
+  {%- set _ = out.append({'path': '/vms/' ~ hostvars[node].proxmox_guest_template_vmid,
+                          'roleid': 'PVETemplateUser'}) -%}
+  {%- endfor -%}
+  {%- for g in proxmox_guests -%}
+  {%- set _ = out.append({'path': '/vms/' ~ g.vmid, 'roleid': 'Provisioner'}) -%}
+  {%- endfor -%}
+  {{ out }}
+
+proxmox_firewall_management:
+  - !vault |
+      $ANSIBLE_VAULT;1.1;AES256
+      38623237623766633532663762613830333132386631343065666338616339313433396134316433
+      6434633132343961363439366464396337306535353935320a663666303532303663653062636536
+      32316139303638633933393465656565363864393164306537393432306530393534316261353363
+      6636306264343064320a386538613930613030303139393130336234383063393262313466333134
+      6461
 
 proxmox_storages:
   - id: local

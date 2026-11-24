@@ -1,0 +1,22 @@
+{# No local_network alias: one would replace the LAN that PVE detects. #}
+[OPTIONS]
+
+enable: {{ proxmox_firewall_enabled | bool | ternary(1, 0) }}
+policy_in: DROP
+policy_out: ACCEPT
+
+[ALIASES]
+
+fabric {{ proxmox_migration_network }}
+
+[IPSET management]
+
+dc/fabric
+{% for source in proxmox_firewall_management %}
+{{ source }}
+{% endfor %}
+
+[RULES]
+
+IN ACCEPT -source dc/fabric -p udp -dport 5405:5412
+IN Ping(ACCEPT) -source +dc/management

@@ -35,4 +35,62 @@
 # the node, and there is no meaningful "absent" state for a hypervisor's
 # management network.
 
+- name: allow ssh passwords again
+  file:
+    path: /etc/ssh/sshd_config.d/10-ansible-managed.conf
+    state: absent
+  notify: reload sshd
+
+- name: remove root's ssh keys from the node's own disk
+  file:
+    path: /root/.ssh/authorized_keys2
+    state: absent
+
+- name: unmask and start rpcbind
+  systemd:
+    name: "{{ item }}"
+    masked: no
+    state: started
+  loop:
+    - rpcbind.socket
+    - rpcbind.service
+
+- include_tasks: firewall-absent.yml
+
 - include_tasks: lan-watchdog-absent.yml
+
+- name: provisioning token access
+  when: proxmox_scope == 'cluster'
+  block:
+    - name: read current acls
+      command: pvesh get /access/acl --output-format=json
+      register: proxmox_acl_current
+      changed_when: false
+      check_mode: no
+
+    # Deleting a role leaves the ACLs that name it behind.
+    - name: revoke the provisioning token's acls
+      command: >-
+        pveum acl delete {{ item.path }}
+        --roles {{ item.roleid }}
+        --tokens {{ item.ugid }}
+      loop: >-
+        {{ proxmox_acl_current.stdout | default('[]', true) | from_json
+           | selectattr('type', 'equalto', 'token')
+           | selectattr('ugid', 'equalto', proxmox_api_user ~ '!' ~ proxmox_api_token_id)
+           | list }}
+      loop_control:
+        label: "{{ item.roleid }} on {{ item.path }}"
+
+    - name: read roles
+      command: pveum role list --output-format=json
+      register: proxmox_roles_current
+      changed_when: false
+      check_mode: no
+
+    - name: remove roles
+      command: "pveum role delete {{ item.roleid }}"
+      loop: "{{ proxmox_roles }}"
+      loop_control:
+        label: "{{ item.roleid }}"
+      when: item.roleid in (proxmox_roles_current.stdout | from_json | map(attribute='roleid') | list)

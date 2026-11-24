@@ -12,6 +12,7 @@
     - proxmox_lan_driver
     - proxmox_bridge_vids
     - proxmox_metrics_server
+    - proxmox_migration_network
 
 - include_tasks: node.yml
   when: proxmox_scope == 'node'

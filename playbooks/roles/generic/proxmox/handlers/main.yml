@@ -42,3 +42,9 @@
   systemd:
     daemon_reload: yes
   listen: reload systemd units
+
+- name: reload sshd
+  systemd:
+    name: ssh
+    state: reloaded
+  listen: reload sshd

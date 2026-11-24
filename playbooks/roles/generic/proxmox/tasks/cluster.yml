@@ -288,17 +288,94 @@
   check_mode: no
   failed_when: false
 
+- name: find the provisioning api token
+  set_fact:
+    proxmox_api_token: >-
+      {{ (proxmox_api_tokens.stdout | default('[]', true) | from_json
+          | selectattr('tokenid', 'equalto', proxmox_api_token_id) | list | first) | default({}, true) }}
+
 - name: require the provisioning api token
   assert:
     that:
       - proxmox_api_tokens.rc == 0
-      - proxmox_api_token_id in (proxmox_api_tokens.stdout | default('[]'))
+      - proxmox_api_token | length > 0
     fail_msg: >-
       The API token {{ proxmox_api_user }}!{{ proxmox_api_token_id }} does not exist,
       so guest provisioning cannot authenticate. Create it and vault the secret it
       prints — it is shown only once:
-      pveum user token add {{ proxmox_api_user }} {{ proxmox_api_token_id }} --privsep 0
+      pveum user token add {{ proxmox_api_user }} {{ proxmox_api_token_id }} --privsep 1
     quiet: yes
+
+- name: read roles
+  command: pveum role list --output-format=json
+  register: proxmox_roles_current
+  changed_when: false
+  check_mode: no
+
+- name: add roles
+  command: "pveum role add {{ item.roleid }} --privs {{ item.privs | join(',') }}"
+  loop: "{{ proxmox_roles }}"
+  loop_control:
+    label: "{{ item.roleid }}"
+  when: item.roleid not in (proxmox_roles_current.stdout | from_json | map(attribute='roleid') | list)
+
+# Without --append, modify replaces the role's privileges outright.
+- name: converge roles
+  command: "pveum role modify {{ item.roleid }} --privs {{ item.privs | join(',') }}"
+  loop: "{{ proxmox_roles }}"
+  loop_control:
+    label: "{{ item.roleid }}"
+  vars:
+    live: >-
+      {{ (proxmox_roles_current.stdout | from_json
+          | selectattr('roleid', 'equalto', item.roleid) | list | first) | default({}, true) }}
+  when:
+    - live | length > 0
+    - (live.privs | default('')).split(',') | sort != item.privs | sort
+
+- name: grant the provisioning token's acls
+  command: >-
+    pveum acl modify {{ item.path }}
+    --roles {{ item.roleid }}
+    --tokens {{ proxmox_api_user }}!{{ proxmox_api_token_id }}
+    --propagate 0
+  loop: "{{ proxmox_api_token_acls }}"
+  loop_control:
+    label: "{{ item.roleid }} on {{ item.path }}"
+  when: >-
+    (proxmox_acl_current.stdout | default('[]') | from_json
+      | selectattr('path', 'equalto', item.path)
+      | selectattr('roleid', 'equalto', item.roleid)
+      | selectattr('ugid', 'equalto', proxmox_api_user ~ '!' ~ proxmox_api_token_id)
+      | list | length) == 0
+
+# Renews once less than half the lifetime is left. PVE checks the expiry
+# against the node's clock, hence the node's epoch.
+- name: narrow the provisioning api token
+  command: >-
+    pveum user token modify {{ proxmox_api_user }} {{ proxmox_api_token_id }}
+    --privsep 1
+    --expire {{ (ansible_facts.date_time.epoch | int) + (proxmox_api_token_lifetime_days | int) * 86400 }}
+  when: >-
+    (proxmox_api_token.privsep | default(0) | int) != 1
+    or (proxmox_api_token.expire | default(0) | int)
+       < (ansible_facts.date_time.epoch | int) + (proxmox_api_token_lifetime_days | int) * 86400 // 2
+
+- name: create the firewall directory
+  file:
+    path: /etc/pve/firewall
+    state: directory
+    owner: root
+    group: www-data
+    mode: 0755
+
+- name: configure the datacenter firewall
+  template:
+    src: pve/cluster.fw.jinja2
+    dest: /etc/pve/firewall/cluster.fw
+    owner: root
+    group: www-data
+    mode: 0640
 
 # Corosync fails over silently, so a dead ring1 costs redundancy without
 # costing availability — nothing would report it until ring0 also broke.

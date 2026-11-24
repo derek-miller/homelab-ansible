@@ -1,0 +1,4 @@
+[OPTIONS]
+
+enable: {{ proxmox_firewall_host_enabled | bool | ternary(1, 0) }}
+nf_conntrack_allow_invalid: 1

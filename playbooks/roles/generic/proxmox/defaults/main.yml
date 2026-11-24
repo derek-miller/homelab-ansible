@@ -69,7 +69,19 @@ proxmox_lan_watchdog_flap_max_trips: 2
 # proxmox_notification_matchers already route rather than a second channel.
 proxmox_lan_watchdog_notify: yes
 
+# Beside the ansible key, in a root authorized_keys file kept off /etc/pve.
+proxmox_root_ssh_keys: []
+
+# The datacenter switch, and each node's own filter.
+proxmox_firewall_enabled: no
+proxmox_firewall_host_enabled: no
+# Sources beside the LAN and the migration network, which are always admitted.
+proxmox_firewall_management: []
+
 proxmox_acls: []
+proxmox_roles: []
+proxmox_api_token_acls: []
+proxmox_api_token_lifetime_days: 90
 proxmox_storages: []
 proxmox_notification_targets: []
 proxmox_notification_matchers: []

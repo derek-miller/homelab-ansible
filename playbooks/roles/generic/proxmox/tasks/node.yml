@@ -176,6 +176,53 @@
     enabled: yes
     state: started
 
+# authorized_keys is a link into /etc/pve, which is empty while pve-cluster is down.
+- name: keep root's ssh keys on the node's own disk
+  copy:
+    content: "{{ ([lookup('file', ansible_surrogate_public_key_file)] + proxmox_root_ssh_keys) | join('\n') }}\n"
+    dest: /root/.ssh/authorized_keys2
+    owner: root
+    group: root
+    mode: 0600
+
+# pvecm create and add put PermitRootLogin yes back into sshd_config itself.
+- name: refuse ssh passwords
+  copy:
+    content: |
+      PermitRootLogin prohibit-password
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+    dest: /etc/ssh/sshd_config.d/10-ansible-managed.conf
+    owner: root
+    group: root
+    mode: 0644
+    validate: /usr/sbin/sshd -t -f %s
+  notify: reload sshd
+
+# Masked rather than removed: removing it removes proxmox-ve.
+- name: stop and mask rpcbind
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+    masked: yes
+  loop:
+    - rpcbind.socket
+    - rpcbind.service
+
+- name: configure the host firewall
+  template:
+    src: pve/host.fw.jinja2
+    dest: "/etc/pve/nodes/{{ inventory_hostname }}/host.fw"
+    owner: root
+    group: www-data
+    mode: 0640
+
+- name: keep the firewall daemon running
+  systemd:
+    name: pve-firewall.service
+    enabled: yes
+    state: started
+
 # HA reacts to a dead node, not a dead LAN. This closes the gap for the case
 # where corosync keeps the node quorate over the fabric while everything
 # bridged to vmbr0 is unreachable.

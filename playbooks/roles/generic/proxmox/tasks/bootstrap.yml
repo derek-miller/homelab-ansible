@@ -1,9 +1,10 @@
 ---
+# No owner, group or mode: the file is a link into /etc/pve, which refuses them.
 - name: authorise the ansible key for root
-  ansible.posix.authorized_key:
-    user: root
-    key: "{{ lookup('file', ansible_surrogate_public_key_file) }}"
-    state: present
+  lineinfile:
+    path: /root/.ssh/authorized_keys
+    line: "{{ lookup('file', ansible_surrogate_public_key_file) }}"
+    create: yes
 
 # Formation is additionally gated on this node not being in a cluster yet, so
 # even a bootstrap run is inert against nodes that are already members and
@@ -35,7 +36,7 @@
 
     # pvecm add reaches the primary over SSH as root, and a fresh node's
     # authorized_keys holds no peer keys until it joins — without this the join
-    # prompts for a password and hangs.
+    # cannot log in to the primary.
     - name: read this node's root public key
       slurp:
         src: /root/.ssh/id_rsa.pub
@@ -43,14 +44,13 @@
       when: inventory_hostname not in groups['proxmox_primary']
 
     - name: authorise this node's root key on the primary
-      ansible.posix.authorized_key:
-        user: root
-        key: "{{ proxmox_root_pubkey.content | b64decode }}"
-        state: present
+      lineinfile:
+        path: /root/.ssh/authorized_keys
+        line: "{{ proxmox_root_pubkey.content | b64decode | trim }}"
       delegate_to: "{{ groups['proxmox_primary'] | first }}"
       # Serialised: every joining node writes the same authorized_keys on the
-      # primary, and concurrent read-modify-writes lose keys — which would leave
-      # pvecm add prompting for a password and hanging.
+      # primary, and concurrent read-modify-writes lose keys, which leaves
+      # pvecm add unable to log in.
       throttle: 1
       when: inventory_hostname not in groups['proxmox_primary']
 
