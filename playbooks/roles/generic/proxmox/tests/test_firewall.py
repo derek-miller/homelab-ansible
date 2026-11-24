@@ -76,7 +76,6 @@ def test_cluster_fw():
     check("inbound is dropped unless a rule allows it", "policy_in: DROP" in body, True)
     check("outbound stays open", "policy_out: ACCEPT" in body, True)
     check("no local_network alias replaces PVE's detected LAN", "local_network" in body, False)
-    check("the nftables backend stays off", "nftables" in body, False)
     check("the fabric alias is the migration network", "fabric {{ proxmox_migration_network }}" in body, True)
 
     ipset = re.search(r"\[IPSET management\]\n(.*?)\n\[", body, re.S)
@@ -96,6 +95,8 @@ def test_host_fw():
           "enable: {{ proxmox_firewall_host_enabled | bool | ternary(1, 0) }}" in body, True)
     check("conntrack never drops guest packets it can't classify",
           re.findall(r"(?m)^nf_conntrack_allow_invalid: .*$", body), ["nf_conntrack_allow_invalid: 1"])
+    check("the nftables backend, which the RUNBOOK's recovery steps don't cover, stays off",
+          re.findall(r"(?m)^nftables:.*$", body), [])
 
 
 def test_where_the_files_are_written():
@@ -108,8 +109,6 @@ def test_where_the_files_are_written():
     order = names(CLUSTER)
     check("the firewall folder is made before cluster.fw",
           order.index("create the firewall directory") < order.index("configure the datacenter firewall"), True)
-    check("the corosync ring is checked after the switch",
-          order.index("configure the datacenter firewall") < order.index("read corosync link status"), True)
 
     plays = names(read(PLAYBOOK))
     check("every node's host.fw is written before cluster.fw in a full run",

@@ -10,6 +10,7 @@ import sys
 
 ROLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 GROUP_VARS = os.path.join(ROLE, "..", "..", "..", "group_vars", "proxmox", "vars.yml")
+GUESTS = os.path.join(ROLE, "..", "proxmox-guest", "tasks", "guests.yml")
 
 results = []
 
@@ -55,6 +56,8 @@ CLUSTER = role("tasks", "cluster.yml")
 ABSENT = role("tasks", "absent.yml")
 DEFAULTS = role("defaults", "main.yml")
 VARS = read(GROUP_VARS)
+GUEST_TASKS = read(GUESTS)
+TOKEN = "proxmox_api_user ~ '!' ~ proxmox_api_token_id"
 
 
 def test_the_token_is_narrowed():
@@ -73,9 +76,10 @@ def test_the_token_is_narrowed():
         "add roles",
         "converge roles",
         "grant the provisioning token's acls",
+        "revoke the provisioning token's other acls",
         "narrow the provisioning api token",
     ]
-    check("the token is checked, then given its role and grants, then narrowed",
+    check("the token is checked, then given its role and grants, stripped of others, then narrowed",
           [order.index(n) for n in sequence], sorted(order.index(n) for n in sequence))
 
 
@@ -84,10 +88,19 @@ def test_the_grants():
     check("token grants go to the token", "--tokens {{ proxmox_api_user }}!{{ proxmox_api_token_id }}" in t, True)
     check("token grants don't propagate", "--propagate 0" in t, True)
     check("token grants loop over proxmox_api_token_acls", 'loop: "{{ proxmox_api_token_acls }}"' in t, True)
+    check("a grant left propagating is set again", "selectattr('propagate', 'equalto', 0)" in t, True)
     check("user grants stay on proxmox_acls alone",
           'loop: "{{ proxmox_acls }}"' in task(CLUSTER, "grant acls"), True)
-    for name in ("grant the provisioning token's acls", "narrow the provisioning api token"):
-        check("%s runs without a shell, so ! passes through" % name, "shell:" in task(CLUSTER, name), False)
+    for name in ("grant the provisioning token's acls", "revoke the provisioning token's other acls",
+                 "narrow the provisioning api token"):
+        check("%s runs through command:" % name, "shell:" in task(CLUSTER, name), False)
+
+    t = task(CLUSTER, "revoke the provisioning token's other acls")
+    check("present revokes only this token's grants",
+          ("selectattr('type', 'equalto', 'token')" in t, "selectattr('ugid', 'equalto', %s)" % TOKEN in t),
+          (True, True))
+    check("present keeps the grants proxmox_api_token_acls declares",
+          ("proxmox_api_token_acls" in t, "== 0" in t, "pveum acl delete" in t), (True, True, True))
 
     privs = re.search(r"roleid: Provisioner\n\s+privs: \[(.*?)\]", VARS)
     privs = sorted(p.strip() for p in privs.group(1).split(",")) if privs else []
@@ -97,6 +110,32 @@ def test_the_grants():
     check("Provisioner reaches no console, power, agent, disk or network privilege",
           [p for p in privs if re.search(r"GuestAgent|Console|PowerMgmt|Migrate|Snapshot|Config\.(Disk|Network|HWType)", p)],
           [])
+
+
+def test_the_grant_set():
+    m = re.search(r"(?ms)^proxmox_api_token_acls: >-\n(.*?)^\S", VARS)
+    acls = m.group(1) if m else ""
+    for path, role in (
+        ("'/storage/' ~ proxmox_guest_storage", "PVEDatastoreUser"),
+        ("'/sdn/zones/localnetwork/vmbr0'", "PVESDNUser"),
+        ("'/vms/' ~ hostvars[node].proxmox_guest_template_vmid", "PVETemplateUser"),
+        ("'/vms/' ~ g.vmid", "Provisioner"),
+    ):
+        check("the token gets %s on %s" % (role, path),
+              bool(re.search(re.escape("'path': " + path) + r",\s*'roleid': '" + role + "'", acls)), True)
+    check("templates are granted for each node with a guest",
+          "proxmox_guests | map(attribute='node') | unique" in acls, True)
+    check("guests are granted one by one", "{%- for g in proxmox_guests -%}" in acls, True)
+
+
+def test_guest_runs_skip_existing_guests():
+    t = task(GUEST_TASKS, "clone guests from the template")
+    check("only a guest missing from the cluster is cloned, so a rebuilt template's lost grant can't fail existing guests",
+          "item.vmid | int not in (proxmox_guest_cluster_vms.stdout | from_json | map(attribute='vmid') | list)" in t,
+          True)
+    order = names(GUEST_TASKS)
+    check("the cluster's guests are read before the clone",
+          order.index("read the cluster's guests") < order.index("clone guests from the template"), True)
 
 
 def test_defaults():
@@ -116,6 +155,8 @@ def test_absent():
 for fn in (
     test_the_token_is_narrowed,
     test_the_grants,
+    test_the_grant_set,
+    test_guest_runs_skip_existing_guests,
     test_defaults,
     test_absent,
 ):

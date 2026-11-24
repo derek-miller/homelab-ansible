@@ -69,7 +69,12 @@ def test_drop_in():
     check(
         "the drop-in holds exactly the key-only directives",
         lines,
-        ["PermitRootLogin prohibit-password", "PasswordAuthentication no", "KbdInteractiveAuthentication no"],
+        [
+            "PermitRootLogin prohibit-password",
+            "PasswordAuthentication no",
+            "KbdInteractiveAuthentication no",
+            "AuthorizedKeysFile .ssh/authorized_keys2 .ssh/authorized_keys",
+        ],
     )
     check("sshd checks the drop-in before it lands", "validate: /usr/sbin/sshd -t -f %s" in t, True)
     check("the drop-in reloads sshd", "notify: reload sshd" in t, True)

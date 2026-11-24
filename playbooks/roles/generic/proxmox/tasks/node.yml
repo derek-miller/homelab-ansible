@@ -186,12 +186,14 @@
     mode: 0600
 
 # pvecm create and add put PermitRootLogin yes back into sshd_config itself.
+# authorized_keys2 is named, and first, because a hung /etc/pve hangs the link.
 - name: refuse ssh passwords
   copy:
     content: |
       PermitRootLogin prohibit-password
       PasswordAuthentication no
       KbdInteractiveAuthentication no
+      AuthorizedKeysFile .ssh/authorized_keys2 .ssh/authorized_keys
     dest: /etc/ssh/sshd_config.d/10-ansible-managed.conf
     owner: root
     group: root

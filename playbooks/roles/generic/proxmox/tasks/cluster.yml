@@ -347,6 +347,25 @@
       | selectattr('path', 'equalto', item.path)
       | selectattr('roleid', 'equalto', item.roleid)
       | selectattr('ugid', 'equalto', proxmox_api_user ~ '!' ~ proxmox_api_token_id)
+      | selectattr('propagate', 'equalto', 0)
+      | list | length) == 0
+
+- name: revoke the provisioning token's other acls
+  command: >-
+    pveum acl delete {{ item.path }}
+    --roles {{ item.roleid }}
+    --tokens {{ item.ugid }}
+  loop: >-
+    {{ proxmox_acl_current.stdout | default('[]', true) | from_json
+       | selectattr('type', 'equalto', 'token')
+       | selectattr('ugid', 'equalto', proxmox_api_user ~ '!' ~ proxmox_api_token_id)
+       | list }}
+  loop_control:
+    label: "{{ item.roleid }} on {{ item.path }}"
+  when: >-
+    (proxmox_api_token_acls
+      | selectattr('path', 'equalto', item.path)
+      | selectattr('roleid', 'equalto', item.roleid)
       | list | length) == 0
 
 # Renews once less than half the lifetime is left. PVE checks the expiry

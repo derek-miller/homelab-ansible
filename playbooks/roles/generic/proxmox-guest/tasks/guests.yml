@@ -12,6 +12,14 @@
   loop_control:
     label: "{{ item.0.name }} {{ item.1.iface }}"
 
+# The token sees a template only through a grant that PVE drops when the
+# template is rebuilt, so only a guest that doesn't exist yet is cloned.
+- name: read the cluster's guests
+  command: pvesh get /cluster/resources --type vm --output-format=json
+  register: proxmox_guest_cluster_vms
+  changed_when: false
+  check_mode: no
+
 # validate_certs stays off here and on the hardware task below: the API is served
 # by the node's self-signed pve-ssl.pem, issued by the cluster's own CA, which the
 # controller has no copy of.
@@ -39,7 +47,9 @@
   delegate_to: localhost
   # A guest that already exists and was not built from the template opts out here
   # only. Its hardware and cloud-init are still converged below.
-  when: item.clone | default(true) | bool
+  when:
+    - item.clone | default(true) | bool
+    - item.vmid | int not in (proxmox_guest_cluster_vms.stdout | from_json | map(attribute='vmid') | list)
 
 - name: read current guest config
   command: "qm config {{ item.vmid }}"
