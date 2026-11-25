@@ -154,6 +154,8 @@ proxmox_api_token_acls: >-
   {%- endfor -%}
   {{ out }}
 
+proxmox_firewall_enabled: yes
+
 proxmox_firewall_management:
   - !vault |
       $ANSIBLE_VAULT;1.1;AES256
