@@ -63,7 +63,7 @@ TOKEN = "proxmox_api_user ~ '!' ~ proxmox_api_token_id"
 def test_the_token_is_narrowed():
     check("nothing asks for a privsep 0 token", "--privsep 0" in CLUSTER, False)
     check("a missing token is made with privsep 1",
-          bool(re.search(r"pveum user token add .*--privsep 1", task(CLUSTER, "require the provisioning api token"))),
+          bool(re.search(r"pveum user token add [^|]*--privsep 1", task(CLUSTER, "require the provisioning api token"))),
           True)
     t = task(CLUSTER, "narrow the provisioning api token")
     check("the token is set to privsep 1 with an expiry", ("--privsep 1" in t, "--expire" in t), (True, True))
@@ -146,6 +146,17 @@ def test_guest_runs_skip_existing_guests():
           order.index("read the cluster's guests") < order.index("clone guests from the template"), True)
 
 
+def test_guest_runs_check_the_token():
+    t = task(GUEST_TASKS, "check the provisioning token")
+    check("every guest run signs in with the token, even when nothing is cloned or changed",
+          "api_token_secret" in t and "when:" not in t, True)
+    order = names(GUEST_TASKS)
+    check("the token is checked before the clone",
+          order.index("check the provisioning token")
+          < order.index("require the token to see every existing guest")
+          < order.index("clone guests from the template"), True)
+
+
 def test_defaults():
     for line in ("proxmox_roles: []", "proxmox_api_token_acls: []"):
         check("defaults declare %s" % line, line in DEFAULTS, True)
@@ -165,6 +176,7 @@ for fn in (
     test_the_grants,
     test_the_grant_set,
     test_guest_runs_skip_existing_guests,
+    test_guest_runs_check_the_token,
     test_defaults,
     test_absent,
 ):

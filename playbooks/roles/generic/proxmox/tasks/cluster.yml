@@ -301,9 +301,11 @@
       - proxmox_api_token | length > 0
     fail_msg: >-
       The API token {{ proxmox_api_user }}!{{ proxmox_api_token_id }} does not exist,
-      so guest provisioning cannot authenticate. Create it and vault the secret it
-      prints — it is shown only once:
-      pveum user token add {{ proxmox_api_user }} {{ proxmox_api_token_id }} --privsep 1
+      so guest provisioning cannot authenticate. Create it from the repo, inside .venv,
+      and put the output in place of proxmox_api_token_secret:
+      ssh root@{{ inventory_hostname }} pveum user token add {{ proxmox_api_user }}
+      {{ proxmox_api_token_id }} --privsep 1 --output-format=json | jq -j .value |
+      ansible-vault encrypt_string --vault-id=.vault_pass --stdin-name proxmox_api_token_secret
     quiet: yes
 
 - name: read roles

@@ -20,9 +20,36 @@
   changed_when: false
   check_mode: no
 
-# validate_certs stays off here and on the hardware task below: the API is served
-# by the node's self-signed pve-ssl.pem, issued by the cluster's own CA, which the
+# validate_certs stays off on every API task here: the API is served by the
+# node's self-signed pve-ssl.pem, issued by the cluster's own CA, which the
 # controller has no copy of.
+# Once every guest exists and matches, neither proxmox_kvm task below calls the
+# API, so this read is what fails a run on a wrong or expired secret.
+- name: check the provisioning token
+  community.proxmox.proxmox_vm_info:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: no
+    type: qemu
+  register: proxmox_guest_token_view
+  delegate_to: localhost
+
+- name: require the token to see every existing guest
+  assert:
+    that: proxmox_guest_token_blind | length == 0
+    fail_msg: >-
+      The provisioning token can't see {{ proxmox_guest_token_blind | join(', ') }},
+      so it has lost those guests' grants. make run-proxmox tags=proxmox-cluster
+      restores them.
+    quiet: yes
+  vars:
+    proxmox_guest_token_blind: >-
+      {{ proxmox_guests | map(attribute='vmid') | map('int') | list
+         | intersect(proxmox_guest_cluster_vms.stdout | from_json | map(attribute='vmid') | map('int') | list)
+         | difference(proxmox_guest_token_view.proxmox_vms | map(attribute='vmid') | map('int') | list) }}
+
 - name: clone guests from the template
   community.proxmox.proxmox_kvm:
     api_host: "{{ proxmox_api_host }}"
