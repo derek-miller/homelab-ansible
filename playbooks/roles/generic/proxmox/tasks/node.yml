@@ -211,6 +211,14 @@
     - rpcbind.socket
     - rpcbind.service
 
+# pmxcfs refuses the 0600 mode a template's copy carries when it creates a file.
+- name: create the host firewall file
+  file:
+    path: "/etc/pve/nodes/{{ inventory_hostname }}/host.fw"
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+
 - name: configure the host firewall
   template:
     src: pve/host.fw.jinja2
