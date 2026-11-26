@@ -1,5 +1,6 @@
 ---
 proxmox_nodeid: 5
+proxmox_firewall_host_enabled: yes
 
 proxmox_lan_address: !vault |
   $ANSIBLE_VAULT;1.1;AES256
