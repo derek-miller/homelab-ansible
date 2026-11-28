@@ -305,6 +305,12 @@
   tags:
     - qemu-guest-agent
 
+- hosts: tcp-forward
+  roles:
+    - role: generic/tcp-forward
+  tags:
+    - tcp-forward
+
 # Near the end because these groups hold one host: a failure there fails the
 # whole play, which would stop the run before the fleet-wide plays.
 - hosts: homebridge

@@ -1,0 +1,13 @@
+[Unit]
+Description=Forward TCP port {{ item.listen_port | int }} to {{ item.target_host }}:{{ item.target_port | int }}
+Wants=network-online.target
+After=network-online.target tailscaled.service
+
+[Service]
+ExecStart=/usr/bin/socat -d -d TCP4-LISTEN:{{ item.listen_port | int }},fork,reuseaddr,range={{ item.allow }} {{ ('TCP6:[' ~ item.target_host ~ ']') if ':' in item.target_host else ('TCP4:' ~ item.target_host) }}:{{ item.target_port | int }}
+DynamicUser=yes
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
