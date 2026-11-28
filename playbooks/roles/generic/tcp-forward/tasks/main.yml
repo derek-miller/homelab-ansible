@@ -1,0 +1,17 @@
+---
+- assert:
+    that:
+      - ansible_os_family == 'Debian'
+      - tcp_forward_state in ('present', 'absent')
+    fail_msg: >-
+      generic/tcp-forward only supports Debian hosts (got
+      {{ ansible_os_family }})
+    quiet: yes
+
+- name: include present tasks
+  include_tasks: present.yml
+  when: tcp_forward_state == 'present'
+
+- name: include absent tasks
+  include_tasks: absent.yml
+  when: tcp_forward_state == 'absent'

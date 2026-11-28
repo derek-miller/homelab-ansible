@@ -110,8 +110,23 @@ sudoers:
   - user: pi
     passwordless: true
 
-# 4via6 site 4: ratgdo garage doors, left then right (ESPHome API 6053, web UI 80)
-tailscale_host_args: --accept-routes --advertise-routes=fd7a:115c:a1e0:b1a:0:4:c0a8:1d4/128,fd7a:115c:a1e0:b1a:0:4:c0a8:1dc/128
+# 4via6 site 4: ratgdo garage doors, left then right (ESPHome API 6053, web UI 80),
+# then the ControlByWeb module (web UI 80 and 443)
+tailscale_host_args: --accept-routes --advertise-routes=fd7a:115c:a1e0:b1a:0:4:c0a8:1d4/128,fd7a:115c:a1e0:b1a:0:4:c0a8:1dc/128,fd7a:115c:a1e0:b1a:0:4:c0a8:10c/128
+
+# The ControlByWeb module's pushes, on to the dev Control4 controller via rackvm2.
+tcp_forwards:
+  - name: controlbyweb-push
+    listen_port: 9100
+    allow: !vault |
+      $ANSIBLE_VAULT;1.1;AES256
+      62373036323865356130353364663431373637623736643363386664646661303136633836363639
+      6130623938353665306533613637633262636362383237370a313838343065353430363037616236
+      32376164653365383063376335616636376662633937396563323361643362616635346335323639
+      3634663936393631320a336630613264616265316432386638373430616336313731313065353937
+      3636
+    target_host: "{{ hostvars['rackvm2'].ansible_host }}"
+    target_port: 19100
 
 raspberry_pi_wifi_country: US
 raspberry_pi_video_group_users:

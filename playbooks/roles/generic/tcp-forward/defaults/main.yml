@@ -1,0 +1,7 @@
+---
+tcp_forward_state: present
+
+# Each forward listens on listen_port (IPv4, every address), accepts clients
+# only from the allow CIDR, and connects each one to target_host:target_port.
+# target_host is an IPv4 or IPv6 address, or a name with an IPv4 record.
+tcp_forwards: []

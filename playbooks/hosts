@@ -108,3 +108,7 @@ rackmini1
 
 [qemu-guest-agent]
 rackvm[1:5]
+
+[tcp-forward]
+mertins-raspi1
+rackvm2

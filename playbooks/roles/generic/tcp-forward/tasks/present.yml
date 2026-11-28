@@ -1,0 +1,63 @@
+---
+- name: install socat
+  apt:
+    name: socat
+    state: present
+  register: _tcp_forward_socat
+
+- name: install the forward units
+  template:
+    src: tcp-forward.service.j2
+    dest: "/etc/systemd/system/tcp-forward-{{ item.name }}.service"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ tcp_forwards }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _tcp_forward_units
+  no_log: true
+
+- name: find the installed forward units
+  find:
+    paths: /etc/systemd/system
+    patterns: tcp-forward-*.service
+  register: _tcp_forward_installed
+
+- name: list the units no longer declared
+  set_fact:
+    _tcp_forward_stale: >-
+      {{ _tcp_forward_installed.files | map(attribute='path') | map('basename')
+         | difference(tcp_forwards | map(attribute='name')
+                      | map('regex_replace', '^', 'tcp-forward-')
+                      | map('regex_replace', '$', '.service')) }}
+
+- name: stop and disable the forwards no longer declared
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: no
+  loop: "{{ _tcp_forward_stale }}"
+
+- name: remove the units no longer declared
+  file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  loop: "{{ _tcp_forward_stale }}"
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  when: _tcp_forward_units is changed or _tcp_forward_stale | length > 0
+
+# A dry run writes neither socat nor a new unit, so there is nothing to start.
+- name: start the forwards, restarting any whose unit changed
+  systemd:
+    name: "tcp-forward-{{ item.item.name }}.service"
+    state: "{{ 'restarted' if item is changed else 'started' }}"
+    enabled: yes
+  loop: "{{ _tcp_forward_units.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: not (ansible_check_mode and (item is changed or _tcp_forward_socat is changed))
+  no_log: true
